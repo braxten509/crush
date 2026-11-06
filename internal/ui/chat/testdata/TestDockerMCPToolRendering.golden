@@ -6,7 +6,7 @@
   [38;2;236;235;240m[38;2;236;235;240mserver-2[m          [38;2;96;95;107mServer number 2[m  [m
 
 === mcp-find {"query":"github","limit":5,"verbose":true} success @100
-[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mgithub (limit=5, verbose=true)[m
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mgithub [38;2;96;95;107m(limit=5, verbose=true)[m[m
 
   [38;2;236;235;240m[38;2;236;235;240mserver-0[m                                        [38;2;96;95;107mServer number 0[m                                [m
   [38;2;236;235;240m[38;2;236;235;240mserver-1[m                                        [38;2;96;95;107mServer number 1[m                                [m
@@ -20,7 +20,7 @@
   [38;2;236;235;240m[38;2;236;235;240mserver-2[m          [38;2;96;95;107mServer number 2[m  [m
 
 === mcp-find {"query":"github","limit":5,"verbose":true} expanded @100
-[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mgithub (limit=5, verbose=true)[m
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mgithub [38;2;96;95;107m(limit=5, verbose=true)[m[m
 
   [38;2;236;235;240m[38;2;236;235;240mserver-0[m                                        [38;2;96;95;107mServer number 0[m                                [m
   [38;2;236;235;240m[38;2;236;235;240mserver-1[m                                        [38;2;96;95;107mServer number 1[m                                [m
@@ -30,7 +30,7 @@
 [38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP: find[m [38;2;96;95;107mgithub[m
 
 === mcp-find {"query":"github","limit":5,"verbose":true} compact @100
-[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP: find[m [38;2;96;95;107mgithub (limit=5, verbose=true)[m
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP: find[m [38;2;96;95;107mgithub [38;2;96;95;107m(limit=5, verbose=true)[m[m
 
 === mcp-find {"query":"github","limit":5,"verbose":true} no result @40
 [38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mgithub[m
@@ -38,7 +38,7 @@
 
 
 === mcp-find {"query":"github","limit":5,"verbose":true} no result @100
-[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mgithub (limit=5, verbose=true)[m
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mgithub [38;2;96;95;107m(limit=5, verbose=true)[m[m
 
 
 
@@ -48,7 +48,7 @@
 [38;2;96;95;107mWaiting for tool response...[m
 
 === mcp-find {"query":"github","limit":5,"verbose":true} running @100
-[38;2;18;199;143m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mgithub (limit=5, verbose=true)[m
+[38;2;18;199;143m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mgithub [38;2;96;95;107m(limit=5, verbose=true)[m[m
 
 [38;2;96;95;107mWaiting for tool response...[m
 
@@ -58,7 +58,7 @@
 [38;2;96;95;107mCanceled.[m
 
 === mcp-find {"query":"github","limit":5,"verbose":true} canceled @100
-[38;2;133;131;146m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mgithub (limit=5, verbose=true)[m
+[38;2;133;131;146m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mgithub [38;2;96;95;107m(limit=5, verbose=true)[m[m
 
 [38;2;96;95;107mCanceled.[m
 
@@ -68,7 +68,7 @@
 [48;2;255;87;125m [m[38;2;255;250;241;48;2;255;87;125mERROR[m[48;2;255;87;125m [m [38;2;191;188;200mboom[m
 
 === mcp-find {"query":"github","limit":5,"verbose":true} error @100
-[38;2;235;66;104m×[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mgithub (limit=5, verbose=true)[m
+[38;2;235;66;104m×[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;0;122;184mFind[m [38;2;96;95;107mgithub [38;2;96;95;107m(limit=5, verbose=true)[m[m
 
 [48;2;255;87;125m [m[38;2;255;250;241;48;2;255;87;125mERROR[m[48;2;255;87;125m [m [38;2;191;188;200mboom[m
 
@@ -448,7 +448,7 @@
   [38;2;236;235;240m[38;2;133;131;146;48;2;45;44;54m added[m[48;2;45;44;54m                             [m[m
 
 === mcp-add {"name":"github","activate":true,"config":{"a":1}} success @100
-[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;104;255;214mAdd[m [38;2;96;95;107mgithub (activate=true, config={"a":1})[m
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;104;255;214mAdd[m [38;2;96;95;107mgithub [38;2;96;95;107m(activate=true, config={"a":1})[m[m
 
   [38;2;236;235;240m[38;2;133;131;146;48;2;45;44;54m added[m[48;2;45;44;54m                                                                                         [m[m
 
@@ -458,7 +458,7 @@
   [38;2;236;235;240m[38;2;133;131;146;48;2;45;44;54m added[m[48;2;45;44;54m                             [m[m
 
 === mcp-add {"name":"github","activate":true,"config":{"a":1}} expanded @100
-[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;104;255;214mAdd[m [38;2;96;95;107mgithub (activate=true, config={"a":1})[m
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;104;255;214mAdd[m [38;2;96;95;107mgithub [38;2;96;95;107m(activate=true, config={"a":1})[m[m
 
   [38;2;236;235;240m[38;2;133;131;146;48;2;45;44;54m added[m[48;2;45;44;54m                                                                                         [m[m
 
@@ -466,13 +466,13 @@
 [38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP: add[m [38;2;96;95;107mgithub[m
 
 === mcp-add {"name":"github","activate":true,"config":{"a":1}} compact @100
-[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP: add[m [38;2;96;95;107mgithub (activate=true, config={"a":1})[m
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP: add[m [38;2;96;95;107mgithub [38;2;96;95;107m(activate=true, config={"a":1})[m[m
 
 === mcp-add {"name":"github","activate":true,"config":{"a":1}} no result @40
 [38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;104;255;214mAdd[m [38;2;96;95;107mgithub[m
 
 === mcp-add {"name":"github","activate":true,"config":{"a":1}} no result @100
-[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;104;255;214mAdd[m [38;2;96;95;107mgithub (activate=true, config={"a":1})[m
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;104;255;214mAdd[m [38;2;96;95;107mgithub [38;2;96;95;107m(activate=true, config={"a":1})[m[m
 
 === mcp-add {"name":"github","activate":true,"config":{"a":1}} running @40
 [38;2;18;199;143m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;104;255;214mAdd[m [38;2;96;95;107mgithub[m
@@ -480,7 +480,7 @@
 [38;2;96;95;107mWaiting for tool response...[m
 
 === mcp-add {"name":"github","activate":true,"config":{"a":1}} running @100
-[38;2;18;199;143m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;104;255;214mAdd[m [38;2;96;95;107mgithub (activate=true, config={"a":1})[m
+[38;2;18;199;143m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;104;255;214mAdd[m [38;2;96;95;107mgithub [38;2;96;95;107m(activate=true, config={"a":1})[m[m
 
 [38;2;96;95;107mWaiting for tool response...[m
 
@@ -490,7 +490,7 @@
 [38;2;96;95;107mCanceled.[m
 
 === mcp-add {"name":"github","activate":true,"config":{"a":1}} canceled @100
-[38;2;133;131;146m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;104;255;214mAdd[m [38;2;96;95;107mgithub (activate=true, config={"a":1})[m
+[38;2;133;131;146m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;104;255;214mAdd[m [38;2;96;95;107mgithub [38;2;96;95;107m(activate=true, config={"a":1})[m[m
 
 [38;2;96;95;107mCanceled.[m
 
@@ -500,7 +500,7 @@
 [48;2;255;87;125m [m[38;2;255;250;241;48;2;255;87;125mERROR[m[48;2;255;87;125m [m [38;2;191;188;200mboom[m
 
 === mcp-add {"name":"github","activate":true,"config":{"a":1}} error @100
-[38;2;235;66;104m×[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;104;255;214mAdd[m [38;2;96;95;107mgithub (activate=true, config={"a":1})[m
+[38;2;235;66;104m×[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;104;255;214mAdd[m [38;2;96;95;107mgithub [38;2;96;95;107m(activate=true, config={"a":1})[m[m
 
 [48;2;255;87;125m [m[38;2;255;250;241;48;2;255;87;125mERROR[m[48;2;255;87;125m [m [38;2;191;188;200mboom[m
 
@@ -572,7 +572,7 @@
   [38;2;236;235;240m[38;2;133;131;146;48;2;45;44;54m removed[m[48;2;45;44;54m                           [m[m
 
 === mcp-remove {"name":"github","force":false} success @100
-[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;255;87;125mRemove[m [38;2;96;95;107mgithub (force=false)[m
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;255;87;125mRemove[m [38;2;96;95;107mgithub [38;2;96;95;107m(force=false)[m[m
 
   [38;2;236;235;240m[38;2;133;131;146;48;2;45;44;54m removed[m[48;2;45;44;54m                                                                                       [m[m
 
@@ -582,7 +582,7 @@
   [38;2;236;235;240m[38;2;133;131;146;48;2;45;44;54m removed[m[48;2;45;44;54m                           [m[m
 
 === mcp-remove {"name":"github","force":false} expanded @100
-[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;255;87;125mRemove[m [38;2;96;95;107mgithub (force=false)[m
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;255;87;125mRemove[m [38;2;96;95;107mgithub [38;2;96;95;107m(force=false)[m[m
 
   [38;2;236;235;240m[38;2;133;131;146;48;2;45;44;54m removed[m[48;2;45;44;54m                                                                                       [m[m
 
@@ -590,13 +590,13 @@
 [38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP: remove[m [38;2;96;95;107mgithub[m
 
 === mcp-remove {"name":"github","force":false} compact @100
-[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP: remove[m [38;2;96;95;107mgithub (force=false)[m
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP: remove[m [38;2;96;95;107mgithub [38;2;96;95;107m(force=false)[m[m
 
 === mcp-remove {"name":"github","force":false} no result @40
 [38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;255;87;125mRemove[m [38;2;96;95;107mgithub[m
 
 === mcp-remove {"name":"github","force":false} no result @100
-[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;255;87;125mRemove[m [38;2;96;95;107mgithub (force=false)[m
+[38;2;0;255;178m✓[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;255;87;125mRemove[m [38;2;96;95;107mgithub [38;2;96;95;107m(force=false)[m[m
 
 === mcp-remove {"name":"github","force":false} running @40
 [38;2;18;199;143m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;255;87;125mRemove[m [38;2;96;95;107mgithub[m
@@ -604,7 +604,7 @@
 [38;2;96;95;107mWaiting for tool response...[m
 
 === mcp-remove {"name":"github","force":false} running @100
-[38;2;18;199;143m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;255;87;125mRemove[m [38;2;96;95;107mgithub (force=false)[m
+[38;2;18;199;143m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;255;87;125mRemove[m [38;2;96;95;107mgithub [38;2;96;95;107m(force=false)[m[m
 
 [38;2;96;95;107mWaiting for tool response...[m
 
@@ -614,7 +614,7 @@
 [38;2;96;95;107mCanceled.[m
 
 === mcp-remove {"name":"github","force":false} canceled @100
-[38;2;133;131;146m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;255;87;125mRemove[m [38;2;96;95;107mgithub (force=false)[m
+[38;2;133;131;146m●[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;255;87;125mRemove[m [38;2;96;95;107mgithub [38;2;96;95;107m(force=false)[m[m
 
 [38;2;96;95;107mCanceled.[m
 
@@ -624,7 +624,7 @@
 [48;2;255;87;125m [m[38;2;255;250;241;48;2;255;87;125mERROR[m[48;2;255;87;125m [m [38;2;191;188;200mboom[m
 
 === mcp-remove {"name":"github","force":false} error @100
-[38;2;235;66;104m×[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;255;87;125mRemove[m [38;2;96;95;107mgithub (force=false)[m
+[38;2;235;66;104m×[m [38;2;0;164;255mDocker MCP[m [38;2;0;164;255m→[m [38;2;255;87;125mRemove[m [38;2;96;95;107mgithub [38;2;96;95;107m(force=false)[m[m
 
 [48;2;255;87;125m [m[38;2;255;250;241;48;2;255;87;125mERROR[m[48;2;255;87;125m [m [38;2;191;188;200mboom[m
 

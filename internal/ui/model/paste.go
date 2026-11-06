@@ -70,7 +70,11 @@ func (m *UI) handlePasteMsg(msg tea.PasteMsg) tea.Cmd {
 		return nil
 	}
 
-	if hasPasteExceededThreshold(msg) && !m.attachmentsLimitReached() && int64(len(msg.Content)) <= common.MaxAttachmentSize {
+	if hasPasteExceededThreshold(msg) && int64(len(msg.Content)) > common.MaxAttachmentSize {
+		// Too big to attach, and far too big for the editor.
+		return util.ReportWarn("Paste is too big (>5mb)")
+	}
+	if hasPasteExceededThreshold(msg) && !m.attachmentsLimitReached() {
 		// Number the paste now: the command runs off the Update goroutine.
 		idx := m.pasteIdx()
 		return func() tea.Msg {

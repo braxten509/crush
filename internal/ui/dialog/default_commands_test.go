@@ -44,7 +44,9 @@ func TestDefaultCommandsList(t *testing.T) {
 					AgentCPUsEnabled: true,
 				},
 			},
-			commands: Commands{sessionID: "s1", hasSession: true, hasTodos: true, hasQueue: true, windowWidth: 200},
+			// The background label follows what is on screen, which the
+			// caller passes in; here it matches the config's Transparent.
+			commands: Commands{sessionID: "s1", hasSession: true, hasTodos: true, hasQueue: true, transparent: true, windowWidth: 200},
 			editor:   "vi",
 		},
 		{

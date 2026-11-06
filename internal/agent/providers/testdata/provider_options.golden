@@ -1,29 +1,29 @@
 == openai/openai plain
-openai: &ProviderOptions{}
+openai: &ResponsesProviderOptions{}
 == openai/openai reasoning-default
-openai: &ProviderOptions{ReasoningEffort: &"medium"}
+openai: &ResponsesProviderOptions{ReasoningEffort: &"medium"}
 == openai/openai reasoning-selected
-openai: &ProviderOptions{ReasoningEffort: &"high"}
+openai: &ResponsesProviderOptions{ReasoningEffort: &"high"}
 == openai/openai reasoning-invalid
-openai: &ProviderOptions{ReasoningEffort: &"low"}
+openai: &ResponsesProviderOptions{ReasoningEffort: &"low"}
 == openai/openai reasoning-none
-openai: &ProviderOptions{ReasoningEffort: &"none"}
+openai: &ResponsesProviderOptions{ReasoningEffort: &"none"}
 == openai/openai think
-openai: &ProviderOptions{}
+openai: &ResponsesProviderOptions{}
 == openai/openai think-off
-openai: &ProviderOptions{}
+openai: &ResponsesProviderOptions{}
 == openai/openai think-cannot-reason
-openai: &ProviderOptions{}
+openai: &ResponsesProviderOptions{}
 == openai/openai explicit-options
-openai: &ProviderOptions{ReasoningEffort: &"low"}
+openai: &ResponsesProviderOptions{ReasoningEffort: &"low"}
 == openai/openai explicit-thinking
-openai: &ProviderOptions{}
+openai: &ResponsesProviderOptions{}
 == openai/openai extra-body
-openai: &ProviderOptions{User: &"catwalk-user", ReasoningEffort: &"low"}
+openai: &ResponsesProviderOptions{ReasoningEffort: &"low", User: &"catwalk-user"}
 == openai/openai top-k
-openai: &ProviderOptions{}
+openai: &ResponsesProviderOptions{}
 == openai/openai catwalk-top-k
-openai: &ProviderOptions{}
+openai: &ResponsesProviderOptions{}
 == openai/openai malformed
 == openai/openai malformed-no-top-k
 == openai/openai gpt-5-fast
@@ -35,25 +35,25 @@ openai: &ResponsesProviderOptions{Include: ["reasoning.encrypted_content"], Reas
 == openai/openai gpt-4o
 openai: &ResponsesProviderOptions{Include: ["reasoning.encrypted_content"], ReasoningSummary: &"auto"}
 == openai/openai abacus-format
-openai: &ProviderOptions{ReasoningEffort: &"low"}
+openai: &ResponsesProviderOptions{ReasoningEffort: &"low"}
 == openai/openai gemini-2
-openai: &ProviderOptions{ReasoningEffort: &"low"}
+openai: &ResponsesProviderOptions{ReasoningEffort: &"low"}
 == openai/openai gemini-3
-openai: &ProviderOptions{ReasoningEffort: &"high"}
+openai: &ResponsesProviderOptions{ReasoningEffort: &"high"}
 == openai/openai minimax-m3
-openai: &ProviderOptions{ReasoningEffort: &"high"}
+openai: &ResponsesProviderOptions{ReasoningEffort: &"high"}
 == openai/openai minimax-m2-think
-openai: &ProviderOptions{}
+openai: &ResponsesProviderOptions{}
 == openai/openai minimax-off
-openai: &ProviderOptions{}
+openai: &ResponsesProviderOptions{}
 == openai/openai deepseek-none
-openai: &ProviderOptions{ReasoningEffort: &"none"}
+openai: &ResponsesProviderOptions{ReasoningEffort: &"none"}
 == openai/openai zai-org
-openai: &ProviderOptions{}
+openai: &ResponsesProviderOptions{}
 == openai/openai claude
-openai: &ProviderOptions{ReasoningEffort: &"max"}
+openai: &ResponsesProviderOptions{ReasoningEffort: &"max"}
 == openai/openai claude-think
-openai: &ProviderOptions{}
+openai: &ResponsesProviderOptions{}
 == azure/azure plain
 openai: &ProviderOptions{}
 == azure/azure reasoning-default
@@ -828,34 +828,63 @@ google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true,
 == google/gemini claude-think
 google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &""}}
 == google-vertex/vertexai plain
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &""}}
 == google-vertex/vertexai reasoning-default
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &"medium"}}
 == google-vertex/vertexai reasoning-selected
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &"high"}}
 == google-vertex/vertexai reasoning-invalid
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &"low"}}
 == google-vertex/vertexai reasoning-none
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &"none"}}
 == google-vertex/vertexai think
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &""}}
 == google-vertex/vertexai think-off
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &""}}
 == google-vertex/vertexai think-cannot-reason
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &""}}
 == google-vertex/vertexai explicit-options
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{ThinkingBudget: &10}}
 == google-vertex/vertexai explicit-thinking
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &""}}
 == google-vertex/vertexai extra-body
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &"low"}}
 == google-vertex/vertexai top-k
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &""}}
 == google-vertex/vertexai catwalk-top-k
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &""}}
 == google-vertex/vertexai malformed
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &""}}
 == google-vertex/vertexai malformed-no-top-k
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &""}}
 == google-vertex/vertexai gpt-5-fast
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &"high"}}
 == google-vertex/vertexai gpt-5.2-standard
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &"low"}}
 == google-vertex/vertexai gpt-5-pro
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &"low"}}
 == google-vertex/vertexai gpt-4o
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &""}}
 == google-vertex/vertexai abacus-format
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &"low"}}
 == google-vertex/vertexai gemini-2
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{ThinkingBudget: &2000, IncludeThoughts: &true}}
 == google-vertex/vertexai gemini-3
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &"high"}}
 == google-vertex/vertexai minimax-m3
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &"high"}}
 == google-vertex/vertexai minimax-m2-think
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &""}}
 == google-vertex/vertexai minimax-off
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &""}}
 == google-vertex/vertexai deepseek-none
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &"none"}}
 == google-vertex/vertexai zai-org
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &""}}
 == google-vertex/vertexai claude
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &"max"}}
 == google-vertex/vertexai claude-think
+google: &ProviderOptions{ThinkingConfig: &ThinkingConfig{IncludeThoughts: &true, ThinkingLevel: &""}}
 == openai-compat/custom-compat plain
 openai-compat: &ProviderOptions{ExtraBody: {}}
 == openai-compat/custom-compat reasoning-default

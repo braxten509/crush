@@ -59,9 +59,29 @@ func TestTestConnection(t *testing.T) {
 			"invalid API key format for provider "+string(catwalk.InferenceProviderAlibabaSingapore))
 	})
 
-	t.Run("unknown provider types fail the request", func(t *testing.T) {
+	// Since catwalk v3, provider types without an SDK of their own (custom
+	// types such as ollama or litellm, or ones Crush does not know) are
+	// probed on an OpenAI-style /models endpoint.
+	t.Run("unknown provider types list models OpenAI-style", func(t *testing.T) {
 		t.Parallel()
-		err := TestConnection(Endpoint{ID: "x", Type: "unknown"}, identity)
+		var gotPath, gotAuth string
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotPath, gotAuth = r.URL.Path, r.Header.Get("Authorization")
+		}))
+		defer srv.Close()
+
+		err := TestConnection(Endpoint{ID: "x", Type: "unknown", APIKey: "k", BaseURL: srv.URL + "/v1"}, identity)
+		require.NoError(t, err)
+		require.Equal(t, "/v1/models", gotPath)
+		require.Equal(t, "Bearer k", gotAuth)
+	})
+
+	t.Run("an unreachable endpoint fails the request", func(t *testing.T) {
+		t.Parallel()
+		srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+		srv.Close()
+
+		err := TestConnection(Endpoint{ID: "x", Type: "unknown", BaseURL: srv.URL}, identity)
 		require.ErrorContains(t, err, "failed to create request for provider x")
 	})
 }

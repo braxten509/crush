@@ -324,8 +324,8 @@ const sidebarWidth = 32
 //	main  |
 //	------| side
 //	editor|
-//	----------
-//	help
+//	------|
+//	help  |
 func (m *UI) layoutChat(l *uiLayout, appRect image.Rectangle, editorHeight int) {
 	// Background tasks are listed under the editor, so the editor block
 	// grows to hold them.
@@ -343,6 +343,10 @@ func (m *UI) layoutChat(l *uiLayout, appRect image.Rectangle, editorHeight int) 
 		layout.Len(appRect.Dx()-sidebarWidth),
 		layout.Fill(1),
 	).Split(appRect).Assign(&mainRect, &sideRect)
+	// The help sits beside the sidebar, not under it, so the keybind hints
+	// never run under the sidebar and the sidebar reaches the last help row.
+	sideRect.Max.Y = l.status.Max.Y - 1
+	l.status.Max.X = mainRect.Max.X
 	// Add padding left
 	sideRect.Min.X += 1
 	var editorRect image.Rectangle

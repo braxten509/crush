@@ -5,7 +5,6 @@ import (
 	"image/color"
 	"testing"
 
-	"charm.land/glamour/v2/ansi"
 	"charm.land/lipgloss/v2"
 	"github.com/stretchr/testify/require"
 )
@@ -24,20 +23,14 @@ func rgbHex(c color.Color) string {
 	return fmt.Sprintf("#%02x%02x%02x", r>>8, g>>8, b>>8)
 }
 
+// badgesOf lists the styles filled with a status color whose text
+// [badgeInk] picks. In this fork the status indicators and messages, the
+// yolo mode badge and the yolo prompt mark are colored text on a subtle
+// surface or the terminal background, not filled chips, so they are not
+// here.
 func badgesOf(s Styles, o quickStyleOpts) []badge {
 	return []badge{
-		{"Status.SuccessIndicator", s.Status.SuccessIndicator, o.success, o.bgLessVisible},
-		{"Status.InfoIndicator", s.Status.InfoIndicator, o.success, o.bgLessVisible},
-		{"Status.UpdateIndicator", s.Status.UpdateIndicator, o.success, o.bgLessVisible},
-		{"Status.WarnIndicator", s.Status.WarnIndicator, o.warning, o.bgMostVisible},
-		{"Status.ErrorIndicator", s.Status.ErrorIndicator, o.destructive, o.bgBase},
-		{"Status.SuccessMessage", s.Status.SuccessMessage, o.successMostSubtle, o.bgLessVisible},
-		{"Status.InfoMessage", s.Status.InfoMessage, o.successMostSubtle, o.bgLessVisible},
-		{"Status.UpdateMessage", s.Status.UpdateMessage, o.successMostSubtle, o.bgLessVisible},
-		{"Status.WarnMessage", s.Status.WarnMessage, o.warningSubtle, o.bgMostVisible},
-		{"Status.ModeBadgeYolo", s.Status.ModeBadgeYolo, o.busy, o.bgBase},
 		{"Status.ModeBannerYolo", s.Status.ModeBannerYolo, o.yolo, o.bgBase},
-		{"Editor.PromptYoloIconFocused", s.Editor.PromptYoloIconFocused, o.busy, o.bgBase},
 		{"Button.Hovered", s.Button.Hovered, o.buttonHovered, o.onPrimary},
 		{"Attachments.Image", s.Attachments.Image, o.success, o.bgLessVisible},
 		{"Attachments.Text", s.Attachments.Text, o.success, o.bgLessVisible},
@@ -47,14 +40,22 @@ func badgesOf(s Styles, o quickStyleOpts) []badge {
 }
 
 // TestBadgeInk_BuiltinsKeepTheirInk pins the built-in themes' look: each
-// keeps the background role it always wrote on its badges.
+// keeps the background role it always wrote on its badges where that role
+// reads on the fill. Where it does not (scholars-edition's hovered button,
+// cream on cream), the text must read instead.
 func TestBadgeInk_BuiltinsKeepTheirInk(t *testing.T) {
 	t.Parallel()
 	for name, opts := range builtinThemes {
 		o := opts()
 		s := quickStyle(o)
 		for _, b := range badgesOf(s, o) {
-			require.Equal(t, rgbHex(b.ink), rgbHex(b.style.GetForeground()), "%s: %s", name, b.name)
+			if wcagContrast(b.ink, b.fill) >= minBadgeInkContrast {
+				require.Equal(t, rgbHex(b.ink), rgbHex(b.style.GetForeground()), "%s: %s", name, b.name)
+				continue
+			}
+			got := wcagContrast(b.style.GetForeground(), b.fill)
+			require.GreaterOrEqual(t, got, minBadgeInkContrast, "%s: %s: %s on %s", name, b.name,
+				rgbHex(b.style.GetForeground()), rgbHex(b.fill))
 		}
 	}
 }
@@ -94,27 +95,26 @@ func TestBadgeInk_LightTheme(t *testing.T) {
 		require.GreaterOrEqual(t, got, minBadgeInkContrast, "%s: %s on %s", b.name,
 			rgbHex(b.style.GetForeground()), rgbHex(b.fill))
 	}
-	// The light background role that reads well stays.
-	require.Equal(t, "#f7f6fb", rgbHex(s.Status.ErrorIndicator.GetForeground()))
+	// The light background role that reads well stays: bgBase on the dark
+	// yolo fill.
+	require.Equal(t, "#f7f6fb", rgbHex(s.Status.ModeBannerYolo.GetForeground()))
 }
 
 // primaryBadgesOf lists the styles [legibleBadges] picks the text of, as
 // text and fill colors.
+//
+// The plan mode badge and the markdown H1 are not here: in this fork they
+// are colored text on the terminal background with no fill of their own
+// (no chip on headings), so there is no badge text for [legibleBadges] to
+// pick.
 func primaryBadgesOf(s Styles) map[string][2]color.Color {
 	pair := func(st lipgloss.Style) [2]color.Color {
 		return [2]color.Color{st.GetForeground(), st.GetBackground()}
 	}
-	h1 := func(b ansi.StyleBlock) [2]color.Color {
-		return [2]color.Color{lipgloss.Color(*b.Color), lipgloss.Color(*b.BackgroundColor)}
-	}
 	return map[string][2]color.Color{
-		"Status.ModeBadgePlan":             pair(s.Status.ModeBadgePlan),
-		"Status.ModeBannerPlanBadge":       pair(s.Status.ModeBannerPlanBadge),
 		"Status.ModeBannerPlan":            pair(s.Status.ModeBannerPlan),
 		"Editor.PromptQuestionIconFocused": pair(s.Editor.PromptQuestionIconFocused),
 		"FilePicker.Selected":              pair(s.FilePicker.Selected),
-		"Markdown.H1":                      h1(s.Markdown.H1),
-		"PlanMarkdown.H1":                  h1(s.PlanMarkdown.H1),
 	}
 }
 

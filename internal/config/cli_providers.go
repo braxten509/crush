@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"charm.land/catwalk/v3/pkg/catwalk"
+	"github.com/charmbracelet/crush/internal/home"
 )
 
 // Provider types backed by an installed agent CLI instead of an HTTP API.
@@ -158,7 +159,8 @@ var (
 
 // Tests must not read the developer's own global config either (this
 // fork's setup turns the API providers off there, which many upstream tests
-// rely on). Tests that care set these themselves.
+// rely on). Tests that care set these themselves. The folders go in the
+// test's scratch home, so no global path leaves it.
 func init() {
 	if !testing.Testing() {
 		return
@@ -167,7 +169,7 @@ func init() {
 		if os.Getenv(key) != "" {
 			continue
 		}
-		if dir, err := os.MkdirTemp("", "crush-test-global"); err == nil {
+		if dir, err := os.MkdirTemp(home.Dir(), "crush-test-global"); err == nil {
 			os.Setenv(key, dir)
 		}
 	}

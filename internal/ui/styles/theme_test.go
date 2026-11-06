@@ -167,25 +167,37 @@ func TestKeanu_BrightOnBrightContrast(t *testing.T) {
 		t.Errorf("keanu selected-file contrast %.2f is below WCAG AA (%.1f)", ratio, minAA)
 	}
 
-	if s.Markdown.H1.Color == nil || s.Markdown.H1.BackgroundColor == nil {
-		t.Fatal("H1 style is missing fg/bg colors")
+	// In this fork headings and inline code have no chip: they are colored
+	// text on the message background, so that is what they must read on.
+	bg := *hex(s.Background)
+
+	// H1 takes the shared heading color unless it sets its own.
+	h1 := s.Markdown.H1.Color
+	if h1 == nil {
+		h1 = s.Markdown.Heading.Color
 	}
-	if ratio := contrastRatio(*s.Markdown.H1.Color, *s.Markdown.H1.BackgroundColor); ratio < minAA {
+	if h1 == nil {
+		t.Fatal("H1 style has no color of its own or from the heading style")
+	}
+	if ratio := contrastRatio(*h1, bg); ratio < minAA {
 		t.Errorf("keanu H1 contrast %.2f is below WCAG AA (%.1f)", ratio, minAA)
 	}
 
 	code := s.Markdown.Code
-	if code.Color == nil || code.BackgroundColor == nil {
-		t.Fatal("inline code style is missing fg/bg colors")
+	if code.Color == nil {
+		t.Fatal("inline code style is missing its color")
 	}
-	if ratio := contrastRatio(*code.Color, *code.BackgroundColor); ratio < minAA {
+	if ratio := contrastRatio(*code.Color, bg); ratio < minAA {
 		t.Errorf("keanu inline code contrast %.2f is below WCAG AA (%.1f)", ratio, minAA)
 	}
 
-	// The inline code chip must stand out from the message background,
-	// like it does inside the thinking block.
-	if bg := *hex(s.Background); *code.BackgroundColor == bg {
-		t.Errorf("inline code background %s matches the message background; the chip is invisible", bg)
+	// Without a chip, inline code must stand out from the green body text
+	// by its own color.
+	if s.Markdown.Document.Color == nil {
+		t.Fatal("markdown document style is missing its color")
+	}
+	if body := *s.Markdown.Document.Color; *code.Color == body {
+		t.Errorf("inline code color %s matches the body text; code is indistinguishable", body)
 	}
 }
 

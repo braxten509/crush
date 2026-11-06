@@ -21,6 +21,7 @@ import (
 	"github.com/charmbracelet/crush/internal/client"
 	"github.com/charmbracelet/crush/internal/cmd"
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/home"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/proto/prototest"
 	"github.com/charmbracelet/crush/internal/server"
@@ -67,20 +68,20 @@ func newEngineProject(t *testing.T, idle string) *engineProject {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = os.RemoveAll(root) })
 
-	home := filepath.Join(root, "h")
+	homeDir := filepath.Join(root, "h")
 	runtimeDir := filepath.Join(root, "r")
 	tmp := filepath.Join(root, "t")
 	globalConfig := filepath.Join(root, "g")
-	for _, dir := range []string{home, tmp, globalConfig, filepath.Join(root, "gd")} {
+	for _, dir := range []string{homeDir, tmp, globalConfig, filepath.Join(root, "gd")} {
 		require.NoError(t, os.MkdirAll(dir, 0o700))
 	}
 	require.NoError(t, os.Mkdir(runtimeDir, 0o700))
-	t.Setenv("HOME", home)
-	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
-	t.Setenv("XDG_DATA_HOME", filepath.Join(home, ".local", "share"))
-	t.Setenv("XDG_STATE_HOME", filepath.Join(home, ".local", "state"))
-	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
-	t.Setenv("CRUSH_CACHE_DIR", filepath.Join(home, ".cache", "crush"))
+	t.Setenv("HOME", homeDir)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(homeDir, ".config"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(homeDir, ".local", "share"))
+	t.Setenv("XDG_STATE_HOME", filepath.Join(homeDir, ".local", "state"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(homeDir, ".cache"))
+	t.Setenv("CRUSH_CACHE_DIR", filepath.Join(homeDir, ".cache", "crush"))
 	t.Setenv("XDG_RUNTIME_DIR", runtimeDir)
 	t.Setenv("TMPDIR", tmp)
 	t.Setenv("CRUSH_GLOBAL_CONFIG", globalConfig)
@@ -95,6 +96,9 @@ func newEngineProject(t *testing.T, idle string) *engineProject {
 	// The engine joins the memory box first; no test may move a process
 	// into the user's real one.
 	t.Setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/nonexistent")
+	// Every folder above is the test's own: the engines it starts (this
+	// test binary run again) use them instead of a scratch home.
+	t.Setenv(home.IsolatedTestEnv, "1")
 	writeGlobalConfig(t, globalConfig, nil)
 
 	socketDir := requireShortSocketFolder(t, runtimeDir, tmp)

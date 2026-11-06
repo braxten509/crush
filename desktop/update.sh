@@ -18,7 +18,8 @@
 # CRUSH_UPDATE_WORK (cache folder), CRUSH_UPDATE_LIB (app install folder),
 # CRUSH_UPDATE_BIN (app launcher), CRUSH_UPDATE_CRUSH (terminal crush to
 # replace), CRUSH_UPDATE_BACKUPS, CRUSH_UPDATE_PROVIDERS (the local
-# cli_providers.go the terminal crush is built with, when present).
+# cli_providers.go the terminal crush is built with, when present),
+# CRUSH_UPDATE_UPSTREAM (upstream Crush, whose release tags name the version).
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="${CRUSH_UPDATE_REPO:-https://github.com/braxten509/crush.git}"
@@ -31,11 +32,25 @@ CRUSH="${CRUSH_UPDATE_CRUSH:-$(command -v crush || echo "$HOME/.local/bin/crush"
 BACKUPS="${CRUSH_UPDATE_BACKUPS:-$STATE/crush/binary-backups}"
 PROVIDERS="${CRUSH_UPDATE_PROVIDERS:-$HOME/dev/crush/internal/config/cli_providers.go}"
 SOURCE_DIR="${CRUSH_UPDATE_SOURCE_DIR:-$HOME/dev/crush}"
+UPSTREAM="${CRUSH_UPDATE_UPSTREAM:-https://github.com/charmbracelet/crush.git}"
 
 # An app started from the menu may lack the owner's shell paths (cargo).
 export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
 current() { python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("commit",""))' "$HERE/build.json" 2>/dev/null; }
 latest() { git ls-remote "$REPO" "refs/heads/$BRANCH" 2>/dev/null | cut -f1; }
+# merged_release DIR: the newest upstream stable release (vX.Y.Z) whose commit
+# is in DIR's history. The fork keeps no release tags, so the tags come from
+# upstream. The version label must name the release the code holds, not the
+# running crush's (a merge installed through this button kept the old label,
+# and Crush then kept offering an update it already had).
+merged_release() {
+  git ls-remote --tags "$UPSTREAM" 'v*' 2>/dev/null |
+    awk '{sub("refs/tags/", "", $2); sub(/\^\{\}$/, "", $2); print $1, $2}' |
+    grep -E ' v[0-9]+\.[0-9]+\.[0-9]+$' |
+    while read -r sha tag; do
+      git -C "$1" merge-base --is-ancestor "$sha" HEAD 2>/dev/null && echo "$tag"
+    done | sort -uV | tail -n 1
+}
 
 check() {
   local now new
@@ -66,7 +81,9 @@ run() {
   local src="$WORK/src"
   rm -rf "$src"
   echo "== copy $REPO $BRANCH" >>"$LOG"
-  git clone -q --depth 1 --branch "$BRANCH" "$REPO" "$src" >>"$LOG" 2>&1 || fail "could not copy the fork's $BRANCH branch"
+  # Every commit (no file contents beyond the branch tip), so merged_release
+  # can see which upstream releases the branch holds.
+  git clone -q --filter=tree:0 --branch "$BRANCH" "$REPO" "$src" >>"$LOG" 2>&1 || fail "could not copy the fork's $BRANCH branch"
   local commit
   commit="$(git -C "$src" rev-parse HEAD)"
   cd "$src/desktop" || fail "the copy has no desktop folder"
@@ -88,7 +105,8 @@ run() {
     cp "$providers" "$WORK/cli_providers.fork.go"
     cp "$PROVIDERS" "$providers" && copied=1
   fi
-  base="$("$CRUSH" --version 2>/dev/null | awk '{print $3}' | sed 's/-local.*//')"
+  base="$(merged_release "$src")"
+  [ -n "$base" ] || base="$("$CRUSH" --version 2>/dev/null | awk '{print $3}' | sed 's/-local.*//')"
   version="${base:-v0.0.0}-local.$(date +%Y%m%d)-${commit:0:8}"
   build_crush() {
     (cd "$src" && nice -n 10 go build -buildvcs=false -ldflags="-X github.com/charmbracelet/crush/internal/version.Version=$version -X github.com/charmbracelet/crush/internal/version.Commit=${commit:0:8} -X github.com/charmbracelet/crush/internal/version.SourceDir=$SOURCE_DIR" -o "$WORK/crush" .) >>"$LOG" 2>&1

@@ -91,7 +91,7 @@ func TestProvidersRefreshRoute(t *testing.T) {
 	}
 	catalog = append(catalog, extra)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/v2/providers" {
+		if r.URL.Path == "/v3/providers" {
 			_ = json.NewEncoder(w).Encode(catalog)
 			return
 		}

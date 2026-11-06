@@ -12,10 +12,16 @@ import (
 
 var homedir, homedirErr = userHomeDir()
 
+// IsolatedTestEnv names the variable a test sets, after pointing HOME, the
+// XDG folders and CRUSH_GLOBAL_* at its own scratch folders, so the test
+// binary it runs again as crush (an engine, `crush logout`) uses those
+// folders instead of making a scratch home of its own.
+const IsolatedTestEnv = "CRUSH_TEST_ISOLATED_ENV"
+
 // userHomeDir returns the real home, or under go test a scratch one so no
 // test can read or rewrite the developer's files.
 func userHomeDir() (string, error) {
-	if !testing.Testing() {
+	if !testing.Testing() || os.Getenv(IsolatedTestEnv) == "1" {
 		return os.UserHomeDir()
 	}
 	for _, key := range testIgnoredEnv {

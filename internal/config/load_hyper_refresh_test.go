@@ -45,7 +45,7 @@ func runHyperRefreshDuringLoad(t *testing.T) {
 	var srv *httptest.Server
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/api/v1/provider":
+		case "/api/v1/provider/v3":
 			if providerCalls.Add(1) == 1 || r.Header.Get("Authorization") != "Bearer fresh" {
 				w.WriteHeader(http.StatusUnauthorized)
 				return

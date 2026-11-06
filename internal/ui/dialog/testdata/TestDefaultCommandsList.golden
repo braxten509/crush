@@ -6,6 +6,7 @@ usage | Usage |  | dialog.ActionOpenDialog{DialogID:usage} | Usage
 autocompact | Compaction limit for API chats |  | dialog.ActionOpenDialog{DialogID:autocompact} | Compaction limit for API chats
 select_notifications | Notification Style |  | dialog.ActionOpenDialog{DialogID:notifications} | Notification Style
 toggle_yolo | Toggle Yolo Mode | ctrl+y | dialog.ActionToggleYoloMode{} | Toggle Yolo Mode
+toggle_sysadmin | Toggle Sysadmin Mode |  | dialog.ActionToggleSysadminMode{} | Toggle Sysadmin Mode
 toggle_help | Toggle Help | ctrl+g | dialog.ActionToggleHelp{} | Toggle Help
 init | Initialize Project |  | dialog.ActionInitializeProject{} | Initialize Project
 save_project | Save Project |  | dialog.ActionSaveProject{} | Save Project
@@ -50,6 +51,7 @@ toggle_mcps | Toggle MCPs |  | dialog.ActionOpenDialog{DialogID:mcp_toggles} | T
 toggle_pills | Toggle To-Dos/Queue | ctrl+t | dialog.ActionTogglePills{} | Toggle To-Dos/Queue
 select_notifications | Notification Style |  | dialog.ActionOpenDialog{DialogID:notifications} | Notification Style
 toggle_yolo | Toggle Yolo Mode | ctrl+y | dialog.ActionToggleYoloMode{} | Toggle Yolo Mode
+toggle_sysadmin | Toggle Sysadmin Mode |  | dialog.ActionToggleSysadminMode{} | Toggle Sysadmin Mode
 toggle_help | Toggle Help | ctrl+g | dialog.ActionToggleHelp{} | Toggle Help
 init | Initialize Project |  | dialog.ActionInitializeProject{} | Initialize Project
 save_project | Save Project |  | dialog.ActionSaveProject{} | Save Project
@@ -93,6 +95,7 @@ toggle_mcps | Toggle MCPs |  | dialog.ActionOpenDialog{DialogID:mcp_toggles} | T
 toggle_pills | Toggle Queue | ctrl+t | dialog.ActionTogglePills{} | Toggle Queue
 select_notifications | Notification Style |  | dialog.ActionOpenDialog{DialogID:notifications} | Notification Style
 toggle_yolo | Toggle Yolo Mode | ctrl+y | dialog.ActionToggleYoloMode{} | Toggle Yolo Mode
+toggle_sysadmin | Toggle Sysadmin Mode |  | dialog.ActionToggleSysadminMode{} | Toggle Sysadmin Mode
 toggle_help | Toggle Help | ctrl+g | dialog.ActionToggleHelp{} | Toggle Help
 init | Initialize Project |  | dialog.ActionInitializeProject{} | Initialize Project
 save_project | Save Project |  | dialog.ActionSaveProject{} | Save Project
@@ -123,6 +126,7 @@ autocompact | Compaction limit for API chats |  | dialog.ActionOpenDialog{Dialog
 toggle_pills | Toggle To-Dos | ctrl+t | dialog.ActionTogglePills{} | Toggle To-Dos
 select_notifications | Notification Style |  | dialog.ActionOpenDialog{DialogID:notifications} | Notification Style
 toggle_yolo | Toggle Yolo Mode | ctrl+y | dialog.ActionToggleYoloMode{} | Toggle Yolo Mode
+toggle_sysadmin | Toggle Sysadmin Mode |  | dialog.ActionToggleSysadminMode{} | Toggle Sysadmin Mode
 toggle_help | Toggle Help | ctrl+g | dialog.ActionToggleHelp{} | Toggle Help
 init | Initialize Project |  | dialog.ActionInitializeProject{} | Initialize Project
 save_project | Save Project |  | dialog.ActionSaveProject{} | Save Project

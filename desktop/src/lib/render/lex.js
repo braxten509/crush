@@ -13,6 +13,24 @@ import { stripPlanMarkersMapped } from "./plan.js";
 const marked = new Marked({ gfm: true, breaks: false, pedantic: false });
 marked.use({ extensions: mathExtensions });
 
+// CommonMark lets only a list starting at 1 break a paragraph, so a heading
+// line like "**Medium**" followed by "10. ..." melts the whole numbered list
+// into one paragraph. Agents write lists that way often, so a numbered line
+// with text ends the paragraph whatever its number.
+const NUMBERED_LINE = /\n {0,3}\d{1,9}[.)][ \t]+\S/;
+marked.use({
+  tokenizer: {
+    paragraph(src) {
+      const cap = this.rules.block.paragraph.exec(src);
+      const cut = cap && NUMBERED_LINE.exec(cap[0]);
+      if (!cut) return false;
+      const raw = cap[0].slice(0, cut.index + 1);
+      const text = raw.slice(0, -1);
+      return { type: "paragraph", raw, text, tokens: this.lexer.inline(text) };
+    },
+  },
+});
+
 export function lexMarkdown(text) {
   return marked.lexer(text);
 }

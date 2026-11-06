@@ -223,23 +223,28 @@ func (a *AssistantMessageItem) renderSpinning() string {
 }
 
 func renderCompactingStatus(sty *styles.Styles, elapsed, dots string) string {
-	label := lipgloss.NewStyle().Foreground(sty.WorkingLabelColor).Render("Compacting conversation") + dots
+	label := lipgloss.NewStyle().Foreground(sty.ThinkingLabelColor).Render("Compacting conversation") + dots
 	if elapsed != "" {
 		label += " " + lipgloss.NewStyle().Foreground(sty.WorkingTimerColor).Render(elapsed)
 	}
 	return label
 }
 
-// renderError renders an error or provider-refusal banner.
+// renderError renders an error, provider-refusal, or truncation banner.
 func (a *AssistantMessageItem) renderError(width int) string {
 	finishPart := a.message.FinishPart()
 	tagLabel := "ERROR"
 	titleText := finishPart.Message
 	detailsText := finishPart.Details
-	if finishPart.Reason == message.FinishReasonContentFilter {
+	switch finishPart.Reason {
+	case message.FinishReasonContentFilter:
 		tagLabel = refusalTagLabel
 		titleText = cmp.Or(titleText, refusalTitle)
 		detailsText = cmp.Or(detailsText, refusalDetails)
+	case message.FinishReasonMaxTokens:
+		tagLabel = truncatedTagLabel
+		titleText = cmp.Or(titleText, truncatedTitle)
+		detailsText = cmp.Or(detailsText, truncatedDetails)
 	}
 	errTag := a.sty.Messages.ErrorTag.Render(tagLabel)
 	truncated := ansi.Truncate(titleText, width-2-lipgloss.Width(errTag), "...")

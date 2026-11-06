@@ -4,7 +4,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 )
 
 // Kimi's plans are billed per project, so the provider only runs inside

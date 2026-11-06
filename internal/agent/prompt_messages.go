@@ -4,11 +4,10 @@ import (
 	"cmp"
 	"context"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"log/slog"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"charm.land/fantasy"
 
 	"github.com/charmbracelet/crush/internal/message"
@@ -25,7 +24,7 @@ type foldedPrompt struct {
 
 // takeQueuedForStep takes the queued prompts that can join call's turn at a
 // tool boundary, saves them as user messages and returns them for the step.
-func (a *sessionAgent) takeQueuedForStep(ctx context.Context, call SessionAgentCall, supportsImages bool) ([]fantasy.Message, error) {
+func (a *sessionAgent) takeQueuedForStep(ctx context.Context, call SessionAgentCall, supportsImages, supportsAudio bool) ([]fantasy.Message, error) {
 	mu := a.sessionMu(call.SessionID)
 	mu.Lock()
 	var fold, canceled []SessionAgentCall
@@ -42,10 +41,16 @@ func (a *sessionAgent) takeQueuedForStep(ctx context.Context, call SessionAgentC
 	}
 	msgs := make([]fantasy.Message, 0, len(fold))
 	for _, q := range fold {
-		if _, err := a.createUserMessage(ctx, q); err != nil {
+		saved, err := a.createUserMessage(ctx, q, "")
+		if err != nil {
 			return nil, err
 		}
-		_, files := a.preparePrompt(nil, supportsImages, q.Attachments...)
+		if q.Report != nil {
+			// A subagent's report reads as its stored message does.
+			msgs = append(msgs, saved.ToAIMessage()...)
+			continue
+		}
+		_, files := a.preparePrompt(nil, supportsImages, supportsAudio, q.Attachments...)
 		var parts []fantasy.MessagePart
 		if text := message.PromptWithTextAttachments(q.Prompt, q.Attachments); text != "" {
 			parts = append(parts, fantasy.TextPart{Text: text})
@@ -56,11 +61,19 @@ func (a *sessionAgent) takeQueuedForStep(ctx context.Context, call SessionAgentC
 	return msgs, nil
 }
 
-func (a *sessionAgent) createUserMessage(ctx context.Context, call SessionAgentCall) (message.Message, error) {
+// createUserMessage saves the call's prompt as a user message, or its
+// subagent report. modelContext is what the model read ahead of the prompt
+// (the host's view and notes); it is stored with the message so later
+// requests replay the same text. A batch stores it with its first original.
+func (a *sessionAgent) createUserMessage(ctx context.Context, call SessionAgentCall, modelContext string) (message.Message, error) {
 	if len(call.batch) > 0 {
 		var last message.Message
-		for _, original := range call.batch {
-			msg, err := a.createUserMessage(ctx, original)
+		for i, original := range call.batch {
+			originalContext := ""
+			if i == 0 {
+				originalContext = modelContext
+			}
+			msg, err := a.createUserMessage(ctx, original, originalContext)
 			if err != nil {
 				return message.Message{}, err
 			}
@@ -68,7 +81,17 @@ func (a *sessionAgent) createUserMessage(ctx context.Context, call SessionAgentC
 		}
 		return last, nil
 	}
-	parts := []message.ContentPart{message.TextContent{Text: call.Prompt, Hidden: call.HiddenUserMessage, SubmissionID: call.SubmissionID}}
+	if call.Report != nil {
+		msg, err := a.messages.Create(ctx, call.SessionID, message.CreateMessageParams{
+			Role:  message.User,
+			Parts: []message.ContentPart{*call.Report},
+		})
+		if err != nil {
+			return message.Message{}, fmt.Errorf("failed to record subagent report: %w", err)
+		}
+		return msg, nil
+	}
+	parts := []message.ContentPart{message.TextContent{Text: call.Prompt, Hidden: call.HiddenUserMessage, SubmissionID: call.SubmissionID, Context: modelContext}}
 	var attachmentParts []message.ContentPart
 	for _, attachment := range call.Attachments {
 		attachmentParts = append(attachmentParts, message.BinaryContent{Path: cmp.Or(attachment.FilePath, attachment.FileName), MIMEType: attachment.MimeType, Data: attachment.Content})
@@ -84,7 +107,7 @@ func (a *sessionAgent) createUserMessage(ctx context.Context, call SessionAgentC
 	return msg, nil
 }
 
-func (a *sessionAgent) preparePrompt(msgs []message.Message, supportsImages bool, attachments ...message.Attachment) ([]fantasy.Message, []fantasy.FilePart) {
+func (a *sessionAgent) preparePrompt(msgs []message.Message, supportsImages, supportsAudio bool, attachments ...message.Attachment) ([]fantasy.Message, []fantasy.FilePart) {
 	var history []fantasy.Message
 	if !a.isSubAgent {
 		history = append(history, fantasy.NewUserMessage(
@@ -175,7 +198,11 @@ If not, please feel free to ignore. Again do not mention this message to the use
 		if attachment.IsText() {
 			continue
 		}
-		if !supportsImages {
+		if attachment.IsAudio() {
+			if !supportsAudio {
+				continue
+			}
+		} else if !supportsImages {
 			continue
 		}
 		files = append(files, fantasy.FilePart{
@@ -208,42 +235,6 @@ func filterFileParts(parts []fantasy.MessagePart) []fantasy.MessagePart {
 		filtered = append(filtered, part)
 	}
 	return filtered
-}
-
-// toolResultsForCalls builds the tool message that must immediately follow
-// an assistant message with tool calls. LLM APIs require every tool call to
-// be followed by its results before any other message; strict-adjacency
-// providers reject the request otherwise. Results are taken from
-// toolResultsByCall and consumed, so a result stored in a message that also
-// holds results for calls of other assistant messages is emitted exactly
-// once, next to the assistant that requested it. Tool calls without any
-// stored result (e.g. an interrupted session) receive a synthetic error
-// response so the conversation keeps working.
-func toolResultsForCalls(m message.Message, toolResultsByCall map[string][]fantasy.MessagePart) fantasy.Message {
-	content := make([]fantasy.MessagePart, 0, len(m.ToolCalls()))
-	for _, tc := range m.ToolCalls() {
-		parts := toolResultsByCall[tc.ID]
-		delete(toolResultsByCall, tc.ID)
-		if len(parts) > 0 {
-			content = append(content, parts...)
-			continue
-		}
-		slog.Warn(
-			"Injecting synthetic tool result for orphaned tool call",
-			"tool_call_id", tc.ID,
-			"tool_name", tc.Name,
-		)
-		content = append(content, fantasy.ToolResultPart{
-			ToolCallID: tc.ID,
-			Output: fantasy.ToolResultOutputContentError{
-				Error: errors.New("tool call was interrupted and did not produce a result, you may retry this call if the result is still needed"),
-			},
-		})
-	}
-	return fantasy.Message{
-		Role:    fantasy.MessageRoleTool,
-		Content: content,
-	}
 }
 
 func (a *sessionAgent) getSessionMessages(ctx context.Context, session session.Session) ([]message.Message, error) {
@@ -306,7 +297,12 @@ func (a *sessionAgent) convertToToolResult(result fantasy.ToolResultContent) mes
 		}
 	case fantasy.ToolResultContentTypeMedia:
 		if r, ok := fantasy.AsToolResultOutputType[fantasy.ToolResultOutputContentMedia](result.Result); ok {
-			if !stringext.IsValidBase64(r.Data) {
+			switch {
+			case r.Data == "":
+				slog.Warn("Tool returned media with no data, storing a note instead",
+					"tool", result.ToolName, "tool_call_id", result.ToolCallID)
+				baseResult.Content = emptyMediaText(r.Text)
+			case !stringext.IsValidBase64(r.Data):
 				slog.Warn(
 					"Tool returned media with invalid base64 data, discarding image",
 					"tool", result.ToolName,
@@ -314,7 +310,7 @@ func (a *sessionAgent) convertToToolResult(result fantasy.ToolResultContent) mes
 				)
 				baseResult.Content = "Tool returned image data with invalid encoding"
 				baseResult.IsError = true
-			} else {
+			default:
 				content := r.Text
 				if content == "" {
 					content = fmt.Sprintf("Loaded %s content", r.MediaType)
@@ -359,7 +355,7 @@ func (a *sessionAgent) workaroundProviderMediaLimitations(messages []fantasy.Mes
 		return messages
 	}
 
-	supportsImages := chatModel.CatwalkCfg.SupportsImages
+	supportsImages := chatModel.CatwalkCfg.Capabilities.Vision
 
 	convertedMessages := make([]fantasy.Message, 0, len(messages))
 

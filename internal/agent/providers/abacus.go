@@ -3,7 +3,7 @@ package providers
 import (
 	"maps"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"charm.land/fantasy"
 	"charm.land/fantasy/providers/openai"
 	"github.com/charmbracelet/crush/internal/config"
@@ -32,11 +32,11 @@ func (b Builder) buildAbacusProvider(provider config.ProviderConfig, selected co
 		headers = make(map[string]string)
 	}
 	client := b.abacusHTTPClient(provider, model, selected)
-	if effective.Type == catwalk.TypeAnthropic {
+	if config.NormalizeProviderType(effective.Type) == catwalk.TypeMessages {
 		return b.buildAnthropicProvider(baseURL, apiKey, headers, provider.ID, client)
 	}
 	if config.AbacusAPIFormat(model) != "responses" {
-		return b.buildOpenaiCompatProvider(baseURL, apiKey, headers, provider.ExtraBody, provider.ID, false, client)
+		return b.buildOpenaiCompatProvider(baseURL, apiKey, headers, provider.ExtraBody, provider.ID, false, catwalk.TypeCompletions, client)
 	}
 	opts := []openai.Option{openai.WithAPIKey(apiKey), openai.WithBaseURL(baseURL), openai.WithUseResponsesAPI(), openai.WithResponsesAPIFunc(func(string) bool { return true }), openai.WithHTTPClient(client)}
 	if len(headers) > 0 {

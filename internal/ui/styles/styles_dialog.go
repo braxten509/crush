@@ -35,6 +35,17 @@ type DialogStyles struct {
 	SelectedItem lipgloss.Style
 	InputPrompt  lipgloss.Style
 
+	// PromptMessage is the friendly description of what an
+	// integrated credential prompt (GPG pinentry) is asking for.
+	PromptMessage lipgloss.Style
+	// PromptKey styles the labeled key rows shown under it.
+	PromptKey lipgloss.Style
+	// SSHMessage is the friendly description of what an integrated
+	// SSH askpass prompt is asking for.
+	SSHMessage lipgloss.Style
+	// SSHKey styles the labeled account/key row shown under it.
+	SSHKey lipgloss.Style
+
 	List lipgloss.Style
 
 	Spinner lipgloss.Style
@@ -77,6 +88,7 @@ type DialogStyles struct {
 	Quit struct {
 		Content lipgloss.Style // Wrapper for the quit dialog's inner content
 		Hint    lipgloss.Style // Style for quit hint
+		Warning lipgloss.Style // Style for the work-in-progress warning
 		Frame   lipgloss.Style // Outer rounded border framing the quit dialog
 	}
 

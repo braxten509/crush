@@ -32,6 +32,7 @@ func quickStyleDialogs(s *Styles, o quickStyleOpts, base lipgloss.Style) {
 	// Dialog.Quit
 	s.Dialog.Quit.Content = lipgloss.NewStyle().Foreground(o.fgBase)
 	s.Dialog.Quit.Hint = lipgloss.NewStyle().Foreground(o.fgMostSubtle)
+	s.Dialog.Quit.Warning = lipgloss.NewStyle().Foreground(o.destructive)
 	s.Dialog.Quit.Frame = lipgloss.NewStyle().BorderForeground(o.primary).Border(lipgloss.RoundedBorder()).Padding(1, 2)
 	s.Dialog.View = base.Border(lipgloss.RoundedBorder()).BorderForeground(o.primary)
 	s.Dialog.PrimaryText = base.Padding(0, 1).Foreground(o.primary)
@@ -47,6 +48,10 @@ func quickStyleDialogs(s *Styles, o quickStyleOpts, base lipgloss.Style) {
 	s.Dialog.NormalItem = base.Padding(0, 1).Foreground(o.fgBase)
 	s.Dialog.SelectedItem = base.Padding(0, 1).Background(o.primary).Foreground(o.onPrimary)
 	s.Dialog.InputPrompt = base.Margin(1, 1)
+	s.Dialog.PromptMessage = base.Foreground(o.fgSubtle).Padding(0, 1)
+	s.Dialog.PromptKey = base.Foreground(o.fgSubtle).Padding(0, 1)
+	s.Dialog.SSHMessage = base.Foreground(o.fgSubtle).Padding(0, 1)
+	s.Dialog.SSHKey = base.Foreground(o.fgSubtle).Padding(0, 1)
 
 	s.Dialog.List = base.Margin(0, 0, 1, 0)
 	s.Dialog.ContentPanel = base.Background(o.bgLessVisible).Foreground(o.fgBase).Padding(1, 2)
@@ -106,11 +111,22 @@ func quickStyleDialogs(s *Styles, o quickStyleOpts, base lipgloss.Style) {
 	s.Status.Help = lipgloss.NewStyle().Padding(0, 1)
 	s.Status.ModeBadgePlan = lipgloss.NewStyle().Foreground(o.plan).Padding(0, 1).Bold(true).SetString("PLAN MODE")
 	s.Status.ModeBadgeYolo = lipgloss.NewStyle().Foreground(o.busy).Padding(0, 1).Bold(true).SetString("YOLO MODE")
+	s.Status.ModeBadgeSysadmin = lipgloss.NewStyle().Foreground(o.destructive).Padding(0, 1).Bold(true).SetString("SYSADMIN MODE")
 	s.Status.ModeBadgeRemote = lipgloss.NewStyle().Foreground(o.info).Padding(0, 1).Bold(true).SetString("REMOTE")
 	s.Status.ModeBannerPlanBadge = s.Status.ModeBadgePlan
 	s.Status.ModeBannerPlan = lipgloss.NewStyle().Foreground(o.fgBase).Background(o.planMoreSubtle).Padding(0, 1)
 	s.Status.ModeBannerYoloBadge = s.Status.ModeBadgeYolo
-	s.Status.ModeBannerYolo = lipgloss.NewStyle().Foreground(o.bgBase).Background(o.yolo).Padding(0, 1)
+	// The banners write a background role on a status fill; badgeInk swaps
+	// it for fgBase where that reads better (light themes).
+	s.Status.ModeBannerYolo = lipgloss.NewStyle().Foreground(badgeInk(o.yolo, o.bgBase, o.fgBase)).Background(o.yolo).Padding(0, 1)
+	s.Status.ModeBannerSysadminBadge = s.Status.ModeBadgeSysadmin
+	// Themes without a subtle destructive hue fill the banner with the
+	// destructive one.
+	sysadminFill := o.destructiveSubtle
+	if sysadminFill == nil {
+		sysadminFill = o.destructive
+	}
+	s.Status.ModeBannerSysadmin = lipgloss.NewStyle().Foreground(badgeInk(sysadminFill, o.bgBase, o.fgBase)).Background(sysadminFill).Padding(0, 1)
 	s.Status.SuccessIndicator = base.Foreground(o.success).Background(o.bgLeastVisible).Padding(0, 1).Bold(true).SetString("OKAY!")
 	s.Status.InfoIndicator = s.Status.SuccessIndicator.Foreground(o.info)
 	s.Status.UpdateIndicator = s.Status.SuccessIndicator.Foreground(o.accent).SetString("HEY!")
@@ -131,7 +147,7 @@ func quickStyleCompletions(s *Styles, o quickStyleOpts, base lipgloss.Style) {
 	s.Completions.Match = base.Underline(true)
 
 	// Attachments styles
-	attachmentIconStyle := base.Foreground(o.bgLessVisible).Background(o.success).Padding(0, 1)
+	attachmentIconStyle := base.Foreground(badgeInk(o.success, o.bgLessVisible, o.fgBase)).Background(o.success).Padding(0, 1)
 	s.Attachments.Image = attachmentIconStyle.SetString(ImageIcon)
 	s.Attachments.Text = attachmentIconStyle.SetString(TextIcon)
 	s.Attachments.Skill = attachmentIconStyle.SetString(SkillIcon)

@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"slices"
+	"syscall"
 	"time"
 
 	"github.com/charmbracelet/crush/internal/backend"
@@ -285,7 +286,7 @@ func runEngineServe(cmd *cobra.Command, _ []string) error {
 	}
 	defer func() { _ = release() }()
 
-	cfg, err := config.Load(config.GlobalWorkspaceDir(), canonical, debug)
+	cfg, err := config.Load(cmd.Context(), config.GlobalWorkspaceDir(), canonical, debug)
 	if err != nil {
 		return fmt.Errorf("failed to load configuration: %w", err)
 	}
@@ -297,9 +298,9 @@ func runEngineServe(cmd *cobra.Command, _ []string) error {
 
 	errch := make(chan error, 1)
 	sigch := make(chan os.Signal, 1)
-	sigs := []os.Signal{os.Interrupt}
-	sigs = append(sigs, addSignals(sigs)...)
-	signal.Notify(sigch, sigs...)
+	// Ctrl+C and SIGTERM stop the engine. SIGHUP does not: the engine
+	// outlives the terminal that started it.
+	signal.Notify(sigch, os.Interrupt, syscall.SIGTERM)
 	defer signal.Stop(sigch)
 
 	go func() {

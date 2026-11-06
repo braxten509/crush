@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	"github.com/charmbracelet/crush/internal/config"
@@ -92,7 +92,7 @@ func TestTerminalShowsTheSelectedAccount(t *testing.T) {
 func TestTerminalShowsMoonshotLimits(t *testing.T) {
 	ws := newLoadWorkspace()
 	ws.cfg.Providers.Set("kimi-coding", config.ProviderConfig{
-		ID: "kimi-coding", Type: catwalk.TypeAnthropic,
+		ID: "kimi-coding", Type: catwalk.TypeMessages,
 		Models: []catwalk.Model{{ID: "k3.1-pro", Name: "Kimi K3.1 Pro"}},
 	})
 	u := newLoadTestUI(t, ws)

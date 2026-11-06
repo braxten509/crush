@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/csync"
 )
 
@@ -227,15 +227,16 @@ func (c *Config) ValidateReasoningEffort(provider, modelID, effort string) error
 	if model == nil {
 		return fmt.Errorf("model %q not found for provider %q", modelID, provider)
 	}
-	if len(model.ReasoningLevels) == 0 {
+	levels := model.ReasoningEffortLevels()
+	if len(levels) == 0 {
 		return fmt.Errorf("model %q does not support reasoning effort", modelID)
 	}
-	if slices.Contains(model.ReasoningLevels, effort) {
+	if slices.Contains(levels, effort) {
 		return nil
 	}
 	return fmt.Errorf(
 		"model %q does not support reasoning effort %q, accepted values: %s",
-		modelID, effort, strings.Join(model.ReasoningLevels, ", "),
+		modelID, effort, strings.Join(levels, ", "),
 	)
 }
 

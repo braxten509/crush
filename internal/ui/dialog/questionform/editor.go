@@ -19,9 +19,7 @@ import (
 // only placeholder and char limit vary.
 func newQuestionTextarea(sty *styles.Styles, placeholder string, charLimit int) textarea.Model {
 	ta := textarea.New()
-	taStyles := sty.Editor.Textarea
-	taStyles.Cursor.Color = sty.Editor.QuestionCursorBar.GetForeground()
-	ta.SetStyles(taStyles)
+	ta.SetStyles(questionTextareaStyles(sty))
 	ta.Placeholder = placeholder
 	ta.ShowLineNumbers = false
 	ta.CharLimit = charLimit
@@ -35,6 +33,13 @@ func newQuestionTextarea(sty *styles.Styles, placeholder string, charLimit int) 
 	ta.KeyMap.InsertNewline = key.NewBinding(key.WithDisabled())
 	ta.Blur()
 	return ta
+}
+
+// questionTextareaStyles returns the styles of a question textarea.
+func questionTextareaStyles(sty *styles.Styles) textarea.Styles {
+	taStyles := sty.Editor.Textarea
+	taStyles.Cursor.Color = sty.Editor.QuestionCursorBar.GetForeground()
+	return taStyles
 }
 
 // questionEditor owns the fill-in textarea, note editor, and notes
@@ -220,7 +225,7 @@ func answerBar(sty *styles.Styles, active bool) string {
 // drawNote appends note rows to lines for the given key. When the
 // note editor is active, renders the live textarea; otherwise shows
 // saved note text or nothing.
-func (e *questionEditor) drawNote(lines *[]contentLine, innerWidth int, bar, barInactive, noteKey string, isActive bool) {
+func (e *questionEditor) drawNote(lines *[]contentLine, innerWidth int, bar, noteKey string, isActive bool) {
 	noteStyle := e.Styles.Editor.QuestionNote
 	isEditing := e.activeNoteKey == noteKey && e.noteEditor.Focused()
 	const notePrefix = "> "
@@ -230,9 +235,11 @@ func (e *questionEditor) drawNote(lines *[]contentLine, innerWidth int, bar, bar
 		e.noteEditor.SetWidth(innerWidth - questionBarWidth - prefixWidth)
 		indent := strings.Repeat(" ", prefixWidth)
 		for j, tl := range strings.Split(e.noteEditor.View(), "\n") {
+			// As with the fill-in: prompt on the first row, bar on all
+			// of them.
 			text := bar + notePrefix + tl
 			if j > 0 {
-				text = barInactive + indent + tl
+				text = bar + indent + tl
 			}
 			*lines = append(*lines, contentLine{text: text, noteRow: j == 0, cursorItem: true, choiceIdx: -1})
 		}

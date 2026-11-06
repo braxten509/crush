@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/csync"
@@ -19,7 +19,6 @@ import (
 	"github.com/charmbracelet/crush/internal/history"
 	"github.com/charmbracelet/crush/internal/lsp"
 	"github.com/charmbracelet/crush/internal/message"
-	"github.com/charmbracelet/crush/internal/permission"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/stretchr/testify/require"
 )
@@ -42,7 +41,7 @@ func markerEnv(t *testing.T) (fakeEnv, *db.Queries) {
 		workingDir:  dir,
 		sessions:    session.NewService(q, conn),
 		messages:    message.NewService(q),
-		permissions: permission.NewPermissionService(dir, true, []string{}),
+		permissions: yoloPermissions(dir),
 		history:     history.NewService(q, conn),
 		filetracker: &tracker,
 		lspClients:  csync.NewMap[string, *lsp.Client](),

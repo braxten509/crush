@@ -7,9 +7,19 @@ import (
 	"strings"
 	"testing"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/stretchr/testify/require"
 )
+
+// reasoningWith is a catalog model's reasoning: it thinks, and takes these
+// effort levels with this default.
+func reasoningWith(defaultEffort string, levels ...string) catwalk.Reasoning {
+	return catwalk.Reasoning{
+		Thinking:           catwalk.ThinkingToggleable,
+		EffortLevels:       catwalk.NewEffortLevels(levels...),
+		DefaultEffortLevel: defaultEffort,
+	}
+}
 
 func TestAbacusDiscoverySupportsCodingModels(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -30,15 +40,15 @@ func TestAbacusDiscoverySupportsCodingModels(t *testing.T) {
 	require.Equal(t, "GPT-6.1 Sol", models[0].Name)
 	require.Equal(t, int64(1_000_000), models[0].ContextWindow)
 	require.Equal(t, int64(128_000), models[0].DefaultMaxTokens)
-	require.True(t, models[0].SupportsImages)
-	require.True(t, models[0].CanReason)
-	require.InDelta(t, 2, models[0].CostPer1MIn, 0.000001)
-	require.InDelta(t, 10, models[0].CostPer1MOut, 0.000001)
-	require.InDelta(t, 0.1, models[0].CostPer1MInCached, 0.000001)
+	require.True(t, models[0].Capabilities.Vision)
+	require.True(t, models[0].CanReason())
+	require.InDelta(t, 2, models[0].Pricing.Input, 0.000001)
+	require.InDelta(t, 10, models[0].Pricing.Output, 0.000001)
+	require.InDelta(t, 0.1, models[0].Pricing.CacheCreate, 0.000001)
 	require.Equal(t, int64(200_000), models[1].ContextWindow)
 	require.Equal(t, "responses", models[0].Options.ProviderOptions["abacus_api_format"])
 	require.Equal(t, "responses-only", models[2].ID)
-	require.Equal(t, []string{"low", "medium", "high", "xhigh", "max"}, models[0].ReasoningLevels)
+	require.Equal(t, []string{"low", "medium", "high", "xhigh", "max"}, models[0].ReasoningEffortLevels())
 }
 
 func TestAbacusClaudeAndGeminiEffortProfiles(t *testing.T) {
@@ -57,45 +67,47 @@ func TestAbacusClaudeAndGeminiEffortProfiles(t *testing.T) {
 			// Native catalogue metadata is supplied by config loading, even
 			// when the native provider itself is disabled.
 			model, ok := abacusModel(raw, catwalk.Provider{ID: "anthropic", Models: []catwalk.Model{{
-				ID: strings.TrimSuffix(test.id, "-thinking"), CanReason: true,
-				ReasoningLevels: test.levels, DefaultReasoningEffort: test.defaultEffort,
+				ID:        strings.TrimSuffix(test.id, "-thinking"),
+				Reasoning: reasoningWith(test.defaultEffort, test.levels...),
 			}}})
 			require.True(t, ok)
-			require.Equal(t, test.levels, model.ReasoningLevels)
-			require.Equal(t, test.defaultEffort, model.DefaultReasoningEffort)
+			require.Equal(t, test.levels, model.ReasoningEffortLevels())
+			require.Equal(t, test.defaultEffort, model.Reasoning.DefaultEffortLevel)
 		})
 	}
 }
 
 func TestAbacusControlsUseTheExactCurrentModel(t *testing.T) {
 	provider := catwalk.Provider{ID: "openai", Models: []catwalk.Model{
-		{ID: "gpt-6-astra", CanReason: true, ReasoningLevels: []string{"low", "high", "max"}},
-		{ID: "gpt-6-sol", CanReason: true, ReasoningLevels: []string{"none", "low", "high"}, DefaultReasoningEffort: "high"},
+		{ID: "gpt-6-astra", Reasoning: reasoningWith("", "low", "high", "max")},
+		{ID: "gpt-6-sol", Reasoning: reasoningWith("high", "none", "low", "high")},
 	}}
 	model, ok := abacusModel([]byte(`{"id":"gpt-6-sol","model_type":"text_generation","api_formats":["responses"],"tools":true}`), provider)
 	require.True(t, ok)
-	require.Equal(t, []string{"none", "low", "high"}, model.ReasoningLevels)
-	require.Equal(t, "high", model.DefaultReasoningEffort)
+	require.Equal(t, []string{"none", "low", "high"}, model.ReasoningEffortLevels())
+	require.Equal(t, "high", model.Reasoning.DefaultEffortLevel)
 	unknown, ok := abacusModel([]byte(`{"id":"gpt-6-new","model_type":"text_generation","api_formats":["responses"],"tools":true}`), provider)
 	require.True(t, ok)
-	require.Empty(t, unknown.ReasoningLevels, "a new model must not inherit a sibling's controls")
+	require.Empty(t, unknown.ReasoningEffortLevels(), "a new model must not inherit a sibling's controls")
 	declared, ok := abacusModel([]byte(`{"id":"gpt-6-sol","model_type":"text_generation","api_formats":["responses"],"tools":true,"reasoning_levels":["medium"],"default_reasoning_effort":"medium"}`), provider)
 	require.True(t, ok)
-	require.Equal(t, []string{"medium"}, declared.ReasoningLevels)
-	require.Equal(t, "medium", declared.DefaultReasoningEffort)
+	require.Equal(t, []string{"medium"}, declared.ReasoningEffortLevels())
+	require.Equal(t, "medium", declared.Reasoning.DefaultEffortLevel)
 }
 
 func TestAbacusNamedModelsDoNotChangeTheirAPIIdentifier(t *testing.T) {
 	provider := catwalk.Provider{ID: "deepseek", Models: []catwalk.Model{{
-		ID: "deepseek-v4-pro", Name: "DeepSeek-V4-Pro", CanReason: true,
-		ReasoningLevels: []string{"low", "high", "max"}, DefaultReasoningEffort: "high",
+		ID: "deepseek-v4-pro", Name: "DeepSeek-V4-Pro",
+		Reasoning: reasoningWith("high", "low", "high", "max"),
 	}}}
 	model, ok := abacusModel([]byte(`{"id":"deepseek-ai/DeepSeek-V4-Pro-0813","display_name":"Deepseek V4 Pro","model_type":"text_generation","api_formats":["openai"],"tools":true}`), provider)
 	require.True(t, ok)
 	require.Equal(t, "deepseek-ai/DeepSeek-V4-Pro-0813", model.ID)
-	require.Equal(t, []string{"low", "high", "max"}, model.ReasoningLevels)
-	provider.Models = append(provider.Models, catwalk.Model{ID: "different-version", Name: "Deepseek V4 Pro", ReasoningLevels: []string{"medium"}})
+	require.Equal(t, []string{"low", "high", "max"}, model.ReasoningEffortLevels())
+	provider.Models = append(provider.Models, catwalk.Model{
+		ID: "different-version", Name: "Deepseek V4 Pro", Reasoning: reasoningWith("", "medium"),
+	})
 	model, ok = abacusModel([]byte(`{"id":"unknown-alias","display_name":"Deepseek V4 Pro","model_type":"text_generation","api_formats":["openai"],"tools":true}`), provider)
 	require.True(t, ok)
-	require.Empty(t, model.ReasoningLevels, "ambiguous display names cannot supply controls")
+	require.Empty(t, model.ReasoningEffortLevels(), "ambiguous display names cannot supply controls")
 }

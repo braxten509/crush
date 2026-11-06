@@ -134,7 +134,7 @@ func TestBackgroundOutputAfterCompletedSessionRun(t *testing.T) {
 	session, err := c.sessions.Create(t.Context(), "completed run")
 	require.NoError(t, err)
 	manager := shell.GetBackgroundShellManager()
-	job, err := manager.Start(t.Context(), t.TempDir(), nil, "printf finished", "completed job")
+	job, err := manager.Start(t.Context(), t.TempDir(), nil, "printf finished", "completed job", 0)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = manager.Remove(job.ID) })
 	require.True(t, job.WaitContext(t.Context()))
@@ -277,7 +277,7 @@ func TestBackgroundJobPersistsLateFileReview(t *testing.T) {
 func TestManagedJobsAreVisibleWithoutMarkedChildProcesses(t *testing.T) {
 	h := registerTestHub(t)
 	hold, _ := gate(t)
-	job, err := shell.GetBackgroundShellManager().Start(t.Context(), t.TempDir(), nil, hold, "logical job")
+	job, err := shell.GetBackgroundShellManager().Start(t.Context(), t.TempDir(), nil, hold, "logical job", 0)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = shell.GetBackgroundShellManager().Kill(job.ID) })
 	h.mu.Lock()

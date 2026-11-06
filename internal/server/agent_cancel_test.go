@@ -82,6 +82,7 @@ func (s *runCoordinator) QueuedPrompts(string) int          { return 0 }
 func (s *runCoordinator) QueuedPromptsList(string) []string { return nil }
 func (s *runCoordinator) ClearQueue(string)                 {}
 func (s *runCoordinator) Interrupt(string)                  {}
+func (s *runCoordinator) AddNote(string, string)            {}
 func (s *runCoordinator) Summarize(context.Context, string) error {
 	return nil
 }
@@ -94,6 +95,8 @@ func (s *runCoordinator) MainAgentName() string {
 	}
 	return "coder"
 }
+func (s *runCoordinator) SetHostContext(proto.HostContext) {}
+func (s *runCoordinator) HostContext() proto.HostContext   { return proto.HostContext{} }
 
 func (s *runCoordinator) SetMainAgent(agentName string) error {
 	s.lastMainAgentSet.Store(agentName)
@@ -247,3 +250,6 @@ func TestPostAgent_DetachesRequestContext(t *testing.T) {
 }
 
 func (s *runCoordinator) RecallQueuedPrompt(string) *message.QueuedPrompt { return nil }
+func (*runCoordinator) ListSettledMessages(context.Context, string) ([]message.Message, error) {
+	return nil, nil
+}

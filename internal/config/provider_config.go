@@ -3,7 +3,7 @@ package config
 import (
 	"maps"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/config/providers"
 	"github.com/charmbracelet/crush/internal/oauth"
 	"github.com/charmbracelet/crush/internal/oauth/copilot"
@@ -91,47 +91,43 @@ type ProviderConfig struct {
 	GrokModels []catwalk.Model `json:"grok_models,omitempty" jsonschema:"-"`
 }
 
-// AvailableModels returns the catalog served by the provider's active credentials.
+// AvailableModels returns the catalog served by the provider's active
+// credentials. It is UsableModels under the name the fork's callers use.
 func (p ProviderConfig) AvailableModels() []catwalk.Model {
-	if p.OAuthToken != nil {
-		switch catwalk.InferenceProvider(p.ID) {
-		case catwalk.InferenceProviderOpenAI:
-			return p.ChatGPTModels
-		case catwalk.InferenceProviderXAI:
-			return p.GrokModels
-		}
+	return p.UsableModels()
+}
+
+// UsableModels returns the models the current credential can serve: a
+// ChatGPT or Grok login only reaches its subscription's models.
+func (p ProviderConfig) UsableModels() []catwalk.Model {
+	if models, ok := p.SubscriptionModels(); ok {
+		return models
 	}
 	return p.Models
 }
 
+// SubscriptionModels returns the models a ChatGPT or Grok login grants, and
+// whether the provider is signed in with one at all.
+func (p ProviderConfig) SubscriptionModels() ([]catwalk.Model, bool) {
+	if p.OAuthToken == nil {
+		return nil, false
+	}
+	switch catwalk.InferenceProvider(p.ID) {
+	case catwalk.InferenceProviderOpenAI:
+		return p.ChatGPTModels, true
+	case catwalk.InferenceProviderXAI:
+		return p.GrokModels, true
+	}
+	return nil, false
+}
+
 // ToProvider converts the [ProviderConfig] to a [catwalk.Provider].
 func (c *ProviderConfig) ToProvider() catwalk.Provider {
-	// Convert config provider to provider.Provider format
-	provider := catwalk.Provider{
+	return catwalk.Provider{
 		Name:   c.Name,
 		ID:     catwalk.InferenceProvider(c.ID),
-		Models: make([]catwalk.Model, len(c.Models)),
+		Models: c.Models,
 	}
-
-	// Convert models
-	for i, model := range c.Models {
-		provider.Models[i] = catwalk.Model{
-			ID:                     model.ID,
-			Name:                   model.Name,
-			CostPer1MIn:            model.CostPer1MIn,
-			CostPer1MOut:           model.CostPer1MOut,
-			CostPer1MInCached:      model.CostPer1MInCached,
-			CostPer1MOutCached:     model.CostPer1MOutCached,
-			ContextWindow:          model.ContextWindow,
-			DefaultMaxTokens:       model.DefaultMaxTokens,
-			CanReason:              model.CanReason,
-			ReasoningLevels:        model.ReasoningLevels,
-			DefaultReasoningEffort: model.DefaultReasoningEffort,
-			SupportsImages:         model.SupportsImages,
-		}
-	}
-
-	return provider
 }
 
 func (c *ProviderConfig) SetupGitHubCopilot() {

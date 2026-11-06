@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 )
 
 // Account is one more sign-in of a tool, kept in a folder of its own

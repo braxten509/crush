@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/stretchr/testify/require"
 )
 
@@ -84,7 +84,7 @@ func runHyperRefreshDuringLoad(t *testing.T) {
 		}
 	}`)
 
-	store, err := Load(e.workDir, e.dataDir, false)
+	store, err := Load(t.Context(), e.workDir, e.dataDir, false)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, exchanges.Load())
 

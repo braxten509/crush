@@ -119,14 +119,16 @@ func commitFileChange(edit editContext, sessionID, filePath, oldContent, newCont
 // history gets the old version on first touch (or when the file changed
 // outside the session since its last version) and the new one, and the
 // file tracker counts the change as a read. History is kept only for files
-// inside the working directory's repository.
+// inside the working directory's repository. The change is already on disk,
+// so a history failure is logged rather than returned: it must not end the
+// agent's turn over an edit that went through.
 func recordFileChange(edit editContext, sessionID, filePath, oldContent, newContent string) error {
 	if edit.files != nil && filechange.InRepository(filechange.RepositoryRoot(edit.workingDir), edit.workingDir, filePath) {
 		file, err := edit.files.GetByPathAndSession(edit.ctx, filePath, sessionID)
 		if err != nil {
 			file, err = edit.files.Create(edit.ctx, sessionID, filePath, oldContent)
 			if err != nil {
-				return fmt.Errorf("error creating file history: %w", err)
+				slog.Error("Error creating file history", "error", err)
 			}
 		}
 		if file.Content != oldContent {
@@ -146,12 +148,13 @@ func recordFileChange(edit editContext, sessionID, filePath, oldContent, newCont
 }
 
 // recordNewFile records a file the session just created: an empty first
-// history version and its content, and a read in the file tracker.
+// history version and its content, and a read in the file tracker. Like
+// recordFileChange, it logs history failures instead of returning them.
 func recordNewFile(edit editContext, sessionID, filePath, content string) error {
 	if filechange.InRepository(filechange.RepositoryRoot(edit.workingDir), edit.workingDir, filePath) {
 		// File can't be in the history so we create a new file history.
 		if _, err := edit.files.Create(edit.ctx, sessionID, filePath, ""); err != nil {
-			return fmt.Errorf("error creating file history: %w", err)
+			slog.Error("Error creating file history", "error", err)
 		}
 		if _, err := edit.files.CreateVersion(edit.ctx, sessionID, filePath, content); err != nil {
 			slog.Error("Error creating file history version", "error", err)

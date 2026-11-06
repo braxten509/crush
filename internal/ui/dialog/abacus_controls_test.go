@@ -3,7 +3,7 @@ package dialog
 import (
 	"testing"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/csync"
 	"github.com/charmbracelet/crush/internal/ui/styles"
@@ -15,14 +15,14 @@ func TestAbacusCommandControlsMatchModelCapabilities(t *testing.T) {
 		model                  catwalk.Model
 		effort, thinking, fast bool
 	}{
-		{catwalk.Model{ID: "claude-opus-5-5-thinking", CanReason: true, ReasoningLevels: []string{"low", "medium", "high", "xhigh", "max"}, DefaultReasoningEffort: "medium"}, true, false, false},
-		{catwalk.Model{ID: "gpt-6.1-sol", CanReason: true, ReasoningLevels: []string{"low", "medium", "high", "xhigh", "max"}, DefaultReasoningEffort: "medium"}, true, false, true},
-		{catwalk.Model{ID: "claude-haiku-4-5-20251001", CanReason: true}, false, true, false},
-		{catwalk.Model{ID: "unknown-always-thinking", CanReason: true}, false, false, false},
+		{catwalk.Model{ID: "claude-opus-5-5-thinking", Reasoning: catwalk.Reasoning{Thinking: catwalk.ThinkingToggleable, EffortLevels: catwalk.NewEffortLevels("low", "medium", "high", "xhigh", "max"), DefaultEffortLevel: "medium"}}, true, false, false},
+		{catwalk.Model{ID: "gpt-6.1-sol", Reasoning: catwalk.Reasoning{Thinking: catwalk.ThinkingToggleable, EffortLevels: catwalk.NewEffortLevels("low", "medium", "high", "xhigh", "max"), DefaultEffortLevel: "medium"}}, true, false, true},
+		{catwalk.Model{ID: "claude-haiku-4-5-20251001", Reasoning: catwalk.Reasoning{Thinking: catwalk.ThinkingToggleable}}, false, true, false},
+		{catwalk.Model{ID: "unknown-always-thinking", Reasoning: catwalk.Reasoning{Thinking: catwalk.ThinkingAlways}}, false, false, false},
 	} {
 		t.Run(test.model.ID, func(t *testing.T) {
 			cfg := &config.Config{
-				Providers: csync.NewMapFrom(map[string]config.ProviderConfig{"abacus": {ID: "abacus", Type: catwalk.TypeOpenAICompat, Models: []catwalk.Model{test.model}}}),
+				Providers: csync.NewMapFrom(map[string]config.ProviderConfig{"abacus": {ID: "abacus", Type: catwalk.TypeCompletions, Models: []catwalk.Model{test.model}}}),
 			}
 			sty := styles.CharmtonePantera()
 			com := chatCommon(cfg, &sty, config.SelectedModel{Provider: "abacus", Model: test.model.ID})
@@ -37,7 +37,7 @@ func TestAbacusCommandControlsMatchModelCapabilities(t *testing.T) {
 			if test.effort {
 				dialog, err := NewReasoning(com)
 				require.NoError(t, err)
-				require.Equal(t, test.model.DefaultReasoningEffort, dialog.list.SelectedItem().(*ReasoningItem).effort)
+				require.Equal(t, test.model.Reasoning.DefaultEffortLevel, dialog.list.SelectedItem().(*ReasoningItem).effort)
 			}
 		})
 	}

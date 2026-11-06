@@ -11,10 +11,8 @@ import (
 	"time"
 
 	"charm.land/fantasy"
-	"github.com/charmbracelet/crush/internal/agent/hyper"
-	"github.com/charmbracelet/crush/internal/agent/notify"
 	"github.com/charmbracelet/crush/internal/agent/providers"
-	"github.com/charmbracelet/crush/internal/pubsub"
+	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/session"
 )
 
@@ -29,6 +27,46 @@ type subAgentParams struct {
 	// SessionSetup is an optional callback invoked after session creation
 	// but before agent execution, for custom session configuration.
 	SessionSetup func(sessionID string)
+	// ModelOverride, when set, is saved with the sub-agent's chat, which
+	// then runs on it instead of the parent chat's model it starts with.
+	ModelOverride *config.SelectedModel
+	// SkipCostRollup leaves billing the parent to the caller. Detached
+	// sub-agents roll their cost up themselves after every run, including
+	// runs that fail or are stopped part-way.
+	SkipCostRollup bool
+}
+
+// subAgentCall assembles the call a sub-agent turn runs under: the model
+// settings for the sub-agent's own chat model, not the parent's. Both the
+// initial task and any message sent to a running sub-agent go through it,
+// so a mid-flight message cannot start a turn with an unconfigured model.
+func (c *coordinator) subAgentCall(ctx context.Context, agent SessionAgent, sessionID, prompt string) (SessionAgentCall, Model, error) {
+	// The sub-agent runs on its own chat's model, which starts as its
+	// parent chat's (owner, 2026-10-24: every chat owns its model).
+	model, err := agent.ChatModel(ctx, sessionID)
+	if err != nil {
+		return SessionAgentCall{}, Model{}, err
+	}
+	providerCfg, ok := c.cfg.Config().Providers.Get(model.ModelCfg.Provider)
+	if !ok {
+		return SessionAgentCall{}, Model{}, errModelProviderNotConfigured
+	}
+	opts := getProviderOptions(model, providerCfg)
+	injectOpenrouterSessionID(opts, sessionID)
+	return SessionAgentCall{
+		SessionID:        sessionID,
+		Prompt:           prompt,
+		MaxOutputTokens:  subAgentMaxTokens(model),
+		ProviderOptions:  opts,
+		Temperature:      model.ModelCfg.Temperature,
+		TopP:             model.ModelCfg.TopP,
+		TopK:             providers.CallTopK(providerCfg, model.ModelCfg.TopK),
+		FrequencyPenalty: model.ModelCfg.FrequencyPenalty,
+		PresencePenalty:  model.ModelCfg.PresencePenalty,
+		NonInteractive:   true,
+		OnAuthRefresh:    c.makeAuthRefreshCallback(providerCfg),
+		model:            model,
+	}, model, nil
 }
 
 // runSubAgent runs a sub-agent and handles session management and cost accumulation.
@@ -46,62 +84,94 @@ func (c *coordinator) runSubAgent(ctx context.Context, params subAgentParams) (f
 	if params.SessionSetup != nil {
 		params.SessionSetup(session.ID)
 	}
+	if params.ModelOverride != nil {
+		if err := c.setChatModel(ctx, session.ID, *params.ModelOverride); err != nil {
+			return fantasy.ToolResponse{}, fmt.Errorf("save the sub-agent's model: %w", err)
+		}
+	}
 
-	// The sub-agent runs on its own chat's model, which starts as its
-	// parent chat's (owner, 2026-10-24: every chat owns its model).
-	model, err := params.Agent.ChatModel(ctx, session.ID)
+	call, model, err := c.subAgentCall(ctx, params.Agent, session.ID, params.Prompt)
 	if err != nil {
 		return fantasy.ToolResponse{}, err
 	}
-	maxTokens := subAgentMaxTokens(model)
-
-	providerCfg, ok := c.cfg.Config().Providers.Get(model.ModelCfg.Provider)
-	if !ok {
-		return fantasy.ToolResponse{}, errModelProviderNotConfigured
-	}
 	// Include failed and recovery attempts in the parent's cost as well.
-	defer func() {
-		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-		defer cancel()
-		if err := c.updateParentSessionCost(cleanupCtx, session.ID, params.SessionID); err != nil {
-			slog.Warn("Failed to update parent session cost", "child_session", session.ID, "parent_session", params.SessionID, "error", err)
-		}
-	}()
-
-	// Run the agent
-	run := func() (*fantasy.AgentResult, error) {
-		return runSubAgentReport(ctx, params.Agent, SessionAgentCall{
-			SessionID:        session.ID,
-			Prompt:           params.Prompt,
-			MaxOutputTokens:  maxTokens,
-			ProviderOptions:  getProviderOptions(model, providerCfg),
-			Temperature:      model.ModelCfg.Temperature,
-			TopP:             model.ModelCfg.TopP,
-			TopK:             providers.CallTopK(providerCfg, model.ModelCfg.TopK),
-			FrequencyPenalty: model.ModelCfg.FrequencyPenalty,
-			PresencePenalty:  model.ModelCfg.PresencePenalty,
-			NonInteractive:   true,
-			OnAuthRefresh:    c.makeAuthRefreshCallback(providerCfg),
-		})
+	if !params.SkipCostRollup {
+		defer func() {
+			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+			defer cancel()
+			if err := c.updateParentSessionCost(cleanupCtx, session.ID, params.SessionID); err != nil {
+				slog.Warn("Failed to update parent session cost", "child_session", session.ID, "parent_session", params.SessionID, "error", err)
+			}
+		}()
 	}
-	result, err := run()
-	// Notify only if still unauthorized after retry. AWS SSO is handled
+
+	done := c.trackSubSession(session.ID)
+	result, err := runSubAgentReport(ctx, params.Agent, call)
+	done()
+	// Ask only if still unauthorized after the retry. AWS SSO is handled
 	// transparently inside OnAuthRefresh, so it needs no post-run notice.
-	if err != nil && isUnauthorized(err) && c.notify != nil && model.ModelCfg.Provider == hyper.Name {
-		c.notify.Publish(pubsub.CreatedEvent, notify.Notification{
-			Type:       notify.TypeReAuthenticate,
-			ProviderID: model.ModelCfg.Provider,
-		})
-	}
-	if errors.Is(err, errSubAgentNoOutput) {
-		return fantasy.NewTextErrorResponse("Sub-agent completed but produced no text output."), nil
-	}
-	if err != nil {
-		return fantasy.NewTextErrorResponse(fmt.Sprintf("Failed to generate response: %s", err)), nil
-	}
+	c.askToSignInAgain(err, model)
+	return subAgentToolResponse(result, err), nil
+}
 
-	output := subAgentOutput(result)
-	return fantasy.NewTextResponse(output), nil
+const (
+	subAgentNoOutput  = "Subagent completed but produced no text output."
+	subAgentRefused   = "Subagent stopped early: the provider's safety classifier refused its response, so it never finished the task. The same task on the same model will likely be refused again; rephrase it or dispatch a new subagent on a different model."
+	subAgentTruncated = "Subagent stopped early: it ran out of output tokens mid-response, so it never finished the task. Ask it to continue in smaller steps."
+)
+
+// subAgentToolResponse turns a worker's run, as runSubAgentReport ended it,
+// into the parent's tool result.
+func subAgentToolResponse(result *fantasy.AgentResult, err error) fantasy.ToolResponse {
+	switch {
+	case errors.Is(err, errSubAgentNoOutput):
+		return fantasy.NewTextErrorResponse(subAgentNoOutput)
+	case errors.Is(err, errSubAgentRefused):
+		return fantasy.NewTextErrorResponse(withLastWords(subAgentRefused, lastStep(result)))
+	case errors.Is(err, errSubAgentTruncated):
+		return fantasy.NewTextErrorResponse(withLastWords(subAgentTruncated, lastStep(result)))
+	case err != nil:
+		return fantasy.NewTextErrorResponse(fmt.Sprintf("Failed to generate response: %s", err))
+	}
+	return subAgentResponse(result)
+}
+
+// subAgentResponse turns a finished sub-agent run into the parent's tool
+// result. The run's last step decides: fantasy falls back to an earlier
+// step's text when the last one has none, which after a cut-short step is
+// narration, not a report.
+func subAgentResponse(result *fantasy.AgentResult) fantasy.ToolResponse {
+	if result == nil {
+		return fantasy.NewTextErrorResponse(subAgentNoOutput)
+	}
+	last := lastStep(result)
+	switch last.FinishReason {
+	case fantasy.FinishReasonContentFilter:
+		return fantasy.NewTextErrorResponse(withLastWords(subAgentRefused, last))
+	case fantasy.FinishReasonLength:
+		return fantasy.NewTextErrorResponse(withLastWords(subAgentTruncated, last))
+	}
+	if output := result.Response.Content.Text(); output != "" {
+		return fantasy.NewTextResponse(output)
+	}
+	return fantasy.NewTextErrorResponse(subAgentNoOutput)
+}
+
+// lastStep is the run's last step, or zero for a run without steps.
+func lastStep(result *fantasy.AgentResult) fantasy.StepResult {
+	if result == nil || len(result.Steps) == 0 {
+		return fantasy.StepResult{}
+	}
+	return result.Steps[len(result.Steps)-1]
+}
+
+// withLastWords appends whatever text the cut-short step did produce.
+func withLastWords(reason string, step fantasy.StepResult) string {
+	text := strings.TrimSpace(step.Content.Text())
+	if text == "" {
+		return reason
+	}
+	return reason + "\n\nIts last output before stopping:\n\n" + text
 }
 
 func subAgentMaxTokens(model Model) int64 {
@@ -118,8 +188,16 @@ const reportRecoveryPrompt = "Your previous response reached max_tokens before i
 	"Reply now with a complete, concise final report (under 600 words): what you verified, what you found, and what is unfinished or uncertain. " +
 	"If little or no work was recorded, say so plainly instead of guessing. Do not include your reasoning."
 
-// errSubAgentNoOutput is a run that ended without any report text.
-var errSubAgentNoOutput = errors.New("sub-agent completed but produced no text output")
+// Errors a worker run ends with when it has no complete report.
+var (
+	// errSubAgentNoOutput is a run that ended without any report text.
+	errSubAgentNoOutput = errors.New("sub-agent completed but produced no text output")
+	// errSubAgentRefused is a run the provider's safety classifier stopped.
+	errSubAgentRefused = errors.New("sub-agent stopped by provider content_filter/refusal; no complete report (not retried)")
+	// errSubAgentTruncated is a run that ran out of output tokens again
+	// while recovering its report.
+	errSubAgentTruncated = errors.New("sub-agent reached max_tokens again while recovering its final report; task incomplete (continue the task to resume)")
+)
 
 // terminalFinishReason is how the run's last step ended. AgentResult.Response
 // is the latest step that has text, so after a last step with none (a tool
@@ -161,9 +239,9 @@ func runSubAgentReport(ctx context.Context, agent SessionAgent, call SessionAgen
 	if result != nil {
 		switch reason := terminalFinishReason(result); reason {
 		case fantasy.FinishReasonLength:
-			return result, errors.New("sub-agent reached max_tokens again while recovering its final report; task incomplete (continue the task to resume)")
+			return result, errSubAgentTruncated
 		case fantasy.FinishReasonContentFilter:
-			return result, errors.New("sub-agent stopped by provider content_filter/refusal; no complete report (not retried)")
+			return result, errSubAgentRefused
 		case fantasy.FinishReasonError:
 			return result, fmt.Errorf("sub-agent stopped with finish reason %q; no complete report", reason)
 		case fantasy.FinishReasonToolCalls:

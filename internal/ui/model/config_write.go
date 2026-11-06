@@ -77,18 +77,20 @@ func saveCompactMode(ws workspace.Workspace, compact bool) tea.Cmd {
 
 // toggleTransparentBackground flips options.tui.transparent. The config
 // write runs off the Update goroutine; the UI switches backgrounds only once
-// it succeeded.
+// it succeeded. It flips what is on screen, which a host theme may have
+// overridden, rather than the config value.
 func (m *UI) toggleTransparentBackground() tea.Cmd {
-	cfg := m.com.Config()
-	if cfg == nil {
+	if m.com.Config() == nil {
 		return util.ReportError(errors.New("configuration not found"))
 	}
-	newValue := cfg.Options == nil || !cfg.Options.TUI.IsTransparent()
+	newValue := !m.isTransparent
 	return m.writeConfigField("options.tui.transparent", newValue, func(err error) tea.Cmd {
 		if err != nil {
 			return util.ReportError(err)
 		}
+		// The user's choice wins over a host theme's override.
 		m.isTransparent = newValue
+		m.hostTheme.transparent = false
 		if newValue {
 			return util.ReportInfo("Using the terminal's background")
 		}

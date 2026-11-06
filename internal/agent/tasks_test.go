@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/csync"
 	"github.com/stretchr/testify/require"
@@ -82,12 +82,12 @@ func TestTaskWatcherUsesPinnedDirectory(t *testing.T) {
 func TestAPIProvidersAvailableForBackgroundTasks(t *testing.T) {
 	t.Setenv("CRUSH_GLOBAL_CONFIG", t.TempDir())
 	h := &taskHub{c: &coordinator{cfg: config.NewTestStore(&config.Config{Providers: csync.NewMapFrom(map[string]config.ProviderConfig{
-		"abacus":      {ID: config.AbacusProviderID, Type: catwalk.TypeOpenAICompat, Models: []catwalk.Model{{ID: "claude-opus-5-5-thinking"}}},
-		"gemini":      {ID: "gemini", Type: catwalk.TypeGoogle, Models: []catwalk.Model{{ID: "gemini-3.8-flash", ReasoningLevels: []string{"low", "medium", "high"}}}},
+		"abacus":      {ID: config.AbacusProviderID, Type: catwalk.TypeCompletions, Models: []catwalk.Model{{ID: "claude-opus-5-5-thinking"}}},
+		"gemini":      {ID: "gemini", Type: catwalk.Type("google"), Models: []catwalk.Model{{ID: "gemini-3.8-flash", Reasoning: catwalk.Reasoning{Thinking: catwalk.ThinkingToggleable, EffortLevels: catwalk.NewEffortLevels("low", "medium", "high")}}}},
 		"claude-code": {ID: "claude-code", Type: config.TypeClaudeCode, Models: []catwalk.Model{{ID: "opus"}}},
-		"kimi-coding": {ID: "kimi-coding", Type: catwalk.TypeAnthropic, FlatRate: true, Models: []catwalk.Model{{ID: "k3.1-pro"}}},
-		"off":         {ID: "off", Type: catwalk.TypeOpenAI, Disable: true, Models: []catwalk.Model{{ID: "gpt"}}},
-		"empty":       {ID: "empty", Type: catwalk.TypeOpenAI},
+		"kimi-coding": {ID: "kimi-coding", Type: catwalk.TypeMessages, FlatRate: true, Models: []catwalk.Model{{ID: "k3.1-pro"}}},
+		"off":         {ID: "off", Type: catwalk.TypeResponses, Disable: true, Models: []catwalk.Model{{ID: "gpt"}}},
+		"empty":       {ID: "empty", Type: catwalk.TypeResponses},
 	})})}}
 	var names []string
 	for _, p := range h.taskProviders() {
@@ -121,7 +121,7 @@ func TestTaskModelTuning(t *testing.T) {
 	t.Parallel()
 	claude := config.ProviderConfig{ID: "claude-code", Type: config.TypeClaudeCode}
 	grok := config.ProviderConfig{ID: "grok-cli", Type: config.TypeGrokCLI}
-	opus := catwalk.Model{ID: "opus", ReasoningLevels: []string{"low", "medium", "high", "xhigh", "max"}, DefaultReasoningEffort: "high"}
+	opus := catwalk.Model{ID: "opus", Reasoning: catwalk.Reasoning{Thinking: catwalk.ThinkingToggleable, EffortLevels: catwalk.NewEffortLevels("low", "medium", "high", "xhigh", "max"), DefaultEffortLevel: "high"}}
 
 	m, err := taskModel(claude, opus, TaskRequest{})
 	require.NoError(t, err)
@@ -139,11 +139,11 @@ func TestTaskModelTuning(t *testing.T) {
 	require.ErrorContains(t, err, "has no effort levels")
 	_, err = taskModel(grok, catwalk.Model{ID: "grok-4.7"}, TaskRequest{Fast: true})
 	require.ErrorContains(t, err, "only for claude and codex")
-	abacus := config.ProviderConfig{ID: config.AbacusProviderID, Type: catwalk.TypeOpenAICompat}
-	m, err = taskModel(abacus, catwalk.Model{ID: "claude-opus-5-5-thinking", ReasoningLevels: opus.ReasoningLevels}, TaskRequest{Effort: "MAX"})
+	abacus := config.ProviderConfig{ID: config.AbacusProviderID, Type: catwalk.TypeCompletions}
+	m, err = taskModel(abacus, catwalk.Model{ID: "claude-opus-5-5-thinking", Reasoning: catwalk.Reasoning{Thinking: catwalk.ThinkingToggleable, EffortLevels: opus.Reasoning.EffortLevels}}, TaskRequest{Effort: "MAX"})
 	require.NoError(t, err)
 	require.Equal(t, "max", m.ReasoningEffort)
-	m, err = taskModel(abacus, catwalk.Model{ID: "gpt-6.1-sol", ReasoningLevels: opus.ReasoningLevels}, TaskRequest{Effort: "high", Fast: true})
+	m, err = taskModel(abacus, catwalk.Model{ID: "gpt-6.1-sol", Reasoning: catwalk.Reasoning{Thinking: catwalk.ThinkingToggleable, EffortLevels: opus.Reasoning.EffortLevels}}, TaskRequest{Effort: "high", Fast: true})
 	require.NoError(t, err)
 	require.Equal(t, "fast", m.ServiceTier)
 }

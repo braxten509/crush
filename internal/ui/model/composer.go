@@ -4,6 +4,7 @@ import (
 	"math/rand"
 
 	"charm.land/bubbles/v2/textarea"
+	"github.com/charmbracelet/crush/internal/permission"
 )
 
 // composer is the prompt editor: the textarea and the bang mode, history
@@ -77,13 +78,15 @@ func (c *composer) randomizePlaceholders() {
 	c.readyPlaceholder = readyPlaceholders[rand.Intn(len(readyPlaceholders))]
 }
 
-// placeholder is the editor's placeholder for the mode: bang mode, YOLO
-// coding, a busy agent, planning or ready.
-func (c *composer) placeholder(busy, plan, yolo bool) string {
+// placeholder is the editor's placeholder for the mode: bang mode, YOLO or
+// sysadmin coding, a busy agent, planning or ready.
+func (c *composer) placeholder(busy, plan bool, mode permission.PermissionMode) string {
 	switch {
 	case c.bangMode:
 		return "Run a shell command"
-	case !plan && yolo:
+	case !plan && mode == permission.PermissionModeSysadmin:
+		return "Sysadmin mode!"
+	case !plan && mode == permission.PermissionModeYolo:
 		return "Go crazy"
 	case busy:
 		return c.workingPlaceholder

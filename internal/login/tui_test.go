@@ -162,7 +162,13 @@ func TestAuthTUIReportsBrowserFailure(t *testing.T) {
 	m := newTestAuthModel(PlatformGrok, func() flow { return fakeCodeEntryFlow{} })
 	var opened string
 	m.openURL = func(url string) error { opened = url; return errors.New("browser unavailable") }
-	m = step(t, m, authReadyMsg{flow: fakeCodeEntryFlow{}, url: "https://auth.example/authorize"})
+	next, cmd := m.Update(authReadyMsg{flow: fakeCodeEntryFlow{}, url: "https://auth.example/authorize"})
+	require.Empty(t, opened, "opening the browser must run outside Update")
+	require.NotNil(t, cmd)
+	cmds, ok := cmd().(tea.BatchMsg)
+	require.True(t, ok)
+	require.Len(t, cmds, 3)
+	m = step(t, next.(authModel), cmds[2]())
 	require.Equal(t, "https://auth.example/authorize", opened)
 	require.True(t, m.browserFailed)
 	require.True(t, m.codeEntry)

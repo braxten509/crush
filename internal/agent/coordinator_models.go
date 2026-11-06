@@ -4,14 +4,23 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"slices"
 
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"charm.land/fantasy"
+	"charm.land/fantasy/providers/openrouter"
 	"github.com/charmbracelet/crush/internal/agent/prompt"
 	"github.com/charmbracelet/crush/internal/agent/providers"
+	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/session"
 )
 
-func (c *coordinator) buildAgent(ctx context.Context, prompt *prompt.Prompt, agent config.Agent, isSubAgent bool) (SessionAgent, error) {
+// buildAgent builds an agent and schedules its one-time setup into ready.
+// Only the coordinator constructor passes c.readyWg; agents built
+// mid-session, such as the task subagents rebuilt on every turn, use a group
+// of their own that their caller waits on.
+func (c *coordinator) buildAgent(ctx context.Context, ready *readyGroup, prompt *prompt.Prompt, agent config.Agent, isSubAgent bool) (SessionAgent, error) {
 	helper, err := c.buildHelperModel(ctx)
 	if err != nil {
 		return nil, err
@@ -30,17 +39,24 @@ func (c *coordinator) buildAgent(ctx context.Context, prompt *prompt.Prompt, age
 		IsSubAgent:           isSubAgent,
 		Tasks:                tasks,
 		DisableAutoSummarize: c.cfg.Config().Options.DisableAutoSummarize,
-		IsYolo:               c.permissions.SkipRequests(),
+		Permissions:          c.permissions,
 		Sessions:             c.sessions,
 		Messages:             c.messages,
 		Cfg:                  c.cfg,
 		Tools:                nil,
 		Notify:               c.notify,
 		RunComplete:          c.runComplete,
-		ModelFor:             c.modelForSelection,
+		Hooks:                c.hookRunner,
+		// A sub-agent's requests are agent-initiated, which Copilot bills
+		// apart from the user's own.
+		ModelFor: func(ctx context.Context, selection config.SelectedModel) (Model, error) {
+			return c.buildChatModel(ctx, selection, isSubAgent)
+		},
 		NewChatModel: func() (config.SelectedModel, bool) {
 			return config.NewChatModel(c.cfg.Config())
 		},
+		titles:    &c.titles,
+		modelsGen: &c.modelsGen,
 	})
 
 	// The readiness goroutines below perform one-time setup — building the
@@ -55,7 +71,7 @@ func (c *coordinator) buildAgent(ctx context.Context, prompt *prompt.Prompt, age
 	// values; the work is local and always completes.
 	initCtx := context.WithoutCancel(ctx)
 
-	c.readyWg.Go(func() error {
+	ready.Go(func() error {
 		// The prompt reads no model: one prompt serves every chat's.
 		systemPrompt, err := prompt.Build(initCtx, "", "", c.cfg)
 		if err != nil {
@@ -65,7 +81,7 @@ func (c *coordinator) buildAgent(ctx context.Context, prompt *prompt.Prompt, age
 		return nil
 	})
 
-	c.readyWg.Go(func() error {
+	ready.Go(func() error {
 		tools, err := c.buildTools(initCtx, agent, isSubAgent)
 		if err != nil {
 			return err
@@ -104,22 +120,36 @@ func (c *coordinator) buildHelperModel(ctx context.Context) (Model, error) {
 	if err != nil {
 		return Model{}, err
 	}
+	return builtModel(languageModel, *catwalkModel, helperCfg, providerCfg), nil
+}
+
+// builtModel is a built model with what the agent needs to know about its
+// provider.
+func builtModel(languageModel fantasy.LanguageModel, catwalkModel catwalk.Model, selection config.SelectedModel, providerCfg config.ProviderConfig) Model {
 	return Model{
-		Model:      languageModel,
-		CatwalkCfg: *catwalkModel,
-		ModelCfg:   helperCfg,
-		FlatRate:   providerCfg.FlatRate,
-	}, nil
+		Model:        languageModel,
+		CatwalkCfg:   catwalkModel,
+		ModelCfg:     selection,
+		FlatRate:     providerCfg.FlatRate,
+		OAuth:        providerCfg.OAuthToken != nil,
+		ProviderName: providerCfg.Name,
+	}
 }
 
 // modelForSelection builds one model from a saved choice (a chat's own
 // model), for a turn on that chat.
 func (c *coordinator) modelForSelection(ctx context.Context, selection config.SelectedModel) (Model, error) {
+	return c.buildChatModel(ctx, selection, false)
+}
+
+// buildChatModel builds a chat's model from its saved choice. isSubAgent
+// marks the requests as a sub-agent's, for providers that bill on it.
+func (c *coordinator) buildChatModel(ctx context.Context, selection config.SelectedModel, isSubAgent bool) (Model, error) {
 	providerCfg, ok := c.cfg.Config().Providers.Get(selection.Provider)
 	if !ok {
 		return Model{}, fmt.Errorf("provider %q is not configured", selection.Provider)
 	}
-	provider, err := c.providerBuilder().Provider(providerCfg, selection, false)
+	provider, err := c.providerBuilder().Provider(providerCfg, selection, isSubAgent)
 	if err != nil {
 		return Model{}, err
 	}
@@ -131,7 +161,7 @@ func (c *coordinator) modelForSelection(ctx context.Context, selection config.Se
 	if err != nil {
 		return Model{}, err
 	}
-	return Model{Model: languageModel, CatwalkCfg: *catwalkModel, ModelCfg: selection, FlatRate: providerCfg.FlatRate}, nil
+	return builtModel(languageModel, *catwalkModel, selection, providerCfg), nil
 }
 
 // providerBuilder builds providers and models from the live config.
@@ -142,6 +172,51 @@ func (c *coordinator) providerBuilder() providers.Builder {
 // getProviderOptions returns the provider options for a call to model.
 func getProviderOptions(model Model, providerCfg config.ProviderConfig) fantasy.ProviderOptions {
 	return providers.Options(model.CatwalkCfg, model.ModelCfg, providerCfg)
+}
+
+// injectOpenrouterSessionID adds session_id to OpenRouter ProviderOptions
+// ExtraBody for sticky routing and upstream session grouping.
+func injectOpenrouterSessionID(opts fantasy.ProviderOptions, sessionID string) {
+	if o, ok := opts[openrouter.Name].(*openrouter.ProviderOptions); ok {
+		if o.ExtraBody == nil {
+			o.ExtraBody = make(map[string]any)
+		}
+		if _, exists := o.ExtraBody["session_id"]; !exists {
+			o.ExtraBody["session_id"] = session.HashID(sessionID)
+		}
+	}
+}
+
+// effectiveToolNames narrows an agent's configured tool list to the tools
+// this coordinator offers its turns. Run mode decides how delegation
+// reports back: a TUI can receive a subagent's report as a later turn, a
+// headless run exits before one could arrive, so delegation blocks there and
+// detaches here. Subagents get neither, since they can neither fan out nor
+// ask questions.
+func (c *coordinator) effectiveToolNames(agentCfg config.Agent, isSubAgent bool) []string {
+	return slices.DeleteFunc(slices.Clone(agentCfg.AllowedTools), func(name string) bool {
+		switch name {
+		case tools.QuestionToolName:
+			return isSubAgent || !c.interactive
+		case AgentToolName:
+			return isSubAgent || c.interactive
+		case AgentDispatchToolName, AgentSendToolName, AgentStatusToolName, AgentStopToolName:
+			return isSubAgent || !c.interactive
+		}
+		return false
+	})
+}
+
+// buildableToolNames is what an agent's tools are built from: the tools its
+// turns are offered, and on an interactive coordinator the blocking agent
+// tool too, for [WithNonInteractive] prompts, which cannot wait for a
+// report; callTools gives each call only its own kind.
+func (c *coordinator) buildableToolNames(agentCfg config.Agent, isSubAgent bool) []string {
+	names := c.effectiveToolNames(agentCfg, isSubAgent)
+	if !isSubAgent && c.interactive && slices.Contains(agentCfg.AllowedTools, AgentToolName) {
+		names = append(names, AgentToolName)
+	}
+	return names
 }
 
 func mergeCallOptions(model Model, cfg config.ProviderConfig) (fantasy.ProviderOptions, *float64, *float64, *int64, *float64, *float64) {

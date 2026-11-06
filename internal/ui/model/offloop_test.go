@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/csync"
 	"github.com/charmbracelet/crush/internal/oauth"
@@ -281,7 +281,7 @@ func TestToggleThinkingCapturesModel(t *testing.T) {
 
 	u, ws := newPrefUI(t)
 	u.session.Model = json.RawMessage(`{"provider":"p","model":"m1"}`)
-	ws.cfg.Providers.Set("p", config.ProviderConfig{ID: "p", Type: catwalk.TypeAnthropic, Models: []catwalk.Model{{ID: "m1", CanReason: true}}})
+	ws.cfg.Providers.Set("p", config.ProviderConfig{ID: "p", Type: catwalk.TypeMessages, Models: []catwalk.Model{{ID: "m1", Reasoning: catwalk.Reasoning{Thinking: catwalk.ThinkingToggleable}}}})
 	cmd := u.handleDialogAction(dialog.ActionToggleThinking{})
 	require.Empty(t, ws.recorded(), "the write must not run on the Update goroutine")
 	msgs := runAll(u, cmd)

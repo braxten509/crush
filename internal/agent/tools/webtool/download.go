@@ -107,30 +107,33 @@ func NewDownloadTool(permissions permission.Service, workingDir string, client *
 
 			req, err := http.NewRequestWithContext(requestCtx, "GET", params.URL, nil)
 			if err != nil {
-				return fantasy.ToolResponse{}, fmt.Errorf("failed to create request: %w", err)
+				return fantasy.NewTextErrorResponse("Failed to create request: " + err.Error()), nil
 			}
 
 			req.Header.Set("User-Agent", "crush/1.0")
 
 			resp, err := client.Do(req)
 			if err != nil {
-				return fantasy.ToolResponse{}, fmt.Errorf("failed to download from URL: %w", err)
+				return fantasy.NewTextErrorResponse("Failed to download from URL: " + err.Error()), nil
 			}
 			defer resp.Body.Close()
 
 			if resp.StatusCode != http.StatusOK {
-				return fantasy.NewTextErrorResponse(fmt.Sprintf("Request failed with status code: %d", resp.StatusCode)), nil
+				return fantasy.NewTextErrorResponse(fmt.Sprintf(
+					"Request failed with status code: %d %s",
+					resp.StatusCode,
+					http.StatusText(resp.StatusCode),
+				)), nil
 			}
 
-			// Create parent directories if they don't exist
-			if err := os.MkdirAll(filepath.Dir(filePath), 0o755); err != nil {
-				return fantasy.ToolResponse{}, fmt.Errorf("failed to create parent directories: %w", err)
+			if err := ensureParentDir(filePath); err != nil {
+				return fantasy.NewTextErrorResponse("Download failed: " + err.Error()), nil
 			}
 
 			// Create the output file
 			outFile, err := os.Create(filePath)
 			if err != nil {
-				return fantasy.ToolResponse{}, fmt.Errorf("failed to create output file: %w", err)
+				return fantasy.NewTextErrorResponse("Failed to create output file: " + err.Error()), nil
 			}
 			defer outFile.Close()
 
@@ -139,7 +142,7 @@ func NewDownloadTool(permissions permission.Service, workingDir string, client *
 			// and any upstream server limits.
 			bytesWritten, err := io.Copy(outFile, resp.Body)
 			if err != nil {
-				return fantasy.ToolResponse{}, fmt.Errorf("failed to write file: %w", err)
+				return fantasy.NewTextErrorResponse("Failed to write file: " + err.Error()), nil
 			}
 
 			contentType := resp.Header.Get("Content-Type")
@@ -151,4 +154,14 @@ func NewDownloadTool(permissions permission.Service, workingDir string, client *
 			return fantasy.NewTextResponse(responseMsg), nil
 		},
 	)
+}
+
+// ensureParentDir creates the parent directories of path. Call it only
+// after the user has granted permission to write path. (The tools package
+// keeps its own copy for the write tools; this package can't reach it.)
+func ensureParentDir(path string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("failed to create parent directories: %w", err)
+	}
+	return nil
 }

@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 )
 
 // openRouterMaxTokens caps a saved OpenRouter model's reply length, as the
@@ -96,22 +96,27 @@ func openRouterCatwalkModel(entry openRouterModel) catwalk.Model {
 		maxTokens = openRouterMaxTokens
 	}
 	model := catwalk.Model{
-		ID:                 entry.ID,
-		Name:               OpenRouterModelName(entry.Name),
-		ContextWindow:      entry.ContextLength,
-		DefaultMaxTokens:   maxTokens,
-		SupportsImages:     slices.Contains(entry.Architecture.InputModalities, "image"),
-		CostPer1MIn:        perMillion(entry.Pricing.Prompt),
-		CostPer1MOut:       perMillion(entry.Pricing.Completion),
-		CostPer1MInCached:  perMillion(entry.Pricing.InputCacheRead),
-		CostPer1MOutCached: perMillion(entry.Pricing.InputCacheWrite),
+		ID:               entry.ID,
+		Name:             OpenRouterModelName(entry.Name),
+		ContextWindow:    entry.ContextLength,
+		DefaultMaxTokens: maxTokens,
+		Capabilities:     catwalk.Capabilities{Vision: slices.Contains(entry.Architecture.InputModalities, "image")},
+		Pricing: catwalk.Pricing{
+			Input:       perMillion(entry.Pricing.Prompt),
+			Output:      perMillion(entry.Pricing.Completion),
+			CacheCreate: perMillion(entry.Pricing.InputCacheRead),
+			CacheHit:    perMillion(entry.Pricing.InputCacheWrite),
+		},
 	}
 	if model.Name == "" {
 		model.Name = entry.ID
 	}
 	if slices.Contains(entry.SupportedParameters, "reasoning") {
-		model.CanReason = true
-		model.ReasoningLevels, model.DefaultReasoningEffort = openRouterLevels(entry)
+		levels, defaultEffort := openRouterLevels(entry)
+		model.Reasoning = catwalk.Reasoning{Thinking: catwalk.ThinkingToggleable, DefaultEffortLevel: defaultEffort}
+		if len(levels) > 0 {
+			model.Reasoning.EffortLevels = catwalk.NewEffortLevels(levels...)
+		}
 	}
 	return model
 }

@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"charm.land/fantasy"
 	"charm.land/fantasy/providers/anthropic"
 	"charm.land/fantasy/providers/openaicompat"
@@ -63,8 +63,8 @@ func TestAbacusNativeRequestsCarryModelControls(t *testing.T) {
 				}
 			}))
 			defer server.Close()
-			catalog := catwalk.Model{ID: test.id, Name: name, CanReason: true, ReasoningLevels: []string{test.effort}, DefaultMaxTokens: 128000}
-			provider := config.ProviderConfig{ID: config.AbacusProviderID, Type: catwalk.TypeOpenAICompat, BaseURL: server.URL + "/v1", APIKey: "test-key", Models: []catwalk.Model{catalog}}
+			catalog := catwalk.Model{ID: test.id, Name: name, Reasoning: catwalk.Reasoning{Thinking: catwalk.ThinkingToggleable, EffortLevels: catwalk.NewEffortLevels(test.effort)}, DefaultMaxTokens: 128000}
+			provider := config.ProviderConfig{ID: config.AbacusProviderID, Type: catwalk.TypeCompletions, BaseURL: server.URL + "/v1", APIKey: "test-key", Models: []catwalk.Model{catalog}}
 			selected := config.SelectedModel{Provider: provider.ID, Model: test.id, ReasoningEffort: test.effort, ServiceTier: test.tier}
 			b := Builder{Config: config.NewTestStore(&config.Config{Options: &config.Options{}})}
 			fp, err := b.Provider(provider, selected, false)
@@ -100,8 +100,8 @@ func TestAbacusNativeRequestsCarryModelControls(t *testing.T) {
 func TestAbacusThinkingTogglesAndExtraBody(t *testing.T) {
 	for _, id := range []string{"claude-haiku-4-5-20251001", "deepseek-ai/DeepSeek-V3.2", "MiniMaxAI/MiniMax-M2.7", "MiniMaxAI/MiniMax-M3"} {
 		for _, think := range []bool{false, true} {
-			catalog := catwalk.Model{ID: id, CanReason: true}
-			provider := config.ProviderConfig{ID: config.AbacusProviderID, Type: catwalk.TypeOpenAICompat, ExtraBody: map[string]any{"custom_parameter": "preserved"}}
+			catalog := catwalk.Model{ID: id, Reasoning: catwalk.Reasoning{Thinking: catwalk.ThinkingToggleable}}
+			provider := config.ProviderConfig{ID: config.AbacusProviderID, Type: catwalk.TypeCompletions, ExtraBody: map[string]any{"custom_parameter": "preserved"}}
 			options := Options(catalog, config.SelectedModel{Provider: provider.ID, Model: id, Think: think}, provider)
 			if native, ok := options[anthropic.Name].(*anthropic.ProviderOptions); ok {
 				require.Equal(t, think, native.Thinking != nil)

@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/backend"
 	"github.com/charmbracelet/crush/internal/commands"
@@ -81,7 +81,7 @@ func TestProvidersRefreshRoute(t *testing.T) {
 	before := config.ModelCatalog()
 	t.Cleanup(func() { restoreModelCatalog(t, before) })
 
-	extra := catwalk.Provider{ID: "g56-extra", Name: "G56 extra", Type: catwalk.TypeOpenAICompat, APIEndpoint: "http://127.0.0.1:9/v1",
+	extra := catwalk.Provider{ID: "g56-extra", Name: "G56 extra", Type: catwalk.TypeCompletions, APIEndpoint: "http://127.0.0.1:9/v1",
 		Models: []catwalk.Model{{ID: "g56-model", Name: "G56 model", ContextWindow: 1000, DefaultMaxTokens: 100}}}
 	var catalog []catwalk.Provider
 	for _, p := range before {

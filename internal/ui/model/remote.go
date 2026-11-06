@@ -14,7 +14,7 @@ import (
 	"github.com/charmbracelet/crush/internal/ui/dialog/remotecontrol"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/remote"
@@ -550,7 +550,7 @@ func (m *UI) remoteSelectModel(providerID, modelID string) (tea.Cmd, error) {
 		Model: config.SelectedModel{
 			Model:           model.ID,
 			Provider:        pc.ID,
-			ReasoningEffort: model.DefaultReasoningEffort,
+			ReasoningEffort: model.Reasoning.DefaultEffortLevel,
 			MaxTokens:       model.DefaultMaxTokens,
 		},
 		ModelType: config.SelectedModelTypeChat,

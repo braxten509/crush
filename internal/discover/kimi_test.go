@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/stretchr/testify/require"
 )
 
@@ -43,14 +43,14 @@ func TestDiscoverKimiModels(t *testing.T) {
 
 	cfg := Config{
 		ID:      "kimi-coding",
-		Type:    catwalk.TypeAnthropic,
+		Type:    catwalk.TypeMessages,
 		BaseURL: srv.URL,
 		APIKey:  "sk-test",
 		ExistingModels: []catwalk.Model{{
 			ID:            "k3",
 			Name:          "Kimi K3",
 			ContextWindow: 1048576,
-			CanReason:     true,
+			Reasoning:     catwalk.Reasoning{Thinking: catwalk.ThinkingToggleable},
 		}},
 	}
 
@@ -65,10 +65,10 @@ func TestDiscoverKimiModels(t *testing.T) {
 	require.Equal(t, "k3.1-pro", models[0].ID)
 	require.Equal(t, "Kimi K3.1 Pro", models[0].Name)
 	require.EqualValues(t, 262144, models[0].ContextWindow)
-	require.True(t, models[0].CanReason)
-	require.Equal(t, []string{"low", "high", "max"}, models[0].ReasoningLevels)
-	require.Equal(t, "high", models[0].DefaultReasoningEffort)
-	require.True(t, models[0].SupportsImages)
+	require.True(t, models[0].CanReason())
+	require.Equal(t, []string{"low", "high", "max"}, models[0].ReasoningEffortLevels())
+	require.Equal(t, "high", models[0].Reasoning.DefaultEffortLevel)
+	require.True(t, models[0].Capabilities.Vision)
 
 	// A model the catalog already knows keeps its name, but the API's
 	// own context window wins over the catalog's stale one.

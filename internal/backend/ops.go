@@ -77,7 +77,8 @@ func (o Ops) skillManager() *skills.Manager {
 
 // CreateSession creates a new session.
 func (o Ops) CreateSession(ctx context.Context, title string) (session.Session, error) {
-	return o.App.Sessions.Create(ctx, title)
+	// Through the app, so the session lifecycle hooks see it.
+	return o.App.CreateSession(ctx, title)
 }
 
 // GetSession returns a session by ID.
@@ -215,6 +216,12 @@ func (o Ops) ListMessages(ctx context.Context, sessionID string) ([]message.Mess
 	if err := o.checkReadable(ctx, sessionID); err != nil {
 		return nil, err
 	}
+	// Every client reads through here, so this is where calls a dead
+	// process left waiting get settled for them.
+	if o.App.AgentCoordinator != nil {
+		return o.App.AgentCoordinator.ListSettledMessages(ctx, sessionID)
+	}
+	// Drain debounced updates so clients observe the latest in-memory state.
 	if err := o.App.Messages.FlushAll(ctx); err != nil {
 		return nil, err
 	}

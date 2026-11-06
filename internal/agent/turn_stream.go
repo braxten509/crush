@@ -2,14 +2,13 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 	"log/slog"
 	"net/http"
 	"slices"
 	"strings"
 	"time"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"charm.land/fantasy"
 	"charm.land/fantasy/providers/anthropic"
 	"charm.land/fantasy/providers/google"
@@ -72,7 +71,7 @@ func (t *turn) prepareStep(callContext context.Context, options fantasy.PrepareS
 	// Fantasy rebuilds each step's messages, so earlier folds are
 	// put back where they went in.
 	if !t.isCLI && options.StepNumber > 0 {
-		queued, err := a.takeQueuedForStep(callContext, call, chatModel.CatwalkCfg.SupportsImages)
+		queued, err := a.takeQueuedForStep(callContext, call, chatModel.CatwalkCfg.Capabilities.Vision, chatModel.CatwalkCfg.Capabilities.Audio)
 		if err != nil {
 			return callContext, prepared, err
 		}
@@ -84,6 +83,7 @@ func (t *turn) prepareStep(callContext context.Context, options fantasy.PrepareS
 		prepared.Messages = slices.Insert(prepared.Messages, min(f.at+i, len(prepared.Messages)), f.msg)
 	}
 
+	prepared.Messages = dropEmptyToolMedia(prepared.Messages)
 	prepared.Messages = a.workaroundProviderMediaLimitations(prepared.Messages, chatModel)
 
 	lastSystemRoleInx := 0
@@ -122,7 +122,7 @@ func (t *turn) prepareStep(callContext context.Context, options fantasy.PrepareS
 	}
 	callContext = context.WithValue(callContext, tools.MessageIDContextKey, assistantMsg.ID)
 	callContext = context.WithValue(callContext, tools.ChannelContextKey, call.Channel)
-	callContext = context.WithValue(callContext, tools.SupportsImagesContextKey, chatModel.CatwalkCfg.SupportsImages)
+	callContext = context.WithValue(callContext, tools.SupportsImagesContextKey, chatModel.CatwalkCfg.Capabilities.Vision)
 	callContext = context.WithValue(callContext, tools.ModelNameContextKey, chatModel.CatwalkCfg.Name)
 	callContext = context.WithValue(callContext, tools.ChatModelContextKey, chatModel.ModelCfg)
 	t.currentAssistant = &assistantMsg
@@ -248,24 +248,19 @@ func (t *turn) modelProvider() fantasy.LanguageModel {
 	// sign-in refreshed mid-turn (the retry after a 401) reaches the next
 	// request in a model built with the new credentials.
 	m := t.chatModel
-	if m.Model != nil && t.a.chatModels.build != nil && m.ModelCfg.Provider != "" {
-		if choice, err := json.Marshal(m.ModelCfg); err == nil {
-			if fresh, ok := t.a.modelForChat(choice); ok {
-				m = fresh
-			}
-		}
-	}
 	slog.Info("ModelProvider called",
 		"provider", m.ModelCfg.Provider,
 		"model", m.ModelCfg.Model)
-	return m.Model
+	return t.a.currentBuildOf(m)
 }
 
 func (t *turn) onToolCall(tc fantasy.ToolCallContent) error {
+	t.toolResultMu.Lock()
+	defer t.toolResultMu.Unlock()
 	t.fileReview.track(tc.ToolCallID, tc.ToolName, tc.Input)
 	input, wasSanitized := sanitizeToolInput(tc.ToolName, tc.ToolCallID, tc.Input)
 	if wasSanitized {
-		t.sanitizedToolCalls[tc.ToolCallID] = true
+		t.sanitizedToolCalls.Set(tc.ToolCallID, true)
 	}
 	toolCall := message.ToolCall{
 		ID:               tc.ToolCallID,
@@ -280,20 +275,26 @@ func (t *turn) onToolCall(tc fantasy.ToolCallContent) error {
 	return t.a.messages.Update(t.ctx, *t.currentAssistant)
 }
 
+// onToolResult records a tool's reply. Fantasy calls it concurrently for
+// parallel tool calls, so the file review and transcript writes take
+// toolResultMu.
 func (t *turn) onToolResult(result fantasy.ToolResultContent) error {
 	toolResult := t.a.convertToToolResult(result)
-	if t.sanitizedToolCalls[result.ToolCallID] {
+	if _, ok := t.sanitizedToolCalls.Get(result.ToolCallID); ok {
 		toolResult.Content = "Tool call failed: arguments were not valid JSON. Please check your tool call format and try again."
 		toolResult.IsError = true
 	}
 	if !toolResult.IsError && toolResult.Name != "" {
-		t.completedToolCalls[toolResult.Name] = struct{}{}
+		t.completedToolCalls.Set(toolResult.Name, struct{}{})
 	}
+	t.toolResultMu.Lock()
+	defer t.toolResultMu.Unlock()
 	// Use parent ctx instead of genCtx to ensure the message is created
 	// even if the request is canceled mid-stream
 	if err := t.fileReview.save(t.ctx, toolResult); err != nil {
 		return err
 	}
+	t.answeredToolCalls.Set(result.ToolCallID, struct{}{})
 	shelltool.PersistBackgroundReview(t.ctx, t.a.messages, t.call.SessionID, toolResult)
 	return nil
 }
@@ -317,26 +318,7 @@ func (t *turn) onStepFinish(stepResult fantasy.StepResult) error {
 	for _, w := range stepResult.Warnings {
 		slog.Warn("Provider warning", "type", w.Type, "message", w.Message)
 	}
-	finishReason := message.FinishReasonUnknown
-	switch stepResult.FinishReason {
-	case fantasy.FinishReasonLength:
-		finishReason = message.FinishReasonMaxTokens
-	case fantasy.FinishReasonStop:
-		finishReason = message.FinishReasonEndTurn
-	case fantasy.FinishReasonToolCalls:
-		finishReason = message.FinishReasonToolUse
-	case fantasy.FinishReasonContentFilter:
-		// Provider safety classifier stopped the model
-		// (Anthropic stop_reason=refusal, OpenAI content_filter).
-		// The TUI owns the display copy; we only persist the
-		// reason so the UI can show a REFUSED banner.
-		finishReason = message.FinishReasonContentFilter
-		slog.Warn(
-			"Provider content filter stopped the model",
-			"session_id", t.call.SessionID,
-			"finish_reason", string(stepResult.FinishReason),
-		)
-	}
+	finishReason, finishMessage, finishDetails := turnFinish(t.chatModel, t.call.SessionID, stepResult.FinishReason)
 	// If a tool result halted the turn (e.g. a hook halt or a
 	// permission denial), the step ends on FinishReasonToolCalls but
 	// the model will not be called again. Treat it as the end of the
@@ -349,7 +331,7 @@ func (t *turn) onStepFinish(stepResult fantasy.StepResult) error {
 			}
 		}
 	}
-	t.currentAssistant.AddFinish(finishReason, "", "")
+	t.currentAssistant.AddFinish(finishReason, finishMessage, finishDetails)
 	t.currentAssistant.PrismModelID, t.currentAssistant.PrismModelName = extractPrismModel(stepResult.ProviderMetadata)
 	t.currentAssistant.PrismHypercreditSavings, t.currentAssistant.PrismDollarSavings = extractPrismSavings(stepResult.ProviderMetadata)
 	t.sessionLock.Lock()
@@ -358,7 +340,9 @@ func (t *turn) onStepFinish(stepResult fantasy.StepResult) error {
 	usage, estimated := fallbackStepUsage(t.stepMessages, stepResult)
 	var updatedSession session.Session
 	_, sessionErr := a.sessions.Edit(t.ctx, t.call.SessionID, func(current *session.Session) bool {
-		a.updateSessionUsage(t.chatModel, current, usage, a.openrouterCost(stepResult.ProviderMetadata), estimated)
+		// Priced at the model Prism routed a Hyper step to.
+		pricingModel := a.modelForStepCost(t.chatModel, stepResult.ProviderMetadata)
+		a.updateSessionUsage(pricingModel, current, usage, a.openrouterCost(stepResult.ProviderMetadata), estimated)
 		updatedSession = *current
 		return true
 	})

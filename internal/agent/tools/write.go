@@ -75,12 +75,7 @@ func NewWriteTool(
 					return fantasy.NewTextErrorResponse(fmt.Sprintf("File %s already contains the exact content. No changes made.", filePath)), nil
 				}
 			} else if !os.IsNotExist(err) {
-				return fantasy.ToolResponse{}, fmt.Errorf("error checking file: %w", err)
-			}
-
-			dir := filepath.Dir(filePath)
-			if err = os.MkdirAll(dir, 0o755); err != nil {
-				return fantasy.ToolResponse{}, fmt.Errorf("error creating directory: %w", err)
+				return fantasy.NewTextErrorResponse(fmt.Sprintf("Failed to check file: %s", err)), nil
 			}
 
 			oldContent := ""
@@ -118,16 +113,38 @@ func NewWriteTool(
 				return deniedResponse(metadata), nil
 			}
 
-			err = os.WriteFile(filePath, []byte(params.Content), 0o644)
-			if err != nil {
-				return fantasy.ToolResponse{}, fmt.Errorf("error writing file: %w", err)
+			if err = writeFileWithParents(filePath, []byte(params.Content)); err != nil {
+				return fantasy.NewTextErrorResponse(fmt.Sprintf("Failed to write file: %s", err)), nil
 			}
+			// The file is written; history failures are logged inside
+			// recordFileChange and must not end the agent's turn.
 			if err := recordFileChange(edit, sessionID, filePath, oldContent, params.Content); err != nil {
-				return fantasy.ToolResponse{}, err
+				return fantasy.NewTextErrorResponse(fmt.Sprintf("File written, but recording it failed: %s", err)), nil
 			}
 
 			result := afterWrite(ctx, lspManager, filePath, fmt.Sprintf("<result>\nFile successfully written: %s\n</result>", filePath))
 			return fantasy.WithResponseMetadata(fantasy.NewTextResponse(result), metadata), nil
 		},
 	)
+}
+
+// ensureParentDir creates the parent directories of path. Call it only
+// after the user has granted permission to write path.
+func ensureParentDir(path string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("failed to create parent directories: %w", err)
+	}
+	return nil
+}
+
+// writeFileWithParents writes data to path, creating any missing parent
+// directories. Call it only after write permission has been granted.
+func writeFileWithParents(path string, data []byte) error {
+	if err := ensureParentDir(path); err != nil {
+		return err
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return fmt.Errorf("failed to write file: %w", err)
+	}
+	return nil
 }

@@ -88,7 +88,7 @@ func (m *UI) handleCLIUpdates(msg cliUpdatesMsg) tea.Cmd {
 		return m.showCLIUpdatesAvailable(updates)
 	}
 	if msg.manual {
-		m.status.ClearInfoMsg()
+		m.status.ClearCurrent()
 	}
 	m.openCLIUpdateForm(updates)
 	return nil
@@ -188,9 +188,7 @@ func (m *UI) handleCLIUpdatesInstalled(msg cliUpdatesInstalledMsg) tea.Cmd {
 }
 
 func (m *UI) showCLIUpdateStatus(typ util.InfoType, text string) tea.Cmd {
-	ttl := 10 * time.Second
-	m.status.SetInfoMsg(util.InfoMsg{Type: typ, Msg: text, TTL: ttl})
-	return clearInfoMsgCmd(ttl)
+	return m.status.Show(util.InfoMsg{Type: typ, Msg: text, TTL: 10 * time.Second})
 }
 
 func updateList(updates []cliupdate.Update) string {

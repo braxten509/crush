@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	"github.com/charmbracelet/crush/internal/message"
@@ -82,7 +82,7 @@ func TestTrimPreparedPromptShortensOldToolOutputsAndWritesSearchableTranscript(t
 		})
 	}
 
-	history, _ := sa.preparePrompt(msgs, true)
+	history, _ := sa.preparePrompt(msgs, true, false)
 	rawTokens := estimateMessageTokens(history)
 	budget := sa.historyTokenBudget(model, 1_000)
 	require.Greater(t, rawTokens, budget, "raw history should exceed the model budget before trimming")
@@ -176,7 +176,7 @@ func TestDropOldestMessagesKeepsToolPairsIntact(t *testing.T) {
 		)
 	}
 
-	history, _ := sa.preparePrompt(msgs, false)
+	history, _ := sa.preparePrompt(msgs, false, false)
 	budget := sa.historyTokenBudget(model, 500)
 	trimmed := sa.trimPreparedPrompt("drop-oldest-session", msgs, history, model, 500)
 
@@ -255,7 +255,7 @@ func TestPreparePrompt_PreservesErrorFinish(t *testing.T) {
 		{ID: "3", Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "continue"}}},
 	}
 
-	history, _ := sa.preparePrompt(msgs, false)
+	history, _ := sa.preparePrompt(msgs, false, false)
 	found := false
 	for _, m := range history {
 		if m.Role == fantasy.MessageRoleAssistant {

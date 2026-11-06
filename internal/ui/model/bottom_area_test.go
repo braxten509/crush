@@ -1,6 +1,7 @@
 package model
 
 import (
+	"github.com/charmbracelet/crush/internal/permission"
 	"strings"
 	"testing"
 
@@ -18,7 +19,7 @@ func TestSkillTagsSitAfterModeBadge(t *testing.T) {
 	u.state = uiChat
 	u.forceCompactMode, u.isCompact = true, true
 	u.session.KeptSkills = []session.KeptSkill{{ID: "/s/deep/SKILL.md", Name: "deep-debugging"}, {ID: "/s/teach/SKILL.md", Name: "teach"}}
-	u.status.SetMode(uiInputModeCode, true)
+	u.status.SetMode(uiInputModeCode, permission.PermissionModeYolo)
 	u.updateLayoutAndSize()
 
 	footer := ansi.Strip(u.composerFooter(120))

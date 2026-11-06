@@ -16,8 +16,9 @@ import (
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/noninteractive"
+	"github.com/charmbracelet/crush/internal/pinentry"
 	"github.com/charmbracelet/crush/internal/pubsub"
-	"github.com/charmbracelet/crush/internal/session"
+	"github.com/charmbracelet/crush/internal/sshaskpass"
 )
 
 // NonInteractive returns the in-process [noninteractive.Backend] for a
@@ -76,6 +77,14 @@ func (n nonInteractive) UpdateAgent(ctx context.Context) error {
 }
 
 func (n nonInteractive) Prepare(ctx context.Context) error {
+	// No dialog can answer an integrated pinentry prompt here, so GPG
+	// would wait forever: let the agent's own pinentry ask instead.
+	pinentry.DisableIntegration()
+
+	// No dialog can answer an ssh prompt here, so ssh would wait forever:
+	// let it fail instead.
+	sshaskpass.DisableIntegration()
+
 	// Non-interactive runs get a single shot at the tool palette, so wait for
 	// MCP initialization to settle before reading MCP tools. The coordinator
 	// waits again for the same reason (it is the gate the client/server path
@@ -99,37 +108,6 @@ func (n nonInteractive) ResolveSession(ctx context.Context, continueSessionID st
 		return "", fmt.Errorf("failed to create session for non-interactive mode: %w", err)
 	}
 	return sess.ID, nil
-}
-
-// resolveSession resolves which session to use for a non-interactive run
-// If continueSessionID is set, it looks up that session by ID
-// If useLast is set, it returns the most recently updated top-level session
-// Otherwise, it creates a new session
-func (app *App) resolveSession(ctx context.Context, continueSessionID string, useLast bool) (session.Session, error) {
-	switch {
-	case continueSessionID != "":
-		if app.Sessions.IsAgentToolSession(continueSessionID) {
-			return session.Session{}, fmt.Errorf("cannot continue an agent tool session: %s", continueSessionID)
-		}
-		sess, err := app.Sessions.Get(ctx, continueSessionID)
-		if err != nil {
-			return session.Session{}, fmt.Errorf("session not found: %s", continueSessionID)
-		}
-		if sess.ParentSessionID != "" {
-			return session.Session{}, fmt.Errorf("cannot continue a child session: %s", continueSessionID)
-		}
-		return sess, nil
-
-	case useLast:
-		sess, err := app.Sessions.GetLast(ctx)
-		if err != nil {
-			return session.Session{}, fmt.Errorf("no sessions found to continue")
-		}
-		return sess, nil
-
-	default:
-		return app.Sessions.Create(ctx, agent.DefaultSessionName)
-	}
 }
 
 // Stream runs the agent on the session in a goroutine and prints the

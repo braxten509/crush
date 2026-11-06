@@ -86,6 +86,8 @@ func (a *sessionAgent) cliStream(m *cliagent.Model, call SessionAgentCall, histo
 		if err != nil {
 			return nil, err
 		}
+		// An agent CLI reads the host's view and notes with its turn text.
+		prompt = call.modelContext + prompt
 		text, resume := cliHandoffWithTranscript(history, link, prompt, a.transcriptDataDir(), call.SessionID)
 		if fork != nil && len(fork.note) > 0 {
 			text = handoffPromptWithTranscript(branchNoteIntro, fork.note, history, text, a.transcriptDataDir(), call.SessionID)

@@ -30,7 +30,8 @@ func NewCache[T any](path string) Cache[T] {
 	return Cache[T]{path: path}
 }
 
-// Get reads the cached catalog and its etag.
+// Get reads the cached catalog and its etag. A cache written before
+// catwalk v3 is read in the v3 model schema; the etag stays the file's.
 func (c Cache[T]) Get() (T, string, error) {
 	var v T
 	data, err := fileutil.ReadFile(c.path)
@@ -38,7 +39,7 @@ func (c Cache[T]) Get() (T, string, error) {
 		return v, "", fmt.Errorf("failed to read provider cache file: %w", err)
 	}
 
-	if err := json.Unmarshal(data, &v); err != nil {
+	if err := json.Unmarshal(migrateV2Catalog(data), &v); err != nil {
 		return v, "", fmt.Errorf("failed to unmarshal provider data from cache: %w", err)
 	}
 

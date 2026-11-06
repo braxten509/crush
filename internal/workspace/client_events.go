@@ -17,11 +17,13 @@ import (
 	"github.com/charmbracelet/crush/internal/log"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/permission"
+	"github.com/charmbracelet/crush/internal/pinentry"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/crush/internal/question"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/skills"
+	"github.com/charmbracelet/crush/internal/sshaskpass"
 	"github.com/charmbracelet/crush/internal/version"
 )
 
@@ -234,23 +236,24 @@ func (w *ClientWorkspace) recoverWorkspace() error {
 func (w *ClientWorkspace) recreateArgs() proto.Workspace {
 	ws := w.cached()
 	return proto.Workspace{
-		Path:     ws.Path,
-		DataDir:  ws.DataDir,
-		Debug:    ws.Debug,
-		YOLO:     ws.YOLO,
-		Channels: ws.Channels,
-		Env:      ws.Env,
-		Version:  version.Version,
-		Protocol: proto.ProtocolVersion,
+		Path:           ws.Path,
+		DataDir:        ws.DataDir,
+		Debug:          ws.Debug,
+		PermissionMode: ws.RequestedPermissionMode(),
+		Channels:       ws.Channels,
+		Env:            ws.Env,
+		Version:        version.Version,
+		Protocol:       proto.ProtocolVersion,
 	}
 }
 
 // afterReconnect runs once a degraded subscription is re-established. It
 // re-asserts the client's current-session selection, since the server's
 // presence entry (or the whole workspace) may have been re-created while we
-// were away, and tells the UI to resync state published while detached. The
-// SSE handler attaches the client before writing its 200, so the presence
-// call cannot be rejected as not-attached here.
+// were away, re-reads the host theme, and tells the UI to resync state
+// published while detached. The SSE handler attaches the client before
+// writing its 200, so the presence call cannot be rejected as not-attached
+// here.
 func (w *ClientWorkspace) afterReconnect(send func(tea.Msg)) {
 	w.mu.RLock()
 	sid := w.lastSession
@@ -260,7 +263,30 @@ func (w *ClientWorkspace) afterReconnect(send func(tea.Msg)) {
 			slog.Warn("Failed to re-assert current session after reconnect", "error", err)
 		}
 	}
+	w.resyncHostTheme(send)
 	send(ConnectionEvent{State: ConnectionRecovered})
+}
+
+// hostThemeResyncTimeout bounds the host theme read after a reconnect, so a
+// wedged server cannot pin the subscription goroutine.
+const hostThemeResyncTimeout = 5 * time.Second
+
+// resyncHostTheme hands the UI the host theme the server holds after a
+// reconnect. The attach replay only covers a theme that is set, so a clear
+// published while the client was away, or a workspace re-created without
+// one, would otherwise leave the TUI on the host's colors. The read runs
+// after the new stream attached, so any later change still arrives as an
+// event, and the UI ignores a theme equal to the last one it received.
+func (w *ClientWorkspace) resyncHostTheme(send func(tea.Msg)) {
+	ctx, cancel := context.WithTimeout(w.subCtx, hostThemeResyncTimeout)
+	defer cancel()
+	st, err := w.client.GetHostTheme(ctx, w.workspaceID())
+	if err != nil {
+		// Servers that predate host themes have no such endpoint.
+		slog.Debug("Failed to read host theme after reconnect", "error", err)
+		return
+	}
+	send(HostThemeEvent{Theme: st.Theme})
 }
 
 // sleepOrDone waits for d or until the subscription context is
@@ -393,6 +419,49 @@ func (w *ClientWorkspace) translateEvent(ev any) tea.Msg {
 			Type:    e.Type,
 			Payload: question.Notification{BatchID: e.Payload.BatchID, SessionID: e.Payload.SessionID},
 		}
+	case pubsub.Event[proto.PinentryPromptRequest]:
+		return pubsub.Event[pinentry.PromptRequest]{
+			Type: e.Type,
+			Payload: pinentry.PromptRequest{
+				ID:     e.Payload.ID,
+				Prompt: e.Payload.Prompt,
+				Key: pinentry.Key{
+					CardNumber:  e.Payload.Key.CardNumber,
+					KeyID:       e.Payload.Key.KeyID,
+					Fingerprint: e.Payload.Key.Fingerprint,
+					Holder:      e.Payload.Key.Holder,
+				},
+				Kind:       pinentry.Kind(e.Payload.Kind),
+				RetryCount: e.Payload.RetryCount,
+				Error:      e.Payload.Error,
+			},
+		}
+	case pubsub.Event[proto.PinentryNotification]:
+		return pubsub.Event[pinentry.Notification]{
+			Type: e.Type,
+			Payload: pinentry.Notification{
+				RequestID: e.Payload.RequestID,
+			},
+		}
+	case pubsub.Event[proto.SSHPromptRequest]:
+		return pubsub.Event[sshaskpass.PromptRequest]{
+			Type: e.Type,
+			Payload: sshaskpass.PromptRequest{
+				ID:      e.Payload.ID,
+				Prompt:  e.Payload.Prompt,
+				KeyInfo: e.Payload.KeyInfo,
+				Kind:    sshaskpass.Kind(e.Payload.Kind),
+				Title:   e.Payload.Title,
+				Message: e.Payload.Message,
+			},
+		}
+	case pubsub.Event[proto.SSHNotification]:
+		return pubsub.Event[sshaskpass.Notification]{
+			Type: e.Type,
+			Payload: sshaskpass.Notification{
+				RequestID: e.Payload.RequestID,
+			},
+		}
 	case pubsub.Event[proto.Message]:
 		return pubsub.Event[message.Message]{
 			Type:    e.Type,
@@ -439,6 +508,17 @@ func (w *ClientWorkspace) translateEvent(ev any) tea.Msg {
 			LatestVersion:  e.Payload.LatestVersion,
 			IsDevelopment:  e.Payload.IsDevelopment,
 		}
+	case pubsub.Event[proto.HostThemeState]:
+		theme := e.Payload.Theme
+		if e.Type == pubsub.DeletedEvent {
+			theme = nil
+		}
+		return HostThemeEvent{Theme: theme}
+	case pubsub.Event[proto.PermissionModeEvent]:
+		// Keep the cached workspace in sync so PermissionMode() never goes
+		// stale when another client or the server changes the mode.
+		w.setCachedPermissionMode(e.Payload.Mode)
+		return nil
 	default:
 		return w.translatePieceEvent(ev)
 	}

@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/csync"
@@ -22,7 +22,6 @@ import (
 	"github.com/charmbracelet/crush/internal/lsp"
 	"github.com/charmbracelet/crush/internal/memwatch"
 	"github.com/charmbracelet/crush/internal/message"
-	"github.com/charmbracelet/crush/internal/permission"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/stretchr/testify/require"
 )
@@ -216,7 +215,7 @@ func newForkRig(t *testing.T, kind catwalk.Type, failFork bool) *forkRig {
 		workingDir:  dir,
 		sessions:    session.NewService(r.q, conn),
 		messages:    message.NewService(r.q),
-		permissions: permission.NewPermissionService(dir, true, []string{}),
+		permissions: yoloPermissions(dir),
 		history:     history.NewService(r.q, conn),
 		filetracker: &tracker,
 		lspClients:  csync.NewMap[string, *lsp.Client](),

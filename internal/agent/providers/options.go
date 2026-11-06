@@ -13,7 +13,7 @@ import (
 	"slices"
 	"strings"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"charm.land/fantasy"
 	"charm.land/fantasy/providers/anthropic"
 	"charm.land/fantasy/providers/azure"
@@ -39,18 +39,19 @@ type modelConfig struct {
 // It prefers the user-selected effort when valid, otherwise the model default when
 // valid, and finally falls back to the first configured reasoning level.
 func effectiveReasoningEffort(model modelConfig) string {
-	if !model.CatwalkCfg.CanReason {
+	if !model.CatwalkCfg.CanReason() {
 		return ""
 	}
 
-	if effort := model.ModelCfg.ReasoningEffort; effort != "" && slices.Contains(model.CatwalkCfg.ReasoningLevels, effort) {
+	levels := model.CatwalkCfg.ReasoningEffortLevels()
+	if effort := model.ModelCfg.ReasoningEffort; effort != "" && slices.Contains(levels, effort) {
 		return effort
 	}
-	if effort := model.CatwalkCfg.DefaultReasoningEffort; effort != "" && slices.Contains(model.CatwalkCfg.ReasoningLevels, effort) {
+	if effort := model.CatwalkCfg.Reasoning.DefaultEffortLevel; effort != "" && slices.Contains(levels, effort) {
 		return effort
 	}
-	if len(model.CatwalkCfg.ReasoningLevels) > 0 {
-		return model.CatwalkCfg.ReasoningLevels[0]
+	if len(levels) > 0 {
+		return levels[0]
 	}
 	return ""
 }
@@ -62,6 +63,8 @@ type optionsCall struct {
 	model    modelConfig
 	provider config.ProviderConfig
 	merged   map[string]any
+	// wireType is the endpoint type the model speaks on this provider.
+	wireType catwalk.Type
 	// effort is the reasoning effort the call should use, and setEffort
 	// whether it is one the model takes.
 	effort    string
@@ -92,11 +95,12 @@ func thinkingSwitch(on bool) map[string]any {
 // a provider type expects and parses them into its typed options.
 type optionsBuilder func(c *optionsCall) fantasy.ProviderOptions
 
-// optionsBuilders maps each provider type to its options builder. Types
-// without one get the known custom providers' handling, or no options.
-var optionsBuilders = map[catwalk.Type]optionsBuilder{
+// optionsBuilders maps the Fantasy provider serving a call (see
+// servingProvider) to its options builder. Providers without one get the
+// known custom providers' handling, or no options.
+var optionsBuilders = map[string]optionsBuilder{
 	openai.Name:       openaiOptions,
-	azure.Name:        openaiOptions,
+	azure.Name:        azureOptions,
 	anthropic.Name:    anthropicOptions,
 	bedrock.Name:      anthropicOptions,
 	openrouter.Name:   openrouterOptions,
@@ -115,17 +119,27 @@ func Options(catwalkModel catwalk.Model, selected config.SelectedModel, provider
 		return fantasy.ProviderOptions{}
 	}
 
+	// The endpoint comes from the model's catalog type, or else the
+	// provider's. Abacus picks each model's endpoint from its API format,
+	// which AbacusProviderForModel has put in the provider's type, the
+	// same choice buildAbacusProvider makes.
+	wireModel := model.CatwalkCfg
+	if providerCfg.ID == config.AbacusProviderID {
+		wireModel.Type = ""
+	}
+
 	effort := effectiveReasoningEffort(model)
 	c := &optionsCall{
 		model:    model,
 		provider: providerCfg,
 		merged:   merged,
+		wireType: config.NormalizeProviderType(wireModel.EffectiveType(providerCfg.Type)),
 		effort:   effort,
-		setEffort: model.CatwalkCfg.CanReason &&
+		setEffort: model.CatwalkCfg.CanReason() &&
 			effort != "" &&
-			slices.Contains(model.CatwalkCfg.ReasoningLevels, effort),
+			slices.Contains(model.CatwalkCfg.ReasoningEffortLevels(), effort),
 	}
-	if build, ok := optionsBuilders[providerCfg.Type]; ok {
+	if build, ok := optionsBuilders[servingProvider(providerCfg, wireModel)]; ok {
 		return build(c)
 	}
 	// Known custom providers (litellm, llamacpp, lmstudio, ollama, omlx)
@@ -201,8 +215,8 @@ func mergeOptions(model modelConfig, providerCfg config.ProviderConfig) (map[str
 	return mergedOptions, true
 }
 
-// openaiOptions builds options for OpenAI and Azure, on the Responses API
-// when the model uses it.
+// openaiOptions builds options for OpenAI's API, on the Responses API when
+// the model's catwalk type says it speaks it.
 func openaiOptions(c *optionsCall) fantasy.ProviderOptions {
 	model := c.model
 	isAbacus := c.provider.ID == config.AbacusProviderID
@@ -214,10 +228,27 @@ func openaiOptions(c *optionsCall) fantasy.ProviderOptions {
 		}
 	}
 	c.setEffortDefault("reasoning_effort", c.effort)
+	responses := c.wireType == catwalk.TypeResponses || (isAbacus && config.AbacusAPIFormat(model.CatwalkCfg) == "responses")
+	return openaiParsedOptions(c, responses)
+}
 
+// azureOptions builds options for Azure. The Azure SDK picks the Responses
+// API per model with its own heuristic, so the options follow the same
+// heuristic to stay in sync with the requests it sends. They stay under
+// openai.Name: Azure serves OpenAI's language models, which read their
+// options from there.
+func azureOptions(c *optionsCall) fantasy.ProviderOptions {
+	c.setEffortDefault("reasoning_effort", c.effort)
+	return openaiParsedOptions(c, openai.IsResponsesModel(c.model.CatwalkCfg.ID))
+}
+
+// openaiParsedOptions parses the merged options for the Responses API,
+// asking reasoning models for their encrypted reasoning and a summary, or
+// for chat completions.
+func openaiParsedOptions(c *optionsCall, responses bool) fantasy.ProviderOptions {
 	options := fantasy.ProviderOptions{}
-	if openai.IsResponsesModel(model.CatwalkCfg.ID) || (isAbacus && config.AbacusAPIFormat(model.CatwalkCfg) == "responses") {
-		if openai.IsResponsesReasoningModel(model.CatwalkCfg.ID) {
+	if responses {
+		if openai.IsResponsesReasoningModel(c.model.CatwalkCfg.ID) {
 			c.merged["reasoning_summary"] = "auto"
 			c.merged["include"] = []openai.IncludeType{openai.IncludeReasoningEncryptedContent}
 		}
@@ -263,7 +294,7 @@ func alibabaAnthropicReasoning(c *optionsCall, hasEffort, hasThink bool) {
 	switch {
 	case !hasEffort && c.setEffort:
 		extraBody["reasoning_effort"] = c.effort
-	case !hasThink && c.model.CatwalkCfg.CanReason:
+	case !hasThink && c.model.CatwalkCfg.CanReason():
 		extraBody["thinking"] = thinkingSwitch(c.model.ModelCfg.Think)
 	}
 	c.merged["extra_body"] = extraBody
@@ -389,7 +420,7 @@ var compatQuirks = map[string]compatQuirk{
 			extraBody["reasoning"] = map[string]string{"effort": c.effort}
 		},
 		thinking: func(c *optionsCall, extraBody map[string]any) {
-			if _, ok := extraBody["reasoning"]; !ok && c.model.CatwalkCfg.CanReason {
+			if _, ok := extraBody["reasoning"]; !ok && c.model.CatwalkCfg.CanReason() {
 				if c.model.ModelCfg.Think {
 					extraBody["reasoning"] = map[string]string{"effort": "medium"}
 				} else {
@@ -497,7 +528,7 @@ func openCodeThinking(c *optionsCall, extraBody map[string]any) {
 	if !isMiniMax(c.model.CatwalkCfg.ID) {
 		return
 	}
-	if c.model.CatwalkCfg.CanReason && (c.model.ModelCfg.Think || c.effort != "") {
+	if c.model.CatwalkCfg.CanReason() && (c.model.ModelCfg.Think || c.effort != "") {
 		extraBody["thinking"] = map[string]any{"type": "adaptive"}
 		extraBody["reasoning_split"] = true
 	} else {
@@ -512,7 +543,7 @@ func isMiniMax(modelID string) bool {
 // alibabaCompatThinking switches thinking for models that reason without
 // effort levels.
 func alibabaCompatThinking(c *optionsCall, extraBody map[string]any) {
-	if c.model.CatwalkCfg.CanReason && !c.setEffort {
+	if c.model.CatwalkCfg.CanReason() && !c.setEffort {
 		extraBody["enable_thinking"] = c.model.ModelCfg.Think
 	}
 }

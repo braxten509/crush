@@ -45,12 +45,15 @@ func (c *errorCoordinator) QueuedPrompts(string) int                          { 
 func (c *errorCoordinator) QueuedPromptsList(string) []string                 { return nil }
 func (c *errorCoordinator) ClearQueue(string)                                 {}
 func (c *errorCoordinator) Interrupt(string)                                  {}
+func (c *errorCoordinator) AddNote(string, string)                            {}
 func (c *errorCoordinator) Summarize(context.Context, string) error           { return nil }
 func (c *errorCoordinator) Model() agent.Model                                { return agent.Model{} }
 func (c *errorCoordinator) UpdateModels(context.Context) error                { return nil }
 func (c *errorCoordinator) SetMainAgent(string) error                         { return nil }
 func (*errorCoordinator) MainAgentName() string                               { return "coder" }
 func (c *errorCoordinator) GenerateTitle(context.Context, string, string)     {}
+func (c *errorCoordinator) SetHostContext(proto.HostContext)                  {}
+func (c *errorCoordinator) HostContext() proto.HostContext                    { return proto.HostContext{} }
 
 // insertRunCompleteWorkspace installs a workspace backed by a real
 // app.App (so the runCompletions broker exists) with the given
@@ -166,3 +169,6 @@ func TestRunAgent_CancellationPublishesNoErrorTerminal(t *testing.T) {
 }
 
 func (c *errorCoordinator) RecallQueuedPrompt(string) *message.QueuedPrompt { return nil }
+func (*errorCoordinator) ListSettledMessages(context.Context, string) ([]message.Message, error) {
+	return nil, nil
+}

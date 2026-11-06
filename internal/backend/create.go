@@ -84,9 +84,7 @@ func (b *Backend) CreateWorkspace(args proto.Workspace) (*Workspace, proto.Works
 	// Re-check admission: the client may have retired while the slow
 	// init above ran with b.mu released, and registering a claim for a
 	// client that has already announced its exit would strand the
-	// workspace. (b.closing cannot have flipped: every shutdown decision
-	// requires pending == 0, and this create has held pending since
-	// before it released b.mu.)
+	// workspace, or the server may have been told to stop meanwhile.
 	if err := b.admitLocked(clientID); err != nil {
 		b.mu.Unlock()
 		ws.invokeShutdown()
@@ -192,14 +190,14 @@ func (b *Backend) newWorkspace(args proto.Workspace, key string) (*Workspace, er
 	if engineDir := b.EngineDataDir(); engineDir != "" {
 		dataDir, lockDataDir = engineDir, false
 	}
-	cfg, err := config.Init(args.Path, dataDir, args.Debug)
+	cfg, err := config.Init(context.Background(), args.Path, dataDir, args.Debug)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize config: %w", err)
 	}
 
 	cpuaffinity.ApplyOptions(cfg.Config().Options)
-	cfg.Overrides().SkipPermissionRequests = args.YOLO
 	cfg.Overrides().EnabledChannels = args.Channels
+	cfg.Overrides().PermissionMode = proto.ProtoModeToPermission(args.RequestedPermissionMode())
 
 	if err := createDotCrushDir(cfg.Config().Options.DataDirectory); err != nil {
 		return nil, fmt.Errorf("failed to create data directory: %w", err)
@@ -297,9 +295,13 @@ func resolveWorkspaceKey(path string) (string, error) {
 // while the first set one will still log the mismatch.
 func logFirstWinsMismatch(existing *Workspace, args proto.Workspace) {
 	existingCfg := existing.Cfg.Config()
-	existingYOLO := existing.Cfg.Overrides().SkipPermissionRequests
 	existingChannels := existing.Cfg.Overrides().EnabledChannels
-	if existingYOLO == args.YOLO &&
+	// Compare the internal modes so an unset request ("") matches the
+	// normalized default ("normal") instead of spuriously logging. The
+	// older yolo flag counts as a request for yolo mode.
+	existingMode := existing.Cfg.Overrides().PermissionMode
+	requestedMode := proto.ProtoModeToPermission(args.RequestedPermissionMode())
+	if existingMode == requestedMode &&
 		existingCfg.Options.Debug == args.Debug &&
 		existingCfg.Options.DataDirectory == args.DataDir &&
 		stringSlicesEqual(existing.Env, args.Env) &&
@@ -310,8 +312,8 @@ func logFirstWinsMismatch(existing *Workspace, args proto.Workspace) {
 		"Workspace flag mismatch on duplicate create; first wins",
 		"workspace_id", existing.ID,
 		"path", existing.Path,
-		"existing_yolo", existingYOLO,
-		"requested_yolo", args.YOLO,
+		"existing_permission_mode", proto.PermissionModeToProto(existingMode),
+		"requested_permission_mode", proto.PermissionModeToProto(requestedMode),
 		"existing_debug", existingCfg.Options.Debug,
 		"requested_debug", args.Debug,
 		"existing_data_dir", existingCfg.Options.DataDirectory,

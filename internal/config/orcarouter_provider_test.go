@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/csync"
 	"github.com/charmbracelet/crush/internal/env"
 	"github.com/stretchr/testify/require"
@@ -32,7 +32,7 @@ func TestOrcaRouterProvidersLoad(t *testing.T) {
 	p, ok := cfg.Providers.Get(OrcaRouterProviderID)
 	require.True(t, ok, "listed with no key and no models")
 	require.Equal(t, "OrcaRouter", p.Name)
-	require.Equal(t, catwalk.TypeOpenAICompat, p.Type)
+	require.Equal(t, catwalk.TypeCompletions, p.Type)
 	require.Equal(t, orcaRouterBaseURL, p.BaseURL)
 	require.Empty(t, p.Models)
 

@@ -62,7 +62,7 @@ func TestSlowModelRefreshDoesNotHoldTheLoad(t *testing.T) {
 func TestRefreshedModelListReadsAsAConfigChange(t *testing.T) {
 	isolateModelCache(t)
 	writeModelCache(t, 2*time.Hour)
-	store, err := Load(t.TempDir(), t.TempDir(), false)
+	store, err := Load(t.Context(), t.TempDir(), t.TempDir(), false)
 	require.NoError(t, err)
 	require.False(t, store.ConfigStaleness().Dirty)
 
@@ -84,7 +84,7 @@ func TestProvidersAreReadFromTheRefreshedList(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "codex"), nil, 0o700))
 	refreshCLIModelList = func(string) {
-		fresh := `{"codex-cli":[{"id":"fresh-model","name":"Fresh","reasoning_levels":["low","high"]}]}`
+		fresh := `{"codex-cli":[{"id":"fresh-model","name":"Fresh","reasoning":{"thinking":"toggleable","effort_levels":[{"value":"low","display":"Low"},{"value":"high","display":"High"}]}}]}`
 		require.NoError(t, os.WriteFile(cliModelCachePath(), []byte(fresh), 0o600))
 	}
 	detect, refresh := detectCLIs, refreshModels
@@ -98,7 +98,7 @@ func TestProvidersAreReadFromTheRefreshedList(t *testing.T) {
 	require.True(t, ok)
 	require.Len(t, codex.Models, 1)
 	require.Equal(t, "fresh-model", codex.Models[0].ID)
-	require.Equal(t, []string{"low", "high"}, codex.Models[0].ReasoningLevels)
+	require.Equal(t, []string{"low", "high"}, codex.Models[0].ReasoningEffortLevels())
 }
 
 // writeModelCache writes an empty model cache aged by age.

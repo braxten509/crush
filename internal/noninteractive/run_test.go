@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"testing"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/csync"
 	"github.com/stretchr/testify/require"
@@ -34,10 +34,16 @@ func newFakeBackend() *fakeBackend {
 			Providers: csync.NewMapFrom(map[string]config.ProviderConfig{
 				"openai": {ID: "openai", Models: []catwalk.Model{
 					{ID: "gpt-4o"},
-					{ID: "o3", ReasoningLevels: []string{"low", "high"}},
+					{ID: "o3", Reasoning: catwalk.Reasoning{
+						Thinking:     catwalk.ThinkingToggleable,
+						EffortLevels: catwalk.NewEffortLevels("low", "high"),
+					}},
 				}},
 				"anthropic": {ID: "anthropic", Models: []catwalk.Model{
-					{ID: "claude-x", ReasoningLevels: []string{"high"}},
+					{ID: "claude-x", Reasoning: catwalk.Reasoning{
+						Thinking:     catwalk.ThinkingToggleable,
+						EffortLevels: catwalk.NewEffortLevels("high"),
+					}},
 					{ID: "claude-small"},
 				}},
 			}),

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"charm.land/fantasy"
 	"charm.land/fantasy/providers/openaicompat"
 	"github.com/charmbracelet/crush/internal/config"
@@ -57,7 +57,7 @@ func TestTinfoilThinking(t *testing.T) {
 			if tc.userBody != nil {
 				selected.ProviderOptions = map[string]any{"extra_body": tc.userBody}
 			}
-			provider := config.ProviderConfig{ID: tc.provider, Type: catwalk.TypeOpenAICompat, BaseURL: "https://inference.tinfoil.sh/v1"}
+			provider := config.ProviderConfig{ID: tc.provider, Type: catwalk.TypeCompletions, BaseURL: "https://inference.tinfoil.sh/v1"}
 			raw := Options(byID[tc.model], selected, provider)[openaicompat.Name]
 			parsed, ok := raw.(*openaicompat.ProviderOptions)
 			require.True(t, ok)
@@ -79,7 +79,7 @@ func TestTinfoilRefusesUnprovenServer(t *testing.T) {
 	}))
 	defer server.Close()
 	model := catwalk.Model{ID: "gemma4-31b"}
-	provider := config.ProviderConfig{ID: "tinfoil", Type: catwalk.TypeOpenAICompat, BaseURL: server.URL + "/v1", APIKey: "test-key"}
+	provider := config.ProviderConfig{ID: "tinfoil", Type: catwalk.TypeCompletions, BaseURL: server.URL + "/v1", APIKey: "test-key"}
 	selected := config.SelectedModel{Provider: "tinfoil", Model: model.ID}
 	builder := Builder{Config: config.NewTestStore(&config.Config{Options: &config.Options{}})}
 	built, err := builder.Provider(provider, selected, false)

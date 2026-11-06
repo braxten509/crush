@@ -151,6 +151,9 @@ func newAuthModel(platform string, newFlow func() flow) authModel {
 // runTUI runs the OAuth authorization flow with a small TUI that guides
 // the user through opening a browser and waiting for the callback.
 func runTUI(platform string, newFlow func() flow) (*oauth.Token, error) {
+	// Don't leak the errors to the TUI
+	browser.Stderr = nil
+	browser.Stdout = nil
 	p := tea.NewProgram(newAuthModel(platform, newFlow))
 	final, err := p.Run()
 	if err != nil {
@@ -184,9 +187,6 @@ func (m authModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.flow = msg.flow
 		m.verificationURL = msg.url
 		m.userCode = msg.userCode
-		if !m.browserFailed && m.openURL != nil {
-			m.browserFailed = m.openURL(msg.url) != nil
-		}
 		m.state = authStateWaiting
 		m.updateAuthKeymap()
 		if msg.userCode == "" {
@@ -201,6 +201,9 @@ func (m authModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		cmds := []tea.Cmd{waitCmd(m.flow), m.spinner.Tick}
+		if !m.browserFailed && m.openURL != nil {
+			cmds = append(cmds, openURLCmd(m.openURL, msg.url))
+		}
 		if msg.userCode != "" {
 			cmds = append(cmds, tea.SetClipboard(msg.userCode))
 		}
@@ -215,6 +218,10 @@ func (m authModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.blankLines = m.contentHeight()
 		m.quitting = true
 		return m, tea.Quit
+
+	case browserFailedMsg:
+		m.browserFailed = true
+		return m, nil
 
 	case authErrMsg:
 		m.err = msg.err
@@ -430,6 +437,21 @@ func startFlowCmd(newFlow func() flow) tea.Cmd {
 			url:      url,
 			userCode: userCode,
 		}
+	}
+}
+
+// browserFailedMsg reports that the browser could not be opened.
+type browserFailedMsg struct{}
+
+// openURLCmd opens the browser off the update loop through open, the
+// model's seam that tests replace. A failure is only recorded: the waiting
+// view always shows the URL to visit by hand.
+func openURLCmd(open func(string) error, url string) tea.Cmd {
+	return func() tea.Msg {
+		if open(url) != nil {
+			return browserFailedMsg{}
+		}
+		return nil
 	}
 }
 

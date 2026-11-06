@@ -3,20 +3,26 @@
 // menu; "+ Add model" under them opens a sheet that searches the account's
 // catalog (GET …/providers/{id}/catalog, the account's preferences applied).
 // OrcaRouter works the same way (owner, 2026-10-27).
-import { isOrcaRouter } from "./providers.js";
+import { flatModel, isOrcaRouter } from "./providers.js";
+
+// OpenRouter: type "openrouter" from an engine before v0.100.0. Catwalk v3
+// gives it the endpoint type "completions", so from v0.100.0 on it is known
+// by its id, as the engine knows it (catwalk.InferenceProviderOpenRouter,
+// internal/agent/coordinator.go buildProvider).
+const isOpenRouter = (id, p) => p?.type === "openrouter" || id === "openrouter";
 
 // The configured OpenRouter and OrcaRouter providers that take saved
 // models: [{id, name}].
 export function addableProviders(cfg) {
   const out = [];
-  for (const [id, p] of cfg?.providers ?? []) if ((p?.type === "openrouter" || isOrcaRouter(id, p)) && !p.disable) out.push({ id, name: p.name || id });
+  for (const [id, p] of cfg?.providers ?? []) if ((isOpenRouter(id, p) || isOrcaRouter(id, p)) && !p.disable) out.push({ id, name: p.name || id });
   return out;
 }
 
 // Whether the provider takes OpenRouter's host switches (Cheapest, FP8
 // floor): OpenRouter only, OrcaRouter has no such setting.
 export function hostSwitches(cfg, id) {
-  for (const [pid, p] of cfg?.providers ?? []) if (pid === id) return p?.type === "openrouter";
+  for (const [pid, p] of cfg?.providers ?? []) if (pid === id) return isOpenRouter(pid, p);
   return false;
 }
 
@@ -45,10 +51,14 @@ export function catalogRows(catalog, query) {
 
 const dollars = (n) => `$${Number(n.toFixed(2))}`;
 
-// "$0.6 / $2.5" per million tokens in and out, or "free".
+// "$0.6 / $2.5" per million tokens in and out, or "free". The catalog comes
+// as the engine sends it (its entries are saved as they are), so the price is
+// read from either shape: catwalk v3's pricing or the older flat costs
+// (flatModel).
 export function priceText(model) {
-  const into = Number(model?.cost_per_1m_in ?? 0);
-  const out = Number(model?.cost_per_1m_out ?? 0);
+  const flat = flatModel(model);
+  const into = Number(flat?.cost_per_1m_in ?? 0);
+  const out = Number(flat?.cost_per_1m_out ?? 0);
   if (into <= 0 && out <= 0) return "free";
   return `${dollars(into)} / ${dollars(out)}`;
 }

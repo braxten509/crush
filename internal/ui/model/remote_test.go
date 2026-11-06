@@ -3,6 +3,7 @@ package model
 import (
 	"context"
 	"errors"
+	"github.com/charmbracelet/crush/internal/permission"
 	"strings"
 	"sync"
 	"testing"
@@ -38,7 +39,7 @@ func TestRemoteActionsRunLikeKeys(t *testing.T) {
 	// YOLO toggles in code mode, as Ctrl+Y does.
 	_, err = m.runRemoteAction(&remote.Action{Kind: remote.ActYolo, SessionID: "s1"})
 	require.NoError(t, err)
-	require.True(t, ws.yolo)
+	require.Equal(t, permission.PermissionModeYolo, ws.permMode)
 
 	// Model changes wait for the turn to end, as in the TUI.
 	warmCaches(m, true)

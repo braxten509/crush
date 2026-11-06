@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"charm.land/fantasy"
-	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -27,9 +26,19 @@ var (
 
 // GenerateTitle generates a session title based on the initial prompt.
 func (a *sessionAgent) GenerateTitle(ctx context.Context, sessionID string, userPrompt string) {
+	a.titles.begin()
+	defer a.titles.end()
+	a.generateTitle(ctx, sessionID, userPrompt)
+}
+
+// generateTitle is GenerateTitle without tracking, for callers that
+// register with a.titles themselves.
+func (a *sessionAgent) generateTitle(ctx context.Context, sessionID string, userPrompt string) {
 	if userPrompt == "" {
 		return
 	}
+	ctx, cancel := context.WithTimeout(ctx, titleTimeout)
+	defer cancel()
 	// A branch keeps the title it was made with: neither a generated title
 	// nor the fallback name replaces it. A failed lookup generates one, as
 	// before.
@@ -44,6 +53,7 @@ func (a *sessionAgent) GenerateTitle(ctx context.Context, sessionID string, user
 	var titleSaved bool
 	defer func() {
 		if !titleSaved {
+			// WithoutCancel also drops the title timeout's deadline.
 			fallbackCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 			defer cancel()
 			if err := a.sessions.Rename(fallbackCtx, sessionID, DefaultSessionName); err != nil {
@@ -60,8 +70,12 @@ func (a *sessionAgent) GenerateTitle(ctx context.Context, sessionID string, user
 
 	title := cleanTitle(resp.Response.Content.Text(), userPrompt)
 
-	// Calculate usage and cost.
-	cost := titleCost(model, resp.TotalUsage, a.stepsOpenrouterCost(resp.Steps))
+	// Calculate usage and cost, at the models Prism routed a Hyper title to.
+	overrideCost := a.stepsOpenrouterCost(resp.Steps)
+	if hyperCost := a.hyperStepsCost(model, resp.Steps); hyperCost != nil {
+		overrideCost = hyperCost
+	}
+	cost := titleCost(model, resp.TotalUsage, overrideCost)
 	promptTokens := contextTokens(resp.TotalUsage)
 	completionTokens := resp.TotalUsage.OutputTokens
 
@@ -121,7 +135,7 @@ func (a *sessionAgent) streamTitle(ctx context.Context, sessionID, userPrompt st
 			continue
 		}
 		tok := int64(40)
-		if model.CatwalkCfg.CanReason {
+		if model.CatwalkCfg.CanReason() {
 			tok = model.CatwalkCfg.DefaultMaxTokens
 		}
 		agent := newAgent(model.Model, titlePrompt, tok)
@@ -165,17 +179,14 @@ func cleanTitle(text, userPrompt string) string {
 }
 
 // titleCost prices a title request from the model's rates, preferring the
-// cost OpenRouter reported. Flat-rate models cost nothing.
-func titleCost(model Model, usage fantasy.Usage, openrouterCost *float64) float64 {
-	modelConfig := config.PriceForRequest(model.CatwalkCfg, usage.InputTokens+usage.CacheReadTokens+usage.CacheCreationTokens)
-	cost := modelConfig.CostPer1MInCached/1e6*float64(usage.CacheCreationTokens) +
-		modelConfig.CostPer1MOutCached/1e6*float64(usage.CacheReadTokens) +
-		modelConfig.CostPer1MIn/1e6*float64(usage.InputTokens) +
-		modelConfig.CostPer1MOut/1e6*float64(usage.OutputTokens)
+// cost OpenRouter reported or the Prism-routed price of a Hyper title.
+// Flat-rate models cost nothing.
+func titleCost(model Model, usage fantasy.Usage, overrideCost *float64) float64 {
+	cost := requestCost(model.CatwalkCfg, usage)
 
-	// Use override cost if available (e.g., from OpenRouter).
-	if openrouterCost != nil {
-		cost = *openrouterCost
+	// Use override cost if available (e.g., from OpenRouter or Hyper Prism).
+	if overrideCost != nil {
+		cost = *overrideCost
 	}
 
 	// Skip cost accumulation

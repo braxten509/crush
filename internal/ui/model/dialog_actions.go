@@ -244,6 +244,25 @@ func (m *UI) handleModelAction(action dialog.Action) (cmd tea.Cmd, ok bool) {
 		m.dialog.CloseDialog(dialog.PermissionsID)
 		cmds = append(cmds, respondToPermission(m.com.Workspace, msg))
 
+	// Credential prompts are answered off the Update goroutine too: each
+	// answer is an HTTP round-trip in client/server mode.
+	case dialog.ActionPinentrySubmit:
+		m.dialog.CloseDialog(dialog.PinentryID)
+		ws := m.com.Workspace
+		cmds = append(cmds, func() tea.Msg { ws.PinentryRespond(msg.RequestID, msg.Secret); return nil })
+	case dialog.ActionPinentryCancel:
+		m.dialog.CloseDialog(dialog.PinentryID)
+		ws := m.com.Workspace
+		cmds = append(cmds, func() tea.Msg { ws.PinentryCancel(msg.RequestID); return nil })
+	case dialog.ActionSSHSubmit:
+		m.dialog.CloseDialog(dialog.SSHID)
+		ws := m.com.Workspace
+		cmds = append(cmds, func() tea.Msg { ws.SSHRespond(msg.RequestID, msg.Secret); return nil })
+	case dialog.ActionSSHCancel:
+		m.dialog.CloseDialog(dialog.SSHID)
+		ws := m.com.Workspace
+		cmds = append(cmds, func() tea.Msg { ws.SSHCancel(msg.RequestID); return nil })
+
 	default:
 		return nil, false
 	}
@@ -441,6 +460,8 @@ func (m *UI) handlePaletteToggle(action dialog.Action) (cmd tea.Cmd, ok bool) {
 	switch action.(type) {
 	case dialog.ActionToggleYoloMode:
 		toggle = m.toggleYoloCommand
+	case dialog.ActionToggleSysadminMode:
+		toggle = m.toggleSysadminCommand
 	case dialog.ActionToggleHelp:
 		toggle = func() tea.Cmd {
 			m.status.ToggleHelp()

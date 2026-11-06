@@ -8,8 +8,10 @@
 package agent
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -20,7 +22,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"charm.land/fantasy"
 	"charm.land/fantasy/providers/anthropic"
 	"charm.land/fantasy/providers/bedrock"
@@ -28,7 +30,10 @@ import (
 	"github.com/charmbracelet/crush/internal/agent/notify"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/csync"
+	"github.com/charmbracelet/crush/internal/hooks"
 	"github.com/charmbracelet/crush/internal/message"
+	"github.com/charmbracelet/crush/internal/permission"
+	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/version"
@@ -54,6 +59,10 @@ type SessionAgentCall struct {
 	// todoHandover is the last model's to-do list, handed to an agent CLI
 	// with the prompt after a model switch cleared it.
 	todoHandover string
+	// modelContext is what the model reads ahead of the prompt this turn:
+	// the host application's view and the notes taken since the last turn.
+	// An agent CLI gets it with its turn's text.
+	modelContext string
 
 	SessionID     string
 	SubmissionID  string
@@ -74,8 +83,15 @@ type SessionAgentCall struct {
 	ProgressUpdateRequired bool
 	// CLIContinue shows a reply the agent CLI started on its own between
 	// turns instead of sending Prompt (cliagent.Turn.Continue).
-	CLIContinue      bool
-	Prompt           string
+	CLIContinue bool
+	// QueueOnly delivers the call only into an active turn; on an idle
+	// session Run returns ErrSessionIdle instead of starting one.
+	QueueOnly bool
+	Prompt    string
+	// Report is a subagent report this call delivers. It is written to
+	// the transcript only when delivered, so it lands where the model
+	// reads it. Prompt is still what the model reads for it.
+	Report           *message.SubAgentReport
 	ProviderOptions  fantasy.ProviderOptions
 	Attachments      []message.Attachment
 	MaxOutputTokens  int64
@@ -85,7 +101,13 @@ type SessionAgentCall struct {
 	FrequencyPenalty *float64
 	PresencePenalty  *float64
 	NonInteractive   bool
-	// reportOnly disables tool use during a bounded sub-agent report recovery.
+
+	// HostContext is what the host application had in view when the
+	// prompt was sent. The model reads it ahead of this prompt, and it is
+	// kept with the prompt's message so later requests replay the same
+	// text.
+	HostContext proto.HostContext
+	// reportOnly disables tool use during a bounded subagent report recovery.
 	reportOnly bool
 	// report, when set, receives the result of the turn that finally ends
 	// this call: a later continuation when the session was summarized with
@@ -146,6 +168,9 @@ type SessionAgentCall struct {
 	channelMeta map[string]string
 }
 
+// ErrSessionIdle is returned for a QueueOnly call when no turn is active.
+var ErrSessionIdle = errors.New("session is idle")
+
 type SessionAgent interface {
 	Run(context.Context, SessionAgentCall) (*fantasy.AgentResult, error)
 	BeginAccepted(sessionID string) *AcceptedRun
@@ -158,10 +183,15 @@ type SessionAgent interface {
 	CancelAll()
 	IsSessionBusy(sessionID string) bool
 	IsBusy() bool
+	// ListSettledMessages reads a session's transcript, first settling any
+	// tool calls a dead process left without a reply.
+	ListSettledMessages(ctx context.Context, sessionID string) ([]message.Message, error)
 	QueuedPrompts(sessionID string) int
 	QueuedPromptsList(sessionID string) []string
 	ClearQueue(sessionID string)
 	RecallQueuedPrompt(sessionID string) *message.QueuedPrompt
+	// AddNote keeps text for the session's next prompt.
+	AddNote(sessionID, text string)
 	Summarize(context.Context, string, fantasy.ProviderOptions, func(context.Context, *fantasy.ProviderError) error) error
 	// ChatModel is the model the chat runs on: its own (owner, 2026-10-24:
 	// every chat owns its model).
@@ -177,6 +207,11 @@ type Model struct {
 	CatwalkCfg catwalk.Model
 	ModelCfg   config.SelectedModel
 	FlatRate   bool
+	// OAuth is true when the provider signs in by OAuth, so a rejected
+	// credential calls for a new sign-in rather than a config change.
+	OAuth bool
+	// ProviderName is the provider's display name, such as "GitHub Copilot".
+	ProviderName string
 }
 
 // activeCancel wraps a context.CancelFunc with a unique pointer identity.
@@ -189,7 +224,7 @@ type activeCancel struct {
 }
 
 type sessionAgent struct {
-	// model is the one model of an agent made for one model (a sub-agent's
+	// model is the one model of an agent made for one model (a subagent's
 	// helper run); the chat agents have none, as every chat owns its model
 	// (owner, 2026-10-24: no shared model anywhere).
 	model *csync.Value[Model]
@@ -204,13 +239,23 @@ type sessionAgent struct {
 	sessions   session.Service
 	messages   message.Service
 	// cfg backs channel reply routing (config lookup + MCP tool
-	// invocation). Nil in tests and sub-agents that never see channel
+	// invocation). Nil in tests and subagents that never see channel
 	// turns; sendChannelReply treats nil as "routing disabled".
 	cfg                  *config.ConfigStore
 	disableAutoSummarize bool
-	isYolo               bool
-	notify               pubsub.Publisher[notify.Notification]
-	runComplete          pubsub.Publisher[notify.RunComplete]
+	// permissions answers whether the user is being asked about tool
+	// calls at all. Nil in tests and anywhere that never needs to know.
+	permissions permission.Service
+	notify      pubsub.Publisher[notify.Notification]
+	runComplete pubsub.Publisher[notify.RunComplete]
+	// hooks runs lifecycle hooks for turns and compaction. Nil runs none.
+	hooks *hooks.Runner
+
+	// notes are what the host told the agent since its last turn, by
+	// session, to add to the next prompt. They are not chat messages.
+	notes *csync.Map[string, []string]
+	// titles tracks in-flight title generation so CancelAll can drain it.
+	titles *titleTracker
 
 	// sessionScheduler queues and dispatches the session's runs.
 	sessionScheduler
@@ -231,6 +276,24 @@ type chatModelCache struct {
 	mu    sync.Mutex
 	build chatModelBuilder
 	byKey map[string]Model
+	// gen is the coordinator's credential generation, shared by every agent
+	// it builds, sub-agents made for one task or dispatch included. A change
+	// since seen means a sign-in, key or provider changed, so every kept
+	// build is stale. Nil for agents no coordinator made.
+	gen  *atomic.Uint64
+	seen uint64
+}
+
+// dropStaleLocked forgets every build made before the latest credential
+// change. The caller holds mu.
+func (c *chatModelCache) dropStaleLocked() {
+	if c.gen == nil {
+		return
+	}
+	if g := c.gen.Load(); g != c.seen {
+		clear(c.byKey)
+		c.seen = g
+	}
 }
 
 type SessionAgentOptions struct {
@@ -241,23 +304,32 @@ type SessionAgentOptions struct {
 	SystemPromptPrefix string
 	SystemPrompt       string
 	IsSubAgent         bool
-	// Tasks lets the session's agent CLI spawn background sub-agents.
+	// Tasks lets the session's agent CLI spawn background subagents.
 	Tasks                *taskHub
 	DisableAutoSummarize bool
-	IsYolo               bool
 	Sessions             session.Service
 	Messages             message.Service
-	Cfg                  *config.ConfigStore
-	Tools                []fantasy.AgentTool
-	Notify               pubsub.Publisher[notify.Notification]
-	RunComplete          pubsub.Publisher[notify.RunComplete]
+	// Permissions tells the agent whether tool calls are put in front of
+	// the user. Nil means they are.
+	Permissions permission.Service
+	Cfg         *config.ConfigStore
+	Tools       []fantasy.AgentTool
+	Notify      pubsub.Publisher[notify.Notification]
+	RunComplete pubsub.Publisher[notify.RunComplete]
+	// Hooks runs lifecycle hooks for turns and compaction. Nil runs none.
+	Hooks *hooks.Runner
 	// ModelFor builds the model a chat runs on from its saved choice. Nil
-	// makes an agent for one model (a sub-agent's), which every chat it
+	// makes an agent for one model (a subagent's), which every chat it
 	// runs uses.
 	ModelFor chatModelBuilder
 	// NewChatModel is the model a chat that has none starts on (the last
 	// pick); it is saved with the chat.
 	NewChatModel func() (config.SelectedModel, bool)
+	// titles is shared by a coordinator's agents so one drain covers all.
+	titles *titleTracker
+	// modelsGen is the coordinator's credential generation: when it moves,
+	// the agent builds its chats' models again (see chatModelCache.gen).
+	modelsGen *atomic.Uint64
 }
 
 func NewSessionAgent(
@@ -275,11 +347,17 @@ func NewSessionAgent(
 		cfg:                  opts.Cfg,
 		disableAutoSummarize: opts.DisableAutoSummarize,
 		tools:                csync.NewSliceFrom(opts.Tools),
-		isYolo:               opts.IsYolo,
+		permissions:          opts.Permissions,
 		notify:               opts.Notify,
 		runComplete:          opts.RunComplete,
-		chatModels:           chatModelCache{build: opts.ModelFor, byKey: map[string]Model{}},
+		hooks:                opts.Hooks,
+		notes:                csync.NewMap[string, []string](),
+		titles:               cmp.Or(opts.titles, new(titleTracker)),
+		chatModels:           chatModelCache{build: opts.ModelFor, byKey: map[string]Model{}, gen: opts.modelsGen},
 		newChatModel:         opts.NewChatModel,
+	}
+	if opts.modelsGen != nil {
+		a.chatModels.seen = opts.modelsGen.Load()
 	}
 	a.sessionScheduler = newSessionScheduler(a)
 	return a
@@ -394,7 +472,7 @@ func (a *sessionAgent) persistCanceledTurn(ctx context.Context, call SessionAgen
 	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
 	if !userMsgCreated {
-		if _, err := a.createUserMessage(writeCtx, call); err != nil {
+		if _, err := a.createUserMessage(writeCtx, call, ""); err != nil {
 			return err
 		}
 	}
@@ -443,6 +521,18 @@ func (a *sessionAgent) publishRunComplete(ctx context.Context, call SessionAgent
 		return
 	}
 	a.runComplete.PublishMustDeliver(ctx, pubsub.UpdatedEvent, complete)
+}
+
+// recordDroppedReport writes a subagent report whose queued call was
+// dropped without running into the transcript, where the model reads it on
+// its next turn, so cancelling a turn never loses one.
+func (a *sessionAgent) recordDroppedReport(ctx context.Context, call SessionAgentCall) {
+	if call.Report == nil {
+		return
+	}
+	if _, err := a.createUserMessage(ctx, call, ""); err != nil {
+		slog.Error("Failed to record a dropped subagent report", "session_id", call.SessionID, "error", err)
+	}
 }
 
 // notifySessionFinished runs after the final message flush. Only a normal,
@@ -555,10 +645,12 @@ func (a *sessionAgent) modelForChat(choice session.ModelChoice) (Model, bool) {
 	keyJSON, _ := json.Marshal(selection)
 	key := string(keyJSON)
 	a.chatModels.mu.Lock()
+	a.chatModels.dropStaleLocked()
 	if built, ok := a.chatModels.byKey[key]; ok {
 		a.chatModels.mu.Unlock()
 		return built, true
 	}
+	builtUnder := a.chatModels.seen
 	a.chatModels.mu.Unlock()
 	built, err := a.chatModels.build(context.Background(), selection)
 	if err != nil {
@@ -566,7 +658,12 @@ func (a *sessionAgent) modelForChat(choice session.ModelChoice) (Model, bool) {
 		return Model{}, false
 	}
 	a.chatModels.mu.Lock()
-	a.chatModels.byKey[key] = built
+	a.chatModels.dropStaleLocked()
+	// A build that raced a credential change may hold the old credential:
+	// it serves this request but is not kept for the next one.
+	if a.chatModels.seen == builtUnder {
+		a.chatModels.byKey[key] = built
+	}
 	a.chatModels.mu.Unlock()
 	return built, true
 }
@@ -574,7 +671,7 @@ func (a *sessionAgent) modelForChat(choice session.ModelChoice) (Model, bool) {
 // ChatModel is the model the chat runs on: the one saved with it. A chat
 // that has none (made by an older app) starts on the last pick, which is
 // saved with it, so it owns that model from then on. An agent made for one
-// model (a sub-agent's) runs every chat on that model.
+// model (a subagent's) runs every chat on that model.
 func (a *sessionAgent) ChatModel(ctx context.Context, sessionID string) (Model, error) {
 	if a.chatModels.build == nil {
 		if one := a.model.Get(); one.Model != nil {
@@ -654,6 +751,33 @@ func (a *sessionAgent) ForgetChatModels() {
 	a.chatModels.mu.Lock()
 	clear(a.chatModels.byKey)
 	a.chatModels.mu.Unlock()
+}
+
+// AddNote keeps text for the session's next prompt, which the agent reads
+// with it. Nothing runs and nothing is shown in the chat.
+func (a *sessionAgent) AddNote(sessionID, text string) {
+	if text == "" {
+		return
+	}
+	existing, _ := a.notes.Get(sessionID)
+	a.notes.Set(sessionID, append(existing, text))
+}
+
+// takeNotes returns and forgets the session's notes, for the prompt about to run.
+func (a *sessionAgent) takeNotes(sessionID string) []string {
+	notes, _ := a.notes.Get(sessionID)
+	a.notes.Del(sessionID)
+	return notes
+}
+
+// CancelAll cancels every run and waits, up to 5s in total, for the runs
+// and any in-flight title generation to finish writing.
+func (a *sessionAgent) CancelAll() {
+	deadline := time.Now().Add(5 * time.Second)
+	a.cancelAllUntil(deadline)
+	if !a.titles.wait(time.Until(deadline)) {
+		slog.Warn("Gave up waiting for session title generation to finish")
+	}
 }
 
 func (a *sessionAgent) SetTools(tools []fantasy.AgentTool) {

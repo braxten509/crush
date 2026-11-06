@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"strings"
 
-	"charm.land/catwalk/pkg/catwalk"
-	"charm.land/catwalk/pkg/embedded"
+	"charm.land/catwalk/v3/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/embedded"
 )
 
 func abacusModel(raw json.RawMessage, providers ...catwalk.Provider) (catwalk.Model, bool) {
@@ -44,27 +44,48 @@ func abacusModel(raw json.RawMessage, providers ...catwalk.Provider) (catwalk.Mo
 		return parsed * 1_000_000
 	}
 	model := catwalk.Model{
-		ID:                entry.ID,
-		Name:              cmp.Or(entry.DisplayName, entry.ID),
-		ContextWindow:     cmp.Or(entry.ContextLength, int64(200_000)),
-		DefaultMaxTokens:  min(cmp.Or(entry.MaxCompletionTokens, int64(32_000)), 128_000),
-		CostPer1MIn:       rate(entry.InputTokenRate),
-		CostPer1MOut:      rate(entry.OutputTokenRate),
-		CostPer1MInCached: rate(entry.CachedInputTokenRate),
-		SupportsImages:    slices.Contains(entry.InputModalities, "image"),
-		CanReason:         entry.Thinking || strings.HasSuffix(entry.ID, "-thinking"),
-		Options:           catwalk.ModelOptions{ProviderOptions: map[string]any{"abacus_api_format": format}},
+		ID:               entry.ID,
+		Name:             cmp.Or(entry.DisplayName, entry.ID),
+		ContextWindow:    cmp.Or(entry.ContextLength, int64(200_000)),
+		DefaultMaxTokens: min(cmp.Or(entry.MaxCompletionTokens, int64(32_000)), 128_000),
+		Pricing: catwalk.Pricing{
+			Input:       rate(entry.InputTokenRate),
+			Output:      rate(entry.OutputTokenRate),
+			CacheCreate: rate(entry.CachedInputTokenRate),
+		},
+		Capabilities: catwalk.Capabilities{Vision: slices.Contains(entry.InputModalities, "image")},
+		Options:      catwalk.ModelOptions{ProviderOptions: map[string]any{"abacus_api_format": format}},
+	}
+	if entry.Thinking || strings.HasSuffix(entry.ID, "-thinking") {
+		model.Reasoning.Thinking = catwalk.ThinkingToggleable
 	}
 	applyAbacusControls(&model, providers)
 	if entry.ReasoningLevels != nil {
-		model.ReasoningLevels = slices.Clone(entry.ReasoningLevels)
-		model.DefaultReasoningEffort = entry.DefaultReasoningEffort
-		model.CanReason = model.CanReason || len(entry.ReasoningLevels) > 0
+		model.Reasoning.EffortLevels = catwalk.NewEffortLevels(entry.ReasoningLevels...)
+		model.Reasoning.DefaultEffortLevel = entry.DefaultReasoningEffort
+		if len(entry.ReasoningLevels) > 0 && !model.CanReason() {
+			model.Reasoning.Thinking = catwalk.ThinkingToggleable
+		}
 	}
-	if !slices.Contains(model.ReasoningLevels, model.DefaultReasoningEffort) {
-		model.DefaultReasoningEffort = ""
+	if !slices.Contains(model.ReasoningEffortLevels(), model.Reasoning.DefaultEffortLevel) {
+		model.Reasoning.DefaultEffortLevel = ""
 	}
 	return model, true
+}
+
+// adoptAbacusControls gives an Abacus model the reasoning controls of the
+// same model in a native provider's catalog. The model still reasons when
+// its own listing says so, even if the catalog entry doesn't.
+func adoptAbacusControls(model *catwalk.Model, known catwalk.Model) {
+	thinking := model.Reasoning.Thinking
+	if known.CanReason() {
+		thinking = known.Reasoning.Thinking
+	}
+	model.Reasoning = catwalk.Reasoning{
+		Thinking:           thinking,
+		EffortLevels:       slices.Clone(known.Reasoning.EffortLevels),
+		DefaultEffortLevel: known.Reasoning.DefaultEffortLevel,
+	}
 }
 
 func applyAbacusControls(model *catwalk.Model, providers []catwalk.Provider) {
@@ -90,9 +111,7 @@ func applyAbacusControls(model *catwalk.Model, providers []catwalk.Provider) {
 		case "anthropic", "openai", "gemini", "xai", "deepseek", "zai", "minimax", "moonshotai":
 			for _, known := range provider.Models {
 				if identity(known.ID) == identity(model.ID) {
-					model.CanReason = known.CanReason || model.CanReason
-					model.ReasoningLevels = slices.Clone(known.ReasoningLevels)
-					model.DefaultReasoningEffort = known.DefaultReasoningEffort
+					adoptAbacusControls(model, known)
 					return
 				}
 				if model.Name != "" && known.Name != "" && name(known.Name) == name(model.Name) {
@@ -102,9 +121,6 @@ func applyAbacusControls(model *catwalk.Model, providers []catwalk.Provider) {
 		}
 	}
 	if len(matches) == 1 {
-		known := matches[0]
-		model.CanReason = known.CanReason || model.CanReason
-		model.ReasoningLevels = slices.Clone(known.ReasoningLevels)
-		model.DefaultReasoningEffort = known.DefaultReasoningEffort
+		adoptAbacusControls(model, matches[0])
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/crush/internal/app"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/proto"
+	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/crush/internal/skills"
 	"github.com/charmbracelet/crush/internal/version"
 )
@@ -92,6 +93,21 @@ type Workspace struct {
 	// window closed and left its work running ([Backend.RetireClientKeepWorkAlone]).
 	// Guarded by clientsMu, like lingering.
 	lingerAlone bool
+
+	// sessions announces when a client of the workspace changes the session
+	// it views. It is apart from the app's events, which the agent's
+	// sessions publish on, so that it reaches the streams on its own.
+	sessions     *pubsub.Broker[proto.ClientSession]
+	sessionsOnce sync.Once
+
+	// themeMu guards hostTheme. It is held only briefly (no IO) and never
+	// together with clientsMu.
+	themeMu sync.Mutex
+	// hostTheme is the theme a host application set for every client of
+	// the workspace, or nil. It is never persisted and is not tied to the
+	// setting client: it stays until a host clears it or the workspace
+	// goes away. Stored themes are never mutated, only replaced.
+	hostTheme *proto.HostTheme
 
 	// rootCache memoizes [Backend.RootSessionID] resolutions, keyed by
 	// session ID. Session parentage is fixed at creation, so entries
@@ -202,16 +218,27 @@ func (w *Workspace) AttachedClientsForSession(sessionID string) int {
 
 func workspaceToProto(ws *Workspace) proto.Workspace {
 	cfg := ws.Cfg.Config()
+	// Report the mode the permission service actually enforces rather
+	// than the startup override. The override is a one-shot seed that
+	// app.New reads at construction; runtime toggles reach only the
+	// service, so reporting the override would show a client "normal"
+	// while the server auto-approves everything. YOLO carries the same
+	// answer for apps that only know the on/off form.
+	mode := ws.Cfg.Overrides().PermissionMode
+	if ws.App != nil && ws.Permissions != nil {
+		mode = ws.Permissions.PermissionMode()
+	}
 	out := proto.Workspace{
-		ID:       ws.ID,
-		Path:     ws.Path,
-		YOLO:     ws.Cfg.Overrides().SkipPermissionRequests,
-		Channels: ws.Cfg.Overrides().EnabledChannels,
-		DataDir:  cfg.Options.DataDirectory,
-		Debug:    cfg.Options.Debug,
-		Config:   cfg,
-		Env:      ws.Env,
-		Version:  version.Version,
+		ID:             ws.ID,
+		Path:           ws.Path,
+		PermissionMode: proto.PermissionModeToProto(mode),
+		YOLO:           mode.SkipsPrompts(),
+		Channels:       ws.Cfg.Overrides().EnabledChannels,
+		DataDir:        cfg.Options.DataDirectory,
+		Debug:          cfg.Options.Debug,
+		Config:         cfg,
+		Env:            ws.Env,
+		Version:        version.Version,
 
 		ConfigPath: ws.Cfg.GlobalDataPath(),
 	}

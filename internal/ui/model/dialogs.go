@@ -1,6 +1,8 @@
 package model
 
 import (
+	"os"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/crush/internal/ui/dialog/models"
@@ -134,7 +136,7 @@ func (m *UI) openQuitDialog() tea.Cmd {
 		return nil
 	}
 
-	quitDialog := dialog.NewQuit(m.com)
+	quitDialog := dialog.NewQuit(m.com, m.runningSubAgents())
 	m.dialog.OpenDialog(quitDialog)
 	return nil
 }
@@ -174,7 +176,7 @@ func (m *UI) openCommandsDialog() tea.Cmd {
 	hasTodos := hasSession && hasIncompleteTodos(m.session.Todos)
 	hasQueue := m.queue.count > 0
 
-	commands, err := dialog.NewCommands(m.com, sessionID, hasSession, hasTodos, hasQueue, m.customCommands, m.mcpPrompts)
+	commands, err := dialog.NewCommands(m.com, sessionID, hasSession, hasTodos, hasQueue, m.isTransparent, m.customCommands, m.mcpPrompts)
 	if err != nil {
 		return util.ReportError(err)
 	}
@@ -257,6 +259,11 @@ func (m *UI) openFilesDialog() tea.Cmd {
 
 // openPermissionsDialog opens the permissions dialog for a permission request.
 func (m *UI) openPermissionsDialog(perm permission.PermissionRequest) tea.Cmd {
+	// CRUSH_PERMISSIONS_PIPED=1: another client (an editor Crush runs in)
+	// shows the prompts and answers them, so this UI doesn't ask twice.
+	if piped, _ := strconv.ParseBool(os.Getenv("CRUSH_PERMISSIONS_PIPED")); piped {
+		return nil
+	}
 	// Close any existing permissions dialog first.
 	m.dialog.CloseDialog(dialog.PermissionsID)
 

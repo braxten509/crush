@@ -466,6 +466,13 @@ func (a *shareFakeAgent) Summarize(context.Context, string) error         { retu
 func (a *shareFakeAgent) Model() agent.Model                              { return agent.Model{} }
 func (a *shareFakeAgent) UpdateModels(context.Context) error              { return nil }
 func (a *shareFakeAgent) GenerateTitle(context.Context, string, string)   {}
+func (a *shareFakeAgent) AddNote(string, string)                          {}
+func (a *shareFakeAgent) SetHostContext(proto.HostContext)                {}
+func (a *shareFakeAgent) HostContext() proto.HostContext                  { return proto.HostContext{} }
+
+func (a *shareFakeAgent) ListSettledMessages(context.Context, string) ([]message.Message, error) {
+	return nil, nil
+}
 
 // TestRemoteRoutes: any app may stop a chat's share and tell what its
 // window shows; GET remote lists the shares; only the window an action went

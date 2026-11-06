@@ -203,7 +203,7 @@ func TestNonInteractivePromptWaitsForMCP(t *testing.T) {
 	t.Cleanup(mcp.DisarmInit)
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
-	_, err := coord.run(WithNonInteractive(ctx), nil, "test-session", "hello")
+	_, err := coord.run(WithNonInteractive(ctx), nil, nil, "test-session", "hello")
 	require.ErrorContains(t, err, "MCP initialization")
 }
 
@@ -217,7 +217,7 @@ func TestNonInteractivePromptJobIsNotSaved(t *testing.T) {
 	jobs := shell.GetBackgroundShellManager()
 	saved := func(ctx context.Context) bool {
 		hold, _ := gate(t)
-		job, err := jobs.Start(t.Context(), t.TempDir(), nil, hold, "job", h.env(parent.ID)...)
+		job, err := jobs.Start(t.Context(), t.TempDir(), nil, hold, "job", 0, h.env(parent.ID)...)
 		require.NoError(t, err)
 		t.Cleanup(func() {
 			_ = jobs.Kill(job.ID)

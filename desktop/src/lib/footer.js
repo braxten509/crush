@@ -372,8 +372,14 @@ function abacusFormat(id) {
   return "openai";
 }
 
+// config.SupportsThinkingToggle. Catwalk v3 (engine v0.100.0 on) names how a
+// model thinks: only "toggleable" turns off ("always" cannot), as the
+// engine's reasoningOptions (internal/agent/agent_dispatch_model.go). A model
+// from an older engine has no such word and keeps the switch.
 function supportsThinkingToggle(provider, model) {
   if (!model.can_reason || (model.reasoning_levels ?? []).length > 0) return false;
+  const thinking = model.reasoning?.thinking;
+  if (typeof thinking === "string" && thinking !== "toggleable") return false;
   if (provider.id !== ABACUS) return true;
   const id = String(model.id ?? "").toLowerCase();
   return abacusFormat(id) === "anthropic" || id.includes("deepseek") || id.startsWith("zai-org/") || id.includes("minimax");

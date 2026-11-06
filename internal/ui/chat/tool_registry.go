@@ -52,7 +52,7 @@ func init() {
 			copyResult: (*baseToolMessageItem).formatBashResultForCopy,
 		},
 		tools.JobOutputToolName: {
-			newItem:  ignoreWorkingDir(NewJobOutputToolMessageItem),
+			newItem:  NewJobOutputToolMessageItem,
 			copyName: "Job: Output",
 		},
 		tools.JobKillToolName: {
@@ -129,6 +129,27 @@ func init() {
 			copyName:   "Agent",
 			copyParams: copyParamsAs(copyAgentParams),
 			copyResult: (*baseToolMessageItem).formatAgentResultForCopy,
+		},
+		agent.AgentDispatchToolName: {
+			newItem:    ignoreWorkingDir(NewAgentToolMessageItem),
+			copyName:   "Create Subagent",
+			copyParams: copyParamsAs(copyAgentDispatchParams),
+			copyResult: (*baseToolMessageItem).formatAgentResultForCopy,
+		},
+		agent.AgentSendToolName: {
+			newItem:    ignoreWorkingDir(NewAgentControlToolMessageItem),
+			copyName:   "Message Subagent",
+			copyParams: copyParamsAs(copyAgentSendParams),
+		},
+		agent.AgentStatusToolName: {
+			newItem:    ignoreWorkingDir(NewAgentControlToolMessageItem),
+			copyName:   "Subagent Status",
+			copyParams: copyParamsAs(copyAgentStatusParams),
+		},
+		agent.AgentStopToolName: {
+			newItem:    ignoreWorkingDir(NewAgentControlToolMessageItem),
+			copyName:   "Stop Subagent",
+			copyParams: copyParamsAs(copyAgentStopParams),
 		},
 		tools.AgenticFetchToolName: {
 			newItem:    ignoreWorkingDir(NewAgenticFetchToolMessageItem),

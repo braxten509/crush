@@ -29,7 +29,14 @@ func ThemeKeyForProvider(providerID string) string {
 // ID. Unknown or empty provider IDs yield the default Charmtone Pantera
 // theme.
 func ThemeForProvider(providerID string) Styles {
-	switch ThemeKeyForProvider(providerID) {
+	return ThemeForKey(ThemeKeyForProvider(providerID))
+}
+
+// ThemeForKey returns the Styles for a key returned by
+// [ThemeKeyForProvider]. Unknown keys yield the default Charmtone Pantera
+// theme.
+func ThemeForKey(key string) Styles {
+	switch key {
 	case "hyper":
 		return HypercrushObsidiana()
 	default:
@@ -67,6 +74,7 @@ func charmtoneOpts() quickStyleOpts {
 		separator: charmtone.Char,
 
 		destructive:       charmtone.Coral,
+		destructiveSubtle: charmtone.Salmon,
 		error:             charmtone.Sriracha,
 		warningSubtle:     charmtone.Zest,
 		warning:           charmtone.Mustard,
@@ -457,6 +465,108 @@ func graphiteOpts() quickStyleOpts {
 	}
 }
 
+// keanuOpts returns the quickStyleOpts for the Keanu theme, a black
+// terminal with phosphor-green text in the spirit of the Matrix films'
+// digital rain. Statuses keep their conventional hues (red for
+// errors, amber for warnings) so they stay readable against the green.
+func keanuOpts() quickStyleOpts {
+	return quickStyleOpts{
+		primary:   lipgloss.Color("#00ff41"), // neon green
+		secondary: lipgloss.Color("#7dffa6"), // pale phosphor green
+		accent:    lipgloss.Color("#00d78f"), // spring green
+		keyword:   lipgloss.Color("#c8ff4d"), // electric lime
+
+		fgBase:       lipgloss.Color("#00ff41"), // neon green text
+		fgMoreSubtle: lipgloss.Color("#00a838"), // dim green
+		fgSubtle:     lipgloss.Color("#00d447"), // mid green
+		fgMostSubtle: lipgloss.Color("#008a30"), // faintest green
+
+		onPrimary: lipgloss.Color("#001507"), // near-black ink on bright chips
+
+		bgBase:         lipgloss.Color("#000000"), // pure black terminal
+		bgLeastVisible: lipgloss.Color("#0e2415"), // darkest green surface
+		bgLessVisible:  lipgloss.Color("#183c22"), // elevated green surface
+		bgMostVisible:  lipgloss.Color("#24572f"), // brightest green surface
+
+		separator: lipgloss.Color("#183c22"), // elevated green surface
+
+		destructive:       lipgloss.Color("#ff5252"), // bright red
+		error:             lipgloss.Color("#d43d3d"), // deep red
+		warningSubtle:     lipgloss.Color("#d7f75b"), // lime
+		warning:           lipgloss.Color("#b8d43d"), // dark lime
+		attention:         lipgloss.Color("#ff9f43"), // amber
+		busy:              lipgloss.Color("#c8ff4d"), // electric lime
+		info:              lipgloss.Color("#00d9c3"), // teal
+		infoMoreSubtle:    lipgloss.Color("#00b3a1"), // mid teal
+		infoMostSubtle:    lipgloss.Color("#008f7f"), // dark teal
+		success:           lipgloss.Color("#00ff41"), // neon green
+		successMoreSubtle: lipgloss.Color("#00c443"), // mid green
+		successMostSubtle: lipgloss.Color("#009637"), // dark green
+
+		yolo:           lipgloss.Color("#c8ff4d"), // electric lime
+		plan:           lipgloss.Color("#4dffb8"), // bright teal-green
+		planMoreSubtle: lipgloss.Color("#0d332b"), // deep teal
+
+		// Diff colors derive from success/destructive over bgBase.
+
+		button:         lipgloss.Color("#00ff41"), // neon green
+		buttonSubtle:   lipgloss.Color("#183c22"), // elevated green surface
+		buttonInactive: lipgloss.Color("#24572f"), // brightest green surface
+		buttonHovered:  lipgloss.Color("#00d447"), // mid green
+
+		// ANSI 16-color palette for remapping raw terminal output
+		// (e.g. bang-mode shell commands) onto legible Keanu colors.
+		ansiBlack:   lipgloss.Color("#0e2415"),
+		ansiRed:     lipgloss.Color("#ff5252"),
+		ansiGreen:   lipgloss.Color("#00d447"),
+		ansiYellow:  lipgloss.Color("#d7f75b"),
+		ansiBlue:    lipgloss.Color("#00b8d9"),
+		ansiMagenta: lipgloss.Color("#b98cff"),
+		ansiCyan:    lipgloss.Color("#00e0c3"),
+		ansiWhite:   lipgloss.Color("#a8d9b8"),
+
+		ansiBrightBlack:   lipgloss.Color("#24572f"),
+		ansiBrightRed:     lipgloss.Color("#ff7a7a"),
+		ansiBrightGreen:   lipgloss.Color("#00ff41"),
+		ansiBrightYellow:  lipgloss.Color("#eaff66"),
+		ansiBrightBlue:    lipgloss.Color("#33cfff"),
+		ansiBrightMagenta: lipgloss.Color("#d1a6ff"),
+		ansiBrightCyan:    lipgloss.Color("#66ffe0"),
+		ansiBrightWhite:   lipgloss.Color("#e6ffe6"),
+	}
+}
+
+// keanuOverrides applies Keanu tweaks that don't fit the token model.
+// The theme is monochrome green, so the default contrast pairings
+// between a bright foreground and the neon-green background collapse into
+// green-on-green and need explicit dark ink instead.
+func keanuOverrides(s Styles) Styles {
+	// fgBase and primary are both neon green, so the shared "fgBase on
+	// primary" pairings (file picker selection, question badge) would
+	// render invisible. Use the near-black onPrimary ink. The plan mode
+	// badge and the headings are colored text with no fill here, so they
+	// keep their colors: dark ink on the black background would vanish.
+	ink := lipgloss.Color("#001507")
+	s.FilePicker.Selected = s.FilePicker.Selected.Foreground(ink)
+	s.Editor.PromptQuestionIconFocused = s.Editor.PromptQuestionIconFocused.Foreground(ink)
+
+	// Inline code is colored text with no chip. It defaults to the
+	// destructive red; pale lime reads as code against the green text
+	// without looking like an error.
+	codeFg := lipgloss.Color("#c8ff8f")
+	s.Markdown.Code.Color = hex(codeFg)
+	s.PlanMarkdown.Code.Color = hex(codeFg)
+
+	// Punctuation and string literals both default to the lime warning
+	// hue, which blends code structure into strings. Dim punctuation to
+	// the mid green the operator style already uses.
+	if chroma := s.Markdown.CodeBlock.Chroma; chroma != nil {
+		chroma.Punctuation.Color = hex(lipgloss.Color("#00d447"))
+	}
+
+	return s
+}
+
 // builtinThemes maps theme names to their quickStyleOpts palette definitions.
 var builtinThemes = map[string]func() quickStyleOpts{
 	"charcoal-amber":    charcoalAmberOpts,
@@ -464,6 +574,7 @@ var builtinThemes = map[string]func() quickStyleOpts{
 	"claude-code":       claudeCodeOpts,
 	"graphite":          graphiteOpts,
 	"gruvbox-dark":      gruvboxDarkOpts,
+	"keanu":             keanuOpts,
 	"scholars-edition":  scholarsEditionOpts,
 	"terminal":          terminalOpts,
 }
@@ -474,6 +585,7 @@ var builtinThemes = map[string]func() quickStyleOpts{
 var builtinThemeOverrides = map[string]func(Styles) Styles{
 	"charmtone-panther": charmtoneOverrides,
 	"gruvbox-dark":      gruvboxDarkOverrides,
+	"keanu":             keanuOverrides,
 	"scholars-edition":  scholarsEditionOverrides,
 }
 

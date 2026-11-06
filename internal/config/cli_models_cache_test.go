@@ -11,7 +11,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/csync"
 	"github.com/stretchr/testify/require"
 )
@@ -21,8 +21,15 @@ func TestConfiguredCLIProviderUsesDiscoveredModels(t *testing.T) {
 	file := cliModelCachePath()
 	require.NoError(t, os.MkdirAll(filepath.Dir(file), 0o700))
 	cache := map[string][]catwalk.Model{
-		string(TypeGrokCLI):  {{ID: "new-grok-model", Name: "New model", CanReason: true, ReasoningLevels: []string{"careful"}, DefaultReasoningEffort: "careful"}},
-		string(TypeCodexCLI): {{ID: "text-only", Name: "Text only", SupportsImages: false}, {ID: "vision", Name: "Vision", SupportsImages: true}},
+		string(TypeGrokCLI): {{ID: "new-grok-model", Name: "New model", Reasoning: catwalk.Reasoning{
+			Thinking:           catwalk.ThinkingToggleable,
+			EffortLevels:       catwalk.NewEffortLevels("careful"),
+			DefaultEffortLevel: "careful",
+		}}},
+		string(TypeCodexCLI): {
+			{ID: "text-only", Name: "Text only", Capabilities: catwalk.Capabilities{Vision: false}},
+			{ID: "vision", Name: "Vision", Capabilities: catwalk.Capabilities{Vision: true}},
+		},
 	}
 	data, err := json.Marshal(cache)
 	require.NoError(t, err)
@@ -38,9 +45,9 @@ func TestConfiguredCLIProviderUsesDiscoveredModels(t *testing.T) {
 	require.True(t, grok.Disable)
 	require.Len(t, grok.Models, 1)
 	require.Equal(t, "new-grok-model", grok.Models[0].ID)
-	require.Equal(t, []string{"careful"}, grok.Models[0].ReasoningLevels)
-	require.Equal(t, "careful", grok.Models[0].DefaultReasoningEffort)
-	require.True(t, grok.Models[0].SupportsImages)
+	require.Equal(t, []string{"careful"}, grok.Models[0].ReasoningEffortLevels())
+	require.Equal(t, "careful", grok.Models[0].Reasoning.DefaultEffortLevel)
+	require.True(t, grok.Models[0].Capabilities.Vision)
 	require.NotNil(t, cfg.GetModel(string(TypeGrokCLI), "new-grok-model"))
 	codex, ok := cfg.Providers.Get(string(TypeCodexCLI))
 	require.True(t, ok)

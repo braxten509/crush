@@ -3,13 +3,14 @@ package config
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	hyperp "github.com/charmbracelet/crush/internal/agent/hyper"
 	"github.com/charmbracelet/crush/internal/lock"
 	"github.com/charmbracelet/crush/internal/oauth"
@@ -266,10 +267,49 @@ func (s *ConfigStore) usableDiskToken(scope Scope, providerID string, entryToken
 	return diskToken
 }
 
-// exchange performs the provider-specific OAuth token exchange. Tests may
+// rejectedRefreshTokenTTL is how long a refused refresh token is answered
+// from memory. It is short so one mistaken refusal cannot outlast an outage.
+const rejectedRefreshTokenTTL = 5 * time.Minute
+
+type rejectedRefresh struct {
+	err   error
+	until time.Time
+}
+
+// exchange performs the provider-specific OAuth token exchange, answering
+// from memory for a refresh token the provider recently refused.
+func (s *ConfigStore) exchange(ctx context.Context, providerID, refreshToken string) (*oauth.Token, error) {
+	now := time.Now
+	if s.now != nil {
+		now = s.now
+	}
+	s.rejectedMu.Lock()
+	rejected, ok := s.rejectedRefreshTokens[refreshToken]
+	if ok && !now().Before(rejected.until) {
+		delete(s.rejectedRefreshTokens, refreshToken)
+		ok = false
+	}
+	s.rejectedMu.Unlock()
+	if ok {
+		return nil, rejected.err
+	}
+	token, err := s.exchangeWithProvider(ctx, providerID, refreshToken)
+	var exchangeErr *oauth.TokenExchangeError
+	if errors.As(err, &exchangeErr) && exchangeErr.IsRefreshTokenRevoked() {
+		s.rejectedMu.Lock()
+		if s.rejectedRefreshTokens == nil {
+			s.rejectedRefreshTokens = make(map[string]rejectedRefresh)
+		}
+		s.rejectedRefreshTokens[refreshToken] = rejectedRefresh{err: err, until: now().Add(rejectedRefreshTokenTTL)}
+		s.rejectedMu.Unlock()
+	}
+	return token, err
+}
+
+// exchangeWithProvider calls the provider's token endpoint. Tests may
 // override it via the exchangeToken field; production uses the real
 // provider clients.
-func (s *ConfigStore) exchange(ctx context.Context, providerID, refreshToken string) (*oauth.Token, error) {
+func (s *ConfigStore) exchangeWithProvider(ctx context.Context, providerID, refreshToken string) (*oauth.Token, error) {
 	if s.exchangeToken != nil {
 		return s.exchangeToken(ctx, providerID, refreshToken)
 	}

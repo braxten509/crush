@@ -17,24 +17,19 @@ import (
 
 // buildTools builds the tool set of an agent: the built-in tools it is
 // allowed, then the MCP tools it is allowed, sorted by name, guarded and
-// wrapped with the PreToolUse hooks.
+// wrapped with the tool hooks.
 func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, isSubAgent bool) ([]fantasy.AgentTool, error) {
-	allTools, err := c.subAgentTools(ctx, agent)
+	allowed := c.buildableToolNames(agent, isSubAgent)
+	allTools, err := c.subAgentTools(ctx, agent, allowed)
 	if err != nil {
 		return nil, err
 	}
 
-	// Build hook runner if PreToolUse hooks are configured.
-	var hookRunner *hooks.Runner
-	if preToolHooks := c.cfg.Config().Hooks[hooks.EventPreToolUse]; len(preToolHooks) > 0 {
-		hookRunner = hooks.NewRunner(preToolHooks, c.cfg.WorkingDir(), c.cfg.WorkingDir())
-	}
-
-	allTools = append(allTools, c.builtinTools(agent, isSubAgent)...)
+	allTools = append(allTools, c.builtinTools(allowed)...)
 
 	var filteredTools []fantasy.AgentTool
 	for _, tool := range allTools {
-		if slices.Contains(agent.AllowedTools, tool.Info().Name) {
+		if slices.Contains(allowed, tool.Info().Name) {
 			filteredTools = append(filteredTools, tool)
 		}
 	}
@@ -49,24 +44,52 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, isSubA
 	// per delegated turn. The top-level invocation of the sub-agent tool
 	// itself is still wrapped from the coder's side.
 	// The secrets guard sits under the hooks and covers sub-agents too.
-	filteredTools = wrapToolsWithHooks(guardTools(filteredTools), hookRunner, isSubAgent)
+	filteredTools = wrapToolsWithHooks(guardTools(filteredTools), c.toolHookRunner(), isSubAgent)
 
 	return filteredTools, nil
 }
 
+// toolHookRunner is the runner for tool hooks: the one the app made, or one
+// reading the hooks from the live config, so a hook added later applies to
+// the next tool build either way.
+func (c *coordinator) toolHookRunner() *hooks.Runner {
+	if c.hookRunner != nil {
+		return c.hookRunner
+	}
+	return hooks.NewRunner(func() map[string][]hooks.HookConfig {
+		return c.cfg.Config().Hooks
+	}, c.cfg.WorkingDir(), c.cfg.WorkingDir())
+}
+
 // subAgentTools builds the tools that delegate to a sub-agent, when the
 // agent is allowed them.
-func (c *coordinator) subAgentTools(ctx context.Context, agent config.Agent) ([]fantasy.AgentTool, error) {
+func (c *coordinator) subAgentTools(ctx context.Context, agent config.Agent, allowed []string) ([]fantasy.AgentTool, error) {
 	var allTools []fantasy.AgentTool
-	if slices.Contains(agent.AllowedTools, AgentToolName) {
-		agentTool, err := c.agentTool(ctx)
+	if slices.Contains(allowed, AgentToolName) {
+		agentTool, err := c.agentTool(ctx, agent.ID)
 		if err != nil {
 			return nil, err
 		}
 		allTools = append(allTools, agentTool)
 	}
+	if slices.Contains(allowed, AgentDispatchToolName) {
+		dispatchTool, err := c.agentDispatchTool(ctx, agent.ID)
+		if err != nil {
+			return nil, err
+		}
+		allTools = append(allTools, dispatchTool)
+	}
+	if slices.Contains(allowed, AgentSendToolName) {
+		allTools = append(allTools, c.agentSendTool())
+	}
+	if slices.Contains(allowed, AgentStatusToolName) {
+		allTools = append(allTools, c.agentStatusTool())
+	}
+	if slices.Contains(allowed, AgentStopToolName) {
+		allTools = append(allTools, c.agentStopTool())
+	}
 
-	if slices.Contains(agent.AllowedTools, tools.AgenticFetchToolName) {
+	if slices.Contains(allowed, tools.AgenticFetchToolName) {
 		agenticFetchTool, err := c.agenticFetchTool(ctx, nil)
 		if err != nil {
 			return nil, err
@@ -77,11 +100,12 @@ func (c *coordinator) subAgentTools(ctx context.Context, agent config.Agent) ([]
 }
 
 // builtinTools builds every built-in tool the agent could be allowed.
-func (c *coordinator) builtinTools(agent config.Agent, isSubAgent bool) []fantasy.AgentTool {
-	logFile := filepath.Join(c.cfg.Config().Options.DataDirectory, "logs", "crush.log")
+func (c *coordinator) builtinTools(allowed []string) []fantasy.AgentTool {
+	cfg := c.cfg.Config()
+	logFile := filepath.Join(cfg.Options.DataDirectory, "logs", "crush.log")
 
 	allTools := []fantasy.AgentTool{
-		shelltool.NewBashTool(c.permissions, c.cfg.WorkingDir(), c.cfg.Config().Options.DataDirectory, c.cfg.Config().Options.Attribution, reportStartedJob),
+		shelltool.NewBashTool(c.permissions, c.cfg.WorkingDir(), cfg.Options.DataDirectory, cfg.Options.Attribution, cfg.Options.GetMaxBackgroundJobs(), cfg.Permissions, reportStartedJob),
 		tools.NewCrushInfoTool(c.cfg, c.lspManager, c.allSkills, c.activeSkills, c.skillTracker),
 		tools.NewCrushLogsTool(logFile),
 		shelltool.NewJobOutputTool(c.cfg.Config().Options.DataDirectory),
@@ -99,8 +123,9 @@ func (c *coordinator) builtinTools(agent config.Agent, isSubAgent bool) []fantas
 		tools.NewWriteTool(c.lspManager, c.permissions, c.history, c.filetracker, c.cfg.WorkingDir()),
 	}
 
-	// Question tool is interactive-only and not available to sub-agents.
-	if !isSubAgent && c.interactive {
+	// Interactive-only, and never given to sub-agents; effectiveToolNames
+	// is what decides both.
+	if slices.Contains(allowed, tools.QuestionToolName) {
 		allTools = append(allTools, tools.NewQuestionTool(c.questions))
 	}
 

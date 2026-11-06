@@ -40,6 +40,10 @@ type Chat struct {
 	// agent's running command to the background.
 	canBackground bool
 
+	// externalAnimation is set when something outside the list is animating
+	// and needs the shared clock, such as the header's subagent spinner.
+	externalAnimation bool
+
 	// animRunning is true while the shared animation clock has a tick
 	// outstanding. The clock stops itself when no visible item is spinning
 	// and is re-armed by EnsureAnimating once one is. animGen identifies
@@ -95,6 +99,11 @@ type Chat struct {
 	// Scrollbar visibility state
 	scrollbarVisible bool
 	scrollbarHideSeq int // current sequence number for hide timer
+	// scrollbarHideArmed is the hide timeout already scheduled, or zero when
+	// none is outstanding. The tick is armed from the UI's update tail rather
+	// than returned by the scroll calls, so a caller ignoring a command can
+	// no longer lose the auto-hide.
+	scrollbarHideArmed int
 	// scrollbarEdge is the chat area's last column, where the scrollbar
 	// shows (-1 before the first draw). scrollbarGrab is where on the
 	// thumb a drag holds it, or -1 when not dragging.
@@ -201,7 +210,7 @@ func (m *Chat) InvalidateVisibleRenderCaches() {
 
 // SetMessages sets the chat messages to the provided list of message items.
 func (m *Chat) SetMessages(msgs ...chat.MessageItem) tea.Cmd {
-	m.scrollbarVisible = false // Reset scrollbar visibility on new session load
+	m.resetScrollbar() // Reset scrollbar visibility on new session load
 	m.flat = slices.Clone(msgs)
 	if m.awaitingReply && !slices.ContainsFunc(m.flat, func(item chat.MessageItem) bool {
 		user, ok := item.(*chat.UserMessageItem)
@@ -418,7 +427,7 @@ func (m *Chat) regroup() {
 			if m.waitingItem == nil || m.waitingFor != submissionKey(user) {
 				m.waitingFor = submissionKey(user)
 				m.waitingItem = chat.NewAssistantMessageItem(m.com.Styles, &message.Message{
-					ID: "waiting:" + m.waitingFor, Role: message.Assistant,
+					ID: "waiting:" + m.waitingFor, Role: message.Assistant, SessionID: user.Message().SessionID,
 				})
 			}
 			owner[m.waitingItem] = len(items)
@@ -536,7 +545,7 @@ func (m *Chat) RenderState() RenderState {
 func (m *Chat) ClearMessages() {
 	m.idInxMap = make(map[string]int)
 	m.flat, m.groupOf, m.folded = nil, nil, nil
-	m.scrollbarVisible = false
+	m.resetScrollbar()
 	m.list.SetItems()
 	m.ClearMouse()
 	// Nothing is left to warm; end any warming so the scrollbar returns.
@@ -613,6 +622,19 @@ func (m *Chat) MessageItem(id string) chat.MessageItem {
 		}
 	}
 	return item
+}
+
+// dispatchItems returns the agent_dispatch items in order. They are read
+// from flat rather than the list, where a run of tool calls folds into one
+// status group row and would hide the dispatches inside it.
+func (m *Chat) dispatchItems() []*chat.AgentToolMessageItem {
+	var items []*chat.AgentToolMessageItem
+	for _, item := range m.flat {
+		if dispatch, ok := item.(*chat.AgentToolMessageItem); ok && dispatch.DispatchLabel() != "" {
+			items = append(items, dispatch)
+		}
+	}
+	return items
 }
 
 // ToggleExpandedSelectedItem expands the selected message item if it is expandable.

@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/stretchr/testify/require"
@@ -28,8 +28,8 @@ func TestIFMRequest(t *testing.T) {
 				_, _ = w.Write([]byte(`{"id":"ifm-test","object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant","content":"ok","reasoning_content":"Thinking trace"},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":2,"total_tokens":12}}`))
 			}))
 			defer server.Close()
-			model := catwalk.Model{ID: "IFM/K2-Horizon-375B-A23B", CanReason: true, ReasoningLevels: []string{"low", "medium", "high"}, DefaultReasoningEffort: "high"}
-			provider := config.ProviderConfig{ID: "ifm", Type: catwalk.TypeOpenAICompat, BaseURL: server.URL + "/v1", APIKey: "test-key"}
+			model := catwalk.Model{ID: "IFM/K2-Horizon-375B-A23B", Reasoning: catwalk.Reasoning{Thinking: catwalk.ThinkingToggleable, EffortLevels: catwalk.NewEffortLevels("low", "medium", "high"), DefaultEffortLevel: "high"}}
+			provider := config.ProviderConfig{ID: "ifm", Type: catwalk.TypeCompletions, BaseURL: server.URL + "/v1", APIKey: "test-key"}
 			selected := config.SelectedModel{Provider: "ifm", Model: model.ID, ReasoningEffort: effort, ProviderOptions: map[string]any{
 				"extra_body": map[string]any{"chat_template_kwargs": map[string]any{"tool_call_format": "json"}},
 			}}

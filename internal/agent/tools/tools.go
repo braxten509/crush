@@ -3,6 +3,7 @@ package tools
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"html/template"
 	"os/exec"
 	"testing"
@@ -79,6 +80,11 @@ func GetModelNameFromContext(ctx context.Context) string {
 // GetChatModelFromContext retrieves the model choice the turn's chat runs on.
 func GetChatModelFromContext(ctx context.Context) config.SelectedModel {
 	return GetContextValue(ctx, ChatModelContextKey, config.SelectedModel{})
+}
+
+// UnsupportedMediaResponse tells the model it cannot receive a tool's media.
+func UnsupportedMediaResponse(modelName string) fantasy.ToolResponse {
+	return fantasy.NewTextErrorResponse(fmt.Sprintf("This model (%s) does not support image data.", modelName))
 }
 
 // NewPermissionDeniedResponse returns a tool response indicating the user

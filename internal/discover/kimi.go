@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strings"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 )
 
 // Kimi's model list changes with the plan, so it comes from the provider
@@ -105,22 +105,31 @@ func discoverKimiModels(ctx context.Context, cfg Config, resolver Resolver) ([]c
 		if maxTokens <= 0 || maxTokens > contextWindow {
 			maxTokens = min(kimiMaxTokens, contextWindow)
 		}
-		levels := raw.Reasoning.Effort.Valid
+		capabilities := existing.Capabilities
+		capabilities.Vision = !knownModel || existing.Capabilities.Vision
 		model := catwalk.Model{
-			ID:                     id,
-			Name:                   name,
-			CostPer1MIn:            existing.CostPer1MIn,
-			CostPer1MOut:           existing.CostPer1MOut,
-			CostPer1MInCached:      existing.CostPer1MInCached,
-			CostPer1MOutCached:     existing.CostPer1MOutCached,
-			ContextWindow:          contextWindow,
-			DefaultMaxTokens:       maxTokens,
-			CanReason:              len(levels) > 0 || knownModel && existing.CanReason,
-			ReasoningLevels:        levels,
-			DefaultReasoningEffort: raw.Reasoning.Effort.Default,
-			SupportsImages:         !knownModel || existing.SupportsImages,
-			Options:                existing.Options,
+			ID:               id,
+			Type:             existing.Type,
+			Name:             name,
+			Pricing:          existing.Pricing,
+			ContextWindow:    contextWindow,
+			DefaultMaxTokens: maxTokens,
+			Capabilities:     capabilities,
+			MaxAttachments:   existing.MaxAttachments,
+			Options:          existing.Options,
 		}
+		// The API's effort levels win; without them a known model keeps
+		// the catalog's way of thinking.
+		if knownModel {
+			model.Reasoning.Thinking = existing.Reasoning.Thinking
+		}
+		if levels := raw.Reasoning.Effort.Valid; len(levels) > 0 {
+			model.Reasoning.EffortLevels = catwalk.NewEffortLevels(levels...)
+			if !model.CanReason() {
+				model.Reasoning.Thinking = catwalk.ThinkingToggleable
+			}
+		}
+		model.Reasoning.DefaultEffortLevel = raw.Reasoning.Effort.Default
 		models = append(models, model)
 	}
 	return models, nil

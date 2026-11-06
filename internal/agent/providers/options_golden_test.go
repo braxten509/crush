@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"charm.land/fantasy/providers/anthropic"
 	"charm.land/fantasy/providers/azure"
 	"charm.land/fantasy/providers/bedrock"
@@ -46,7 +46,7 @@ func providerOptionsProviders() []config.ProviderConfig {
 		{ID: "openrouter", Type: openrouter.Name},
 		{ID: "vercel", Type: vercel.Name},
 		{ID: "gemini", Type: google.Name},
-		{ID: "vertexai", Type: catwalk.TypeVertexAI},
+		{ID: "vertexai", Type: legacyGoogleVertexType},
 		{ID: "custom-compat", Type: openaicompat.Name},
 		{ID: "custom-compat-options", Type: openaicompat.Name, ProviderOptions: map[string]any{"user": "provider-user", "extra_body": map[string]any{"from": "provider"}}},
 		{ID: string(catwalk.InferenceProviderIoNet), Type: openaicompat.Name},
@@ -79,6 +79,11 @@ func providerOptionsModels() []struct {
 	model modelConfig
 } {
 	levels := []string{"low", "medium", "high"}
+	// reasoning is a model that can think, with the given effort levels
+	// and default effort.
+	reasoning := func(levels []string, defaultEffort string) catwalk.Reasoning {
+		return catwalk.Reasoning{Thinking: catwalk.ThinkingToggleable, EffortLevels: catwalk.NewEffortLevels(levels...), DefaultEffortLevel: defaultEffort}
+	}
 	topK := int64(40)
 	catwalkTopK := int64(64)
 	return []struct {
@@ -86,15 +91,15 @@ func providerOptionsModels() []struct {
 		model modelConfig
 	}{
 		{"plain", modelConfig{CatwalkCfg: catwalk.Model{ID: "plain-model"}}},
-		{"reasoning-default", modelConfig{CatwalkCfg: catwalk.Model{ID: "reasoner", CanReason: true, ReasoningLevels: levels, DefaultReasoningEffort: "medium"}}},
-		{"reasoning-selected", modelConfig{CatwalkCfg: catwalk.Model{ID: "reasoner", CanReason: true, ReasoningLevels: levels, DefaultReasoningEffort: "medium"}, ModelCfg: config.SelectedModel{ReasoningEffort: "high"}}},
-		{"reasoning-invalid", modelConfig{CatwalkCfg: catwalk.Model{ID: "reasoner", CanReason: true, ReasoningLevels: levels, DefaultReasoningEffort: "ultra"}, ModelCfg: config.SelectedModel{ReasoningEffort: "extreme"}}},
-		{"reasoning-none", modelConfig{CatwalkCfg: catwalk.Model{ID: "reasoner", CanReason: true, ReasoningLevels: []string{"none", "low", "high"}}, ModelCfg: config.SelectedModel{ReasoningEffort: "none"}}},
-		{"think", modelConfig{CatwalkCfg: catwalk.Model{ID: "thinker", CanReason: true}, ModelCfg: config.SelectedModel{Think: true}}},
-		{"think-off", modelConfig{CatwalkCfg: catwalk.Model{ID: "thinker", CanReason: true}}},
+		{"reasoning-default", modelConfig{CatwalkCfg: catwalk.Model{ID: "reasoner", Reasoning: reasoning(levels, "medium")}}},
+		{"reasoning-selected", modelConfig{CatwalkCfg: catwalk.Model{ID: "reasoner", Reasoning: reasoning(levels, "medium")}, ModelCfg: config.SelectedModel{ReasoningEffort: "high"}}},
+		{"reasoning-invalid", modelConfig{CatwalkCfg: catwalk.Model{ID: "reasoner", Reasoning: reasoning(levels, "ultra")}, ModelCfg: config.SelectedModel{ReasoningEffort: "extreme"}}},
+		{"reasoning-none", modelConfig{CatwalkCfg: catwalk.Model{ID: "reasoner", Reasoning: reasoning([]string{"none", "low", "high"}, "")}, ModelCfg: config.SelectedModel{ReasoningEffort: "none"}}},
+		{"think", modelConfig{CatwalkCfg: catwalk.Model{ID: "thinker", Reasoning: reasoning(nil, "")}, ModelCfg: config.SelectedModel{Think: true}}},
+		{"think-off", modelConfig{CatwalkCfg: catwalk.Model{ID: "thinker", Reasoning: reasoning(nil, "")}}},
 		{"think-cannot-reason", modelConfig{CatwalkCfg: catwalk.Model{ID: "thinker"}, ModelCfg: config.SelectedModel{Think: true}}},
 		{"explicit-options", modelConfig{
-			CatwalkCfg: catwalk.Model{ID: "reasoner", CanReason: true, ReasoningLevels: levels},
+			CatwalkCfg: catwalk.Model{ID: "reasoner", Reasoning: reasoning(levels, "")},
 			ModelCfg: config.SelectedModel{ReasoningEffort: "high", Think: true, ProviderOptions: map[string]any{
 				"reasoning_effort": "low",
 				"effort":           "low",
@@ -103,31 +108,31 @@ func providerOptionsModels() []struct {
 			}},
 		}},
 		{"explicit-thinking", modelConfig{
-			CatwalkCfg: catwalk.Model{ID: "reasoner", CanReason: true},
+			CatwalkCfg: catwalk.Model{ID: "reasoner", Reasoning: reasoning(nil, "")},
 			ModelCfg:   config.SelectedModel{Think: true, ProviderOptions: map[string]any{"thinking": map[string]any{"budget_tokens": 500}}},
 		}},
 		{"extra-body", modelConfig{
-			CatwalkCfg: catwalk.Model{ID: "reasoner", CanReason: true, ReasoningLevels: levels, Options: catwalk.ModelOptions{ProviderOptions: map[string]any{"user": "catwalk-user", "extra_body": map[string]any{"catwalk": true, "custom": "catwalk"}}}},
+			CatwalkCfg: catwalk.Model{ID: "reasoner", Reasoning: reasoning(levels, ""), Options: catwalk.ModelOptions{ProviderOptions: map[string]any{"user": "catwalk-user", "extra_body": map[string]any{"catwalk": true, "custom": "catwalk"}}}},
 			ModelCfg:   config.SelectedModel{ReasoningEffort: "low", ProviderOptions: map[string]any{"extra_body": map[string]any{"custom": "selected", "thinking": map[string]any{"type": "explicit"}}}},
 		}},
 		{"top-k", modelConfig{CatwalkCfg: catwalk.Model{ID: "plain-model", Options: catwalk.ModelOptions{TopK: &catwalkTopK}}, ModelCfg: config.SelectedModel{TopK: &topK}}},
 		{"catwalk-top-k", modelConfig{CatwalkCfg: catwalk.Model{ID: "plain-model", Options: catwalk.ModelOptions{TopK: &catwalkTopK}}}},
 		{"malformed", modelConfig{CatwalkCfg: catwalk.Model{ID: "plain-model"}, ModelCfg: config.SelectedModel{TopK: &topK, ProviderOptions: map[string]any{"user": 5.0}}}},
 		{"malformed-no-top-k", modelConfig{CatwalkCfg: catwalk.Model{ID: "plain-model"}, ModelCfg: config.SelectedModel{ProviderOptions: map[string]any{"user": 5.0}}}},
-		{"gpt-5-fast", modelConfig{CatwalkCfg: catwalk.Model{ID: "gpt-5", CanReason: true, ReasoningLevels: []string{"minimal", "low", "medium", "high"}}, ModelCfg: config.SelectedModel{ReasoningEffort: "high", ServiceTier: "fast"}}},
-		{"gpt-5.2-standard", modelConfig{CatwalkCfg: catwalk.Model{ID: "gpt-5.2", CanReason: true, ReasoningLevels: levels}, ModelCfg: config.SelectedModel{ServiceTier: "standard"}}},
-		{"gpt-5-pro", modelConfig{CatwalkCfg: catwalk.Model{ID: "gpt-5-pro", CanReason: true, ReasoningLevels: levels}, ModelCfg: config.SelectedModel{ServiceTier: "fast"}}},
+		{"gpt-5-fast", modelConfig{CatwalkCfg: catwalk.Model{ID: "gpt-5", Reasoning: reasoning([]string{"minimal", "low", "medium", "high"}, "")}, ModelCfg: config.SelectedModel{ReasoningEffort: "high", ServiceTier: "fast"}}},
+		{"gpt-5.2-standard", modelConfig{CatwalkCfg: catwalk.Model{ID: "gpt-5.2", Reasoning: reasoning(levels, "")}, ModelCfg: config.SelectedModel{ServiceTier: "standard"}}},
+		{"gpt-5-pro", modelConfig{CatwalkCfg: catwalk.Model{ID: "gpt-5-pro", Reasoning: reasoning(levels, "")}, ModelCfg: config.SelectedModel{ServiceTier: "fast"}}},
 		{"gpt-4o", modelConfig{CatwalkCfg: catwalk.Model{ID: "gpt-4o"}}},
-		{"abacus-format", modelConfig{CatwalkCfg: catwalk.Model{ID: "custom-x", CanReason: true, ReasoningLevels: levels, Options: catwalk.ModelOptions{ProviderOptions: map[string]any{config.AbacusAPIFormatOption: "responses"}}}}},
-		{"gemini-2", modelConfig{CatwalkCfg: catwalk.Model{ID: "gemini-2.5-pro", CanReason: true, ReasoningLevels: levels}}},
-		{"gemini-3", modelConfig{CatwalkCfg: catwalk.Model{ID: "gemini-3-pro", CanReason: true, ReasoningLevels: []string{"low", "high"}}, ModelCfg: config.SelectedModel{ReasoningEffort: "high"}}},
-		{"minimax-m3", modelConfig{CatwalkCfg: catwalk.Model{ID: "MiniMax-M3", CanReason: true, ReasoningLevels: levels}, ModelCfg: config.SelectedModel{ReasoningEffort: "high"}}},
-		{"minimax-m2-think", modelConfig{CatwalkCfg: catwalk.Model{ID: "minimax-m2", CanReason: true}, ModelCfg: config.SelectedModel{Think: true}}},
-		{"minimax-off", modelConfig{CatwalkCfg: catwalk.Model{ID: "minimax-m2", CanReason: true}}},
-		{"deepseek-none", modelConfig{CatwalkCfg: catwalk.Model{ID: "deepseek-v4", CanReason: true, ReasoningLevels: []string{"none", "high"}}, ModelCfg: config.SelectedModel{ReasoningEffort: "none"}}},
-		{"zai-org", modelConfig{CatwalkCfg: catwalk.Model{ID: "zai-org/glm-5", CanReason: true}, ModelCfg: config.SelectedModel{Think: true}}},
-		{"claude", modelConfig{CatwalkCfg: catwalk.Model{ID: "claude-opus-5", CanReason: true, ReasoningLevels: []string{"low", "high", "max"}}, ModelCfg: config.SelectedModel{ReasoningEffort: "max"}}},
-		{"claude-think", modelConfig{CatwalkCfg: catwalk.Model{ID: "claude-sonnet-5", CanReason: true}, ModelCfg: config.SelectedModel{Think: true}}},
+		{"abacus-format", modelConfig{CatwalkCfg: catwalk.Model{ID: "custom-x", Reasoning: reasoning(levels, ""), Options: catwalk.ModelOptions{ProviderOptions: map[string]any{config.AbacusAPIFormatOption: "responses"}}}}},
+		{"gemini-2", modelConfig{CatwalkCfg: catwalk.Model{ID: "gemini-2.5-pro", Reasoning: reasoning(levels, "")}}},
+		{"gemini-3", modelConfig{CatwalkCfg: catwalk.Model{ID: "gemini-3-pro", Reasoning: reasoning([]string{"low", "high"}, "")}, ModelCfg: config.SelectedModel{ReasoningEffort: "high"}}},
+		{"minimax-m3", modelConfig{CatwalkCfg: catwalk.Model{ID: "MiniMax-M3", Reasoning: reasoning(levels, "")}, ModelCfg: config.SelectedModel{ReasoningEffort: "high"}}},
+		{"minimax-m2-think", modelConfig{CatwalkCfg: catwalk.Model{ID: "minimax-m2", Reasoning: reasoning(nil, "")}, ModelCfg: config.SelectedModel{Think: true}}},
+		{"minimax-off", modelConfig{CatwalkCfg: catwalk.Model{ID: "minimax-m2", Reasoning: reasoning(nil, "")}}},
+		{"deepseek-none", modelConfig{CatwalkCfg: catwalk.Model{ID: "deepseek-v4", Reasoning: reasoning([]string{"none", "high"}, "")}, ModelCfg: config.SelectedModel{ReasoningEffort: "none"}}},
+		{"zai-org", modelConfig{CatwalkCfg: catwalk.Model{ID: "zai-org/glm-5", Reasoning: reasoning(nil, "")}, ModelCfg: config.SelectedModel{Think: true}}},
+		{"claude", modelConfig{CatwalkCfg: catwalk.Model{ID: "claude-opus-5", Reasoning: reasoning([]string{"low", "high", "max"}, "")}, ModelCfg: config.SelectedModel{ReasoningEffort: "max"}}},
+		{"claude-think", modelConfig{CatwalkCfg: catwalk.Model{ID: "claude-sonnet-5", Reasoning: reasoning(nil, "")}, ModelCfg: config.SelectedModel{Think: true}}},
 	}
 }
 

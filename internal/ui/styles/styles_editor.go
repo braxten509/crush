@@ -61,6 +61,12 @@ type EditorStyles struct {
 	QuestionRadioOff   lipgloss.Style // Unselected single-choice radio.
 	QuestionCheckOn    lipgloss.Style // Checked multi-choice indicator.
 	QuestionCheckOff   lipgloss.Style // Unchecked multi-choice indicator.
+
+	// Sysadmin mode prompt (" # " icon + ":::" dots).
+	PromptSysadminIconFocused lipgloss.Style
+	PromptSysadminIconBlurred lipgloss.Style
+	PromptSysadminDotsFocused lipgloss.Style
+	PromptSysadminDotsBlurred lipgloss.Style
 }
 
 // RadioStyles groups the Radio styles of [Styles].

@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 )
 
 // kimiUsageURL is Moonshot AI's plan usage address, the one Kimi's own

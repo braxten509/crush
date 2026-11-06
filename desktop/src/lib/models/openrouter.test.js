@@ -15,6 +15,10 @@ describe("OpenRouter models", () => {
       ["deepinfra", { id: "deepinfra", name: "DeepInfra", type: "openai-compat", models: [] }],
     ]) };
     expect(addableProviders(cfg)).toEqual([{ id: "openrouter", name: "OpenRouter" }]);
+    // Catwalk v3 (engine v0.100.0 on) types it "completions"; its id still says OpenRouter.
+    const v3 = { providers: new Map([["openrouter", { id: "openrouter", name: "OpenRouter", type: "completions", models: [] }]]) };
+    expect(addableProviders(v3)).toEqual([{ id: "openrouter", name: "OpenRouter" }]);
+    expect(hostSwitches(v3, "openrouter")).toBe(true);
   });
 
   it("takes every OrcaRouter account too, without OpenRouter's host switches", () => {
@@ -43,6 +47,9 @@ describe("OpenRouter models", () => {
     expect(priceText(kimi)).toBe("$0.6 / $2.5");
     expect(priceText(free)).toBe("free");
     expect(priceText({ cost_per_1m_in: 12, cost_per_1m_out: 0.125 })).toBe("$12 / $0.13");
+    // A catalog from an engine on catwalk v3 (v0.100.0 on).
+    expect(priceText({ pricing: { input: 0.6, output: 2.5, cache_hit: 0.15 } })).toBe("$0.6 / $2.5");
+    expect(priceText({ pricing: { input: 0, output: 0 } })).toBe("free");
     expect(contextText(262144)).toBe("262K");
     expect(contextText(1048576)).toBe("1M");
     expect(contextText(2000000)).toBe("2M");

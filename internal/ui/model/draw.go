@@ -32,6 +32,7 @@ func (m *UI) drawHeader(scr uv.Screen, area uv.Rectangle) {
 		m.hyperCredits,
 		m.logoFrame,
 		m.gitBranch,
+		m.subAgentsRunning,
 	)
 }
 
@@ -95,7 +96,7 @@ func (m *UI) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 
 	// Add status and help layer
 	m.status.SetHideHelp(isOnboarding)
-	m.status.SetMode(m.mode, m.yoloModeCached())
+	m.status.SetMode(m.mode, m.permModeCached())
 	m.status.Draw(scr, layout.status)
 
 	// Draw completions popup if open
@@ -357,14 +358,25 @@ func (m *UI) drawSessionDetails(scr uv.Screen, area uv.Rectangle) {
 	remainingHeight := height - lipgloss.Height(detailsHeader) - lipgloss.Height(version)
 
 	const maxSectionWidth = 50
-	sectionWidth := max(1, min(maxSectionWidth, width/4-2)) // account for spacing between sections
-	maxItemsPerSection := remainingHeight - 3               // Account for section title and spacing
+	// Subagents take the leading column when any exist, since a running
+	// subagent is the one thing here that changes while you watch.
+	subAgents := m.subAgentStatuses()
+	columns := 4
+	if len(subAgents) > 0 {
+		columns++
+	}
+	sectionWidth := max(1, min(maxSectionWidth, (width-(columns-1))/columns)) // one space between columns
+	maxItemsPerSection := max(0, remainingHeight-3)                           // Account for section title and spacing
 
 	lspSection := m.lspInfo(sectionWidth, maxItemsPerSection, false)
 	mcpSection := m.mcpInfo(sectionWidth, maxItemsPerSection, false)
 	skillsSection := m.skillsInfo(sectionWidth, maxItemsPerSection, false)
 	filesSection := m.filesInfo(m.com.Workspace.WorkingDir(), sectionWidth, maxItemsPerSection, false)
 	sections := lipgloss.JoinHorizontal(lipgloss.Top, filesSection, " ", lspSection, " ", mcpSection, " ", skillsSection)
+	if len(subAgents) > 0 {
+		sections = lipgloss.JoinHorizontal(lipgloss.Top, m.subAgentsInfo(subAgents, sectionWidth, maxItemsPerSection, false), " ", sections)
+	}
+	sections = lipgloss.NewStyle().MaxWidth(width).MaxHeight(max(0, remainingHeight)).Render(sections)
 	uv.NewStyledString(
 		s.CompactDetails.View.
 			Width(area.Dx()).

@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/config/resolve"
 	"github.com/stretchr/testify/require"
 )
@@ -24,7 +24,7 @@ func TestTestConnection(t *testing.T) {
 
 		err := TestConnection(Endpoint{
 			ID:           "custom",
-			Type:         catwalk.TypeOpenAICompat,
+			Type:         catwalk.TypeCompletions,
 			APIKey:       "sk-test",
 			BaseURL:      srv.URL + "/v1",
 			ExtraHeaders: map[string]string{"X-Extra": "yes"},
@@ -42,15 +42,18 @@ func TestTestConnection(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		err := TestConnection(Endpoint{ID: "custom", Type: catwalk.TypeAnthropic, APIKey: "k", BaseURL: srv.URL}, identity)
+		err := TestConnection(Endpoint{ID: "custom", Type: catwalk.TypeMessages, APIKey: "k", BaseURL: srv.URL}, identity)
 		require.ErrorContains(t, err, "failed to connect to provider custom")
 	})
 
 	t.Run("providers without a test endpoint are checked offline", func(t *testing.T) {
 		t.Parallel()
 		require.NoError(t, TestConnection(Endpoint{ID: string(catwalk.InferenceProviderMiniMax)}, identity))
-		require.NoError(t, TestConnection(Endpoint{ID: "b", Type: catwalk.TypeBedrock, APIKey: "ABSK123"}, identity))
-		require.EqualError(t, TestConnection(Endpoint{ID: "b", Type: catwalk.TypeBedrock, APIKey: "nope"}, identity), "not a valid bedrock api key")
+		// A custom entry still typed catwalk v2's "bedrock" keeps the
+		// offline Bedrock key check.
+		legacyBedrock := catwalk.Type("bedrock")
+		require.NoError(t, TestConnection(Endpoint{ID: "b", Type: legacyBedrock, APIKey: "ABSK123"}, identity))
+		require.EqualError(t, TestConnection(Endpoint{ID: "b", Type: legacyBedrock, APIKey: "nope"}, identity), "not a valid bedrock api key")
 		require.EqualError(t,
 			TestConnection(Endpoint{ID: string(catwalk.InferenceProviderAlibabaSingapore), APIKey: "nope"}, identity),
 			"invalid API key format for provider "+string(catwalk.InferenceProviderAlibabaSingapore))

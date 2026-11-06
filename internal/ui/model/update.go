@@ -1,8 +1,12 @@
 package model
 
 import (
+	"fmt"
+
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/ui/common"
+	"github.com/charmbracelet/crush/internal/ui/util"
 )
 
 // updateFlow says how update goes on after a message handler.
@@ -50,6 +54,7 @@ func (m *UI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	// Update terminal capabilities
 	m.caps.Update(msg)
+	m.trackTurnOutcome(msg)
 
 	cmd, flow := m.routeMsg(msg, endedScrollbarDrag)
 	switch flow {
@@ -122,7 +127,9 @@ func (m *UI) finishUpdate(msg tea.Msg) []tea.Cmd {
 
 	// at this point this can only handle [message.Attachment] message, and we
 	// should return all cmds anyway.
-	if m.attachments.Update(msg) {
+	if _, isAttachment := msg.(message.Attachment); isAttachment && m.attachmentsLimitReached() {
+		cmds = append(cmds, util.ReportWarn(fmt.Sprintf("Maximum attachment reached for this session (%d)", m.currentModelMaxAttachments())))
+	} else if m.attachments.Update(msg) {
 		m.frame.invalidate()
 	}
 	m.syncAttachmentsLayout()
@@ -130,12 +137,26 @@ func (m *UI) finishUpdate(msg tea.Msg) []tea.Cmd {
 	// scroll, session load); make sure the clock is running. This is the
 	// sole place the clock is armed so a tick never sits inside a caller's
 	// tea.Sequence.
+	// The header spins while dispatched subagents work, and they work out
+	// of sight, so the clock cannot be left to the transcript alone, which
+	// only arms it for an item currently on screen.
+	m.subAgentsRunning = m.runningSubAgents()
 	if m.state == uiChat {
+		m.chat.SetExternalAnimation(m.subAgentsRunning > 0)
 		if cmd := m.chat.EnsureAnimating(); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+		// Same for the scrollbar's auto-hide: a scroll may be applied from
+		// anywhere, so the deadline is armed here instead of being handed
+		// back to each call site to forward.
+		if cmd := m.chat.EnsureScrollbarHide(); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 		if v := m.subagentView; v != nil {
 			if cmd := v.chat.EnsureAnimating(); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+			if cmd := v.chat.EnsureScrollbarHide(); cmd != nil {
 				cmds = append(cmds, cmd)
 			}
 		}
@@ -151,7 +172,7 @@ func (m *UI) finishUpdate(msg tea.Msg) []tea.Cmd {
 func (m *UI) syncPlaceholder() {
 	prevPlaceholder := m.textarea.Placeholder
 	if m.focus == uiFocusEditor {
-		m.textarea.Placeholder = m.placeholder(m.isAgentBusy(), m.mode == uiInputModePlan, m.yoloModeCached())
+		m.textarea.Placeholder = m.placeholder(m.isAgentBusy(), m.mode == uiInputModePlan, m.permModeCached())
 	}
 	if m.textarea.Placeholder != prevPlaceholder {
 		m.frame.invalidate()

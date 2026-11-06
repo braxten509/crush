@@ -8,7 +8,7 @@ import (
 	"slices"
 	"time"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/accounts"
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	"github.com/charmbracelet/crush/internal/config"
@@ -116,7 +116,7 @@ func (h *taskHub) subAgentOn(ctx context.Context, t *Task, b config.FallbackBloc
 	model := provider.Models[i]
 	selected := fallback.Model(b)
 	if selected.ReasoningEffort == "" {
-		selected.ReasoningEffort = model.DefaultReasoningEffort
+		selected.ReasoningEffort = model.Reasoning.DefaultEffortLevel
 	}
 	sub, m, err := h.subAgent(ctx, provider, model, selected, t.ReadOnly, t.MCP, t.Dir)
 	if err != nil {

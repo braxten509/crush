@@ -149,7 +149,7 @@ func (m *UI) restoreRecalledDrafts() tea.Cmd {
 	}
 	m.textarea.SetValue(text)
 	// Recovered messages are agent prompts, even if they begin with '!'.
-	m.setEditorPrompt(m.yoloModeCached())
+	m.setEditorPrompt(m.permModeCached())
 	m.textarea.MoveToEnd()
 	m.promptHistory.index = -1
 	m.promptHistory.draft = text
@@ -214,7 +214,7 @@ func (m *UI) syncBangModeFromTextarea() {
 		m.bangMode = false
 		m.bangWasEmpty = false
 	}
-	m.setEditorPrompt(m.yoloModeCached())
+	m.setEditorPrompt(m.permModeCached())
 }
 
 // historyPrev changes the text area content to the previous message in the history

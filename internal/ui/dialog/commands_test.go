@@ -16,7 +16,7 @@ import (
 func TestSkillsCommandOpensSkillsDialog(t *testing.T) {
 	sty := styles.CharmtonePantera()
 	com := &common.Common{Styles: &sty, Workspace: fastModeWorkspace{cfg: &config.Config{}}}
-	c, err := NewCommands(com, "", false, false, false, nil, nil)
+	c, err := NewCommands(com, "", false, false, false, false, nil, nil)
 	require.NoError(t, err)
 	for _, r := range "skills" {
 		c.HandleMsg(kittest.KeyMsg(r))
@@ -30,7 +30,7 @@ func TestCommandsRefreshKeepsTheFilter(t *testing.T) {
 	t.Parallel()
 	sty := styles.CharmtonePantera()
 	com := &common.Common{Workspace: fastModeWorkspace{cfg: &config.Config{}}, Styles: &sty}
-	c, err := NewCommands(com, "", false, false, false, nil, nil)
+	c, err := NewCommands(com, "", false, false, false, false, nil, nil)
 	require.NoError(t, err)
 
 	for _, r := range "remot" {

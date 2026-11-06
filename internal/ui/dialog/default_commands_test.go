@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/csync"
 	"github.com/charmbracelet/crush/internal/ui/styles"
@@ -17,8 +17,8 @@ import (
 // states that add, drop or relabel commands.
 func TestDefaultCommandsList(t *testing.T) {
 	yes, no := true, false
-	reasoningModel := catwalk.Model{ID: "think", CanReason: true, SupportsImages: true}
-	effortModel := catwalk.Model{ID: "effort", CanReason: true, ReasoningLevels: []string{"low", "high"}}
+	reasoningModel := catwalk.Model{ID: "think", Reasoning: catwalk.Reasoning{Thinking: catwalk.ThinkingToggleable}, Capabilities: catwalk.Capabilities{Vision: true}}
+	effortModel := catwalk.Model{ID: "effort", Reasoning: catwalk.Reasoning{Thinking: catwalk.ThinkingToggleable, EffortLevels: catwalk.NewEffortLevels("low", "high")}}
 	cases := []struct {
 		name     string
 		cfg      *config.Config

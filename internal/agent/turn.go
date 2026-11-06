@@ -15,13 +15,17 @@ import (
 	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/agent/tools/mcp"
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/csync"
+	"github.com/charmbracelet/crush/internal/hooks"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/session"
 )
 
 // turn is the state of one call to sessionAgent.Run: how it was
 // dispatched, what the model streams into, and what is published when it
-// ends. The streaming callbacks are its methods; they run one at a time.
+// ends. The streaming callbacks are its methods. They run one at a time,
+// except the tool callbacks: fantasy runs parallel tool calls concurrently,
+// so those take toolResultMu and keep their sets in concurrent maps.
 type turn struct {
 	a    *sessionAgent
 	call SessionAgentCall
@@ -66,15 +70,22 @@ type turn struct {
 	// consumedCalls are queued calls folded into this turn.
 	consumedCalls []SessionAgentCall
 	// folded are the queued prompts taken in at tool boundaries this turn.
-	folded             []foldedPrompt
-	sanitizedToolCalls map[string]bool
+	folded []foldedPrompt
+	// sanitizedToolCalls are calls whose arguments were not valid JSON.
+	// Written from OnToolCall and read from OnToolResult.
+	sanitizedToolCalls *csync.Map[string, bool]
 	toolCallMu         sync.Mutex
+	// toolResultMu serializes the tool callbacks' writes to the file review
+	// and the transcript.
+	toolResultMu sync.Mutex
 	// completedToolCalls are the full names of tool calls that completed
-	// without error this turn. Written only from the streaming callbacks
-	// (which run sequentially) and read after Stream returns, where
+	// without error this turn. Read after Stream returns, where
 	// sendChannelReply uses it to tell whether the model already replied
 	// on the originating channel.
-	completedToolCalls map[string]struct{}
+	completedToolCalls *csync.Map[string, struct{}]
+	// answeredToolCalls are calls that got a reply this turn; the rest are
+	// settled when it ends.
+	answeredToolCalls *csync.Map[string, struct{}]
 }
 
 func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *fantasy.AgentResult, retErr error) {
@@ -105,6 +116,8 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 		return t.cancelOnEntry(ctx)
 	case dispatchQueued:
 		return nil, nil
+	case dispatchIdle:
+		return nil, ErrSessionIdle
 	case dispatchLocked:
 		return nil, session.ErrChatLocked
 	}
@@ -138,6 +151,9 @@ const (
 	// dispatchLocked: the chat is locked or being locked (owner,
 	// 2026-11-03); nothing runs or queues in it.
 	dispatchLocked
+	// dispatchIdle: a QueueOnly call found the session idle, so nothing
+	// was queued or run.
+	dispatchIdle
 )
 
 // dispatch decides, under the session's dispatch mutex, whether the call
@@ -199,12 +215,24 @@ func (t *turn) dispatch(ctx context.Context) dispatchOutcome {
 		}
 		t.queuedAgain = true
 		t.call.report.handOn()
+		// Queued now; once it is taken from the queue it runs like any call.
+		t.call.QueueOnly = false
 		a.enqueueCall(t.call)
 		if t.call.Accepted != nil {
 			t.call.Accepted.Close()
 		}
 		sessMu.Unlock()
 		return dispatchQueued
+	}
+
+	if t.call.QueueOnly {
+		// Only meant for a turn in progress, and there is none: the
+		// caller starts a turn of its own instead.
+		if t.call.Accepted != nil {
+			t.call.Accepted.Close()
+		}
+		sessMu.Unlock()
+		return dispatchIdle
 	}
 
 	// Idle: become the active run. Register the cancel func before dropping
@@ -415,7 +443,7 @@ func (t *turn) run() (*fantasy.AgentResult, error) {
 		return nil, err
 	}
 	a.memoryNotice(t.ctx, t.call.SessionID)
-	history, files := a.preparePrompt(msgs, t.chatModel.CatwalkCfg.SupportsImages, t.call.Attachments...)
+	history, files := a.preparePrompt(msgs, t.chatModel.CatwalkCfg.Capabilities.Vision, t.chatModel.CatwalkCfg.Capabilities.Audio, t.call.Attachments...)
 	if !t.isCLI {
 		overhead := approxTokenCount(systemPrompt) + approxTokenCount(t.promptPrefix) + approxTokenCount(t.call.Prompt) + int64(len(agentTools)*300)
 		history = a.trimPreparedPrompt(t.call.SessionID, msgs, history, t.chatModel, overhead)
@@ -423,9 +451,11 @@ func (t *turn) run() (*fantasy.AgentResult, error) {
 
 	startTime := time.Now()
 	a.eventPromptSent(t.call.SessionID, t.chatModel)
+	a.fireTurnHook(t.genCtx, t.call, hooks.Event{Name: hooks.EventTurnStart})
 
-	t.sanitizedToolCalls = make(map[string]bool)
-	t.completedToolCalls = make(map[string]struct{})
+	t.sanitizedToolCalls = csync.NewMap[string, bool]()
+	t.completedToolCalls = csync.NewMap[string, struct{}]()
+	t.answeredToolCalls = csync.NewMap[string, struct{}]()
 	// Agent CLIs run their own tool loop; cliStream drives the same
 	// callbacks from the CLI's events.
 	stream := agent.Stream
@@ -447,6 +477,7 @@ func (t *turn) run() (*fantasy.AgentResult, error) {
 	if t.wasInterruptedForProgress() && err == nil {
 		err = context.Canceled
 	}
+	t.settle(err)
 	if err != nil {
 		return t.handleStreamError(result, err)
 	}
@@ -536,19 +567,29 @@ func (t *turn) loadHistory() ([]message.Message, error) {
 		return nil, fmt.Errorf("failed to get session messages: %w", err)
 	}
 
-	// Generate title from the first real (non-shell) user prompt.
-	// can take tens of seconds. Blocking Run on it delays the
-	// response to the caller. Use a detached context so the title
-	// goroutine survives Run's cancel.
-	// Sub-agent sessions are titled by whoever started them.
+	// Generate title from the first real (non-shell) user prompt in the
+	// background; Run must not wait on it, it can take tens of seconds.
+	// A detached context lets it survive Run's cancel; CancelAll drains it
+	// instead. Sub-agent sessions are titled by whoever started them.
 	if !hasUserTextMessage(msgs) && !a.isSubAgent {
 		titleCtx := context.WithoutCancel(t.ctx)
-		go a.GenerateTitle(titleCtx, t.call.SessionID, t.call.Prompt)
+		a.titles.begin()
+		go func() {
+			defer a.titles.end()
+			a.generateTitle(titleCtx, t.call.SessionID, t.call.Prompt)
+		}()
+	}
+
+	// The context sent ahead of the prompt (what the host has in view and
+	// the notes it left) is stored with the user message, so later
+	// requests replay the same text. A continuation already sent it.
+	if !t.call.userMessagesCreated {
+		t.call.modelContext = hostContextPrompt(t.call.HostContext) + notesPrompt(a.takeNotes(t.call.SessionID))
 	}
 
 	// Persist each original submission exactly once, including continuations.
 	if !t.call.userMessagesCreated {
-		if _, err := a.createUserMessage(t.ctx, t.call); err != nil {
+		if _, err := a.createUserMessage(t.ctx, t.call, t.call.modelContext); err != nil {
 			return nil, err
 		}
 	}
@@ -567,11 +608,19 @@ func (t *turn) buildStreamCall(history []fantasy.Message, files []fantasy.FilePa
 		maxOutputTokens = &call.MaxOutputTokens
 	}
 	prompt := message.PromptWithTextAttachments(call.Prompt, call.Attachments)
+	if prompt != "" || len(call.batch) == 0 {
+		prompt = call.modelContext + prompt
+	}
 	if len(call.batch) > 0 && !t.isCLI && !call.NotRecallable {
-		for _, original := range call.batch {
-			_, originalFiles := a.preparePrompt(nil, t.chatModel.CatwalkCfg.SupportsImages, original.Attachments...)
+		for i, original := range call.batch {
+			_, originalFiles := a.preparePrompt(nil, t.chatModel.CatwalkCfg.Capabilities.Vision, t.chatModel.CatwalkCfg.Capabilities.Audio, original.Attachments...)
 			parts := []fantasy.MessagePart{}
-			if text := message.PromptWithTextAttachments(original.Prompt, original.Attachments); text != "" {
+			text := message.PromptWithTextAttachments(original.Prompt, original.Attachments)
+			if i == 0 {
+				// The context goes once, ahead of the first prompt.
+				text = call.modelContext + text
+			}
+			if text != "" {
 				parts = append(parts, fantasy.TextPart{Text: text})
 			}
 			parts = append(parts, filesAsParts(originalFiles)...)

@@ -6,14 +6,18 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/csync"
 	"github.com/charmbracelet/crush/internal/env"
 	"github.com/stretchr/testify/require"
 )
 
 func TestAbacusControlsSurviveModelResolution(t *testing.T) {
-	model := catwalk.Model{ID: "gpt-6.1-sol", DefaultMaxTokens: 128000, CanReason: true, ReasoningLevels: []string{"low", "medium", "high", "xhigh", "max"}, DefaultReasoningEffort: "medium"}
+	model := catwalk.Model{ID: "gpt-6.1-sol", DefaultMaxTokens: 128000, Reasoning: catwalk.Reasoning{
+		Thinking:           catwalk.ThinkingToggleable,
+		EffortLevels:       catwalk.NewEffortLevels("low", "medium", "high", "xhigh", "max"),
+		DefaultEffortLevel: "medium",
+	}}
 	cfg := &Config{
 		Options:   &Options{DisableDefaultProviders: true},
 		Providers: csync.NewMapFrom(map[string]ProviderConfig{"abacus": {ID: "abacus", APIKey: "test-key", Models: []catwalk.Model{model}}}),
@@ -40,9 +44,13 @@ func TestAbacusDiscoveryUsesFreshControlsWithDefaultProvidersDisabled(t *testing
 		requests = append(requests, r.URL.Path)
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
-		case "/v2/providers":
+		case "/v3/providers":
 			require.NoError(t, json.NewEncoder(w).Encode([]catwalk.Provider{{ID: "anthropic", Models: []catwalk.Model{{
-				ID: "claude-new-version", CanReason: true, ReasoningLevels: []string{"low", "high"}, DefaultReasoningEffort: "high",
+				ID: "claude-new-version", Reasoning: catwalk.Reasoning{
+					Thinking:           catwalk.ThinkingToggleable,
+					EffortLevels:       catwalk.NewEffortLevels("low", "high"),
+					DefaultEffortLevel: "high",
+				},
 			}}}}))
 		case "/v1/models":
 			_, _ = w.Write([]byte(`{"data":[{"id":"claude-new-version","display_name":"Claude New Version","model_type":"text_generation","api_formats":["anthropic"],"tools":true}]}`))
@@ -67,12 +75,12 @@ func TestAbacusDiscoveryUsesFreshControlsWithDefaultProvidersDisabled(t *testing
 	variables := env.NewFromMap(map[string]string{})
 	_, err = cfg.configureProviders(t.Context(), variables, NewShellVariableResolver(variables), providers)
 	require.NoError(t, err)
-	require.Equal(t, []string{"/v2/providers", "/v1/models"}, requests)
+	require.Equal(t, []string{"/v3/providers", "/v1/models"}, requests)
 	_, enabled := cfg.Providers.Get("anthropic")
 	require.False(t, enabled, "native catalogue metadata must not enable default providers")
 	abacus, ok := cfg.Providers.Get(AbacusProviderID)
 	require.True(t, ok)
 	require.Len(t, abacus.Models, 1)
-	require.Equal(t, []string{"low", "high"}, abacus.Models[0].ReasoningLevels)
-	require.Equal(t, "high", abacus.Models[0].DefaultReasoningEffort)
+	require.Equal(t, []string{"low", "high"}, abacus.Models[0].ReasoningEffortLevels())
+	require.Equal(t, "high", abacus.Models[0].Reasoning.DefaultEffortLevel)
 }

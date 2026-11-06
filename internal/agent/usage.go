@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"strconv"
 
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"charm.land/fantasy"
 	"charm.land/fantasy/providers/openai"
 	"charm.land/fantasy/providers/openrouter"
@@ -88,16 +89,63 @@ func extraFieldFloat(pm *openai.ProviderMetadata, key string) *float64 {
 	return &parsed
 }
 
+// modelForStepCost is the model a step is priced at: for a Hyper chat routed
+// by Prism, the model that actually served the step, keeping the chat's own
+// selection; otherwise the chat's model.
+func (a *sessionAgent) modelForStepCost(model Model, metadata fantasy.ProviderMetadata) Model {
+	if model.ModelCfg.Provider != hyper.Name || a.cfg == nil {
+		return model
+	}
+	routedModelID, _ := extractPrismModel(metadata)
+	if routedModelID == "" {
+		return model
+	}
+	cfg := a.cfg.Config()
+	if cfg == nil {
+		return model
+	}
+	routedModel := cfg.GetModel(hyper.Name, routedModelID)
+	if routedModel == nil {
+		return model
+	}
+	model.CatwalkCfg = *routedModel
+	return model
+}
+
+// hyperStepsCost prices a Hyper response step by step at the models Prism
+// routed each step to, or returns nil for any other provider.
+func (a *sessionAgent) hyperStepsCost(model Model, steps []fantasy.StepResult) *float64 {
+	if model.ModelCfg.Provider != hyper.Name || len(steps) == 0 {
+		return nil
+	}
+	var cost float64
+	for _, step := range steps {
+		pricingModel := a.modelForStepCost(model, step.ProviderMetadata)
+		cost += requestCost(pricingModel.CatwalkCfg, step.Usage)
+	}
+	return &cost
+}
+
+// usageCost prices usage in every token bucket at the given rates.
+func usageCost(pricing catwalk.Pricing, usage fantasy.Usage) float64 {
+	return pricing.CacheCreate/1e6*float64(usage.CacheCreationTokens) +
+		pricing.CacheHit/1e6*float64(usage.CacheReadTokens) +
+		pricing.Input/1e6*float64(usage.InputTokens) +
+		pricing.Output/1e6*float64(usage.OutputTokens)
+}
+
+// requestCost prices one request at the model's rates, at its long-context
+// price when the request was big enough to be billed at it.
+func requestCost(m catwalk.Model, usage fantasy.Usage) float64 {
+	return usageCost(config.PriceForRequest(m, contextTokens(usage)).Pricing, usage)
+}
+
 func (a *sessionAgent) updateSessionUsage(model Model, session *session.Session, usage fantasy.Usage, overrideCost *float64, estimated bool) {
 	if !usageIsZero(usage) {
 		session.EstimatedUsage = estimated
 	}
 
-	modelConfig := config.PriceForRequest(model.CatwalkCfg, usage.InputTokens+usage.CacheReadTokens+usage.CacheCreationTokens)
-	cost := modelConfig.CostPer1MInCached/1e6*float64(usage.CacheCreationTokens) +
-		modelConfig.CostPer1MOutCached/1e6*float64(usage.CacheReadTokens) +
-		modelConfig.CostPer1MIn/1e6*float64(usage.InputTokens) +
-		modelConfig.CostPer1MOut/1e6*float64(usage.OutputTokens)
+	cost := requestCost(model.CatwalkCfg, usage)
 
 	if !estimated {
 		a.eventTokensUsed(session.ID, model, usage, cost)
@@ -106,7 +154,7 @@ func (a *sessionAgent) updateSessionUsage(model Model, session *session.Session,
 	if estimated {
 		cost = 0
 	} else {
-		// Use override cost if available (e.g., from OpenRouter).
+		// Use override cost if available (e.g., from OpenRouter or Hyper Prism).
 		if overrideCost != nil {
 			cost = *overrideCost
 		}

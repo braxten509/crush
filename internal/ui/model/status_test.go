@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/crush/internal/permission"
 	"github.com/charmbracelet/crush/internal/ui/attachments"
 	"github.com/charmbracelet/crush/internal/ui/util"
 	uv "github.com/charmbracelet/ultraviolet"
@@ -37,7 +38,7 @@ func TestStatusDrawExpandedHelpRowsAlignWithBadge(t *testing.T) {
 	st.helpKm = u
 	st.SetWidth(100)
 	st.ToggleHelp()
-	st.SetMode(uiInputModePlan, false)
+	st.SetMode(uiInputModePlan, permission.PermissionModeNormal)
 
 	lines := drawStatusLines(t, st, 100, 6)
 	require.True(t, strings.HasPrefix(lines[0], strings.Repeat(" ", badgeLeftInset)+" "+"PLAN MODE"),
@@ -65,7 +66,7 @@ func TestStatusDrawExpandedHelpRowsAlignWithoutBadge(t *testing.T) {
 	st.helpKm = u
 	st.SetWidth(100)
 	st.ToggleHelp()
-	st.SetMode(uiInputModeCode, false)
+	st.SetMode(uiInputModeCode, permission.PermissionModeNormal)
 
 	lines := drawStatusLines(t, st, 100, 6)
 	wantCol := u.com.Styles.Status.Help.GetPaddingLeft()

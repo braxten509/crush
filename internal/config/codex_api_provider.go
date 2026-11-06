@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 )
 
 // CodexAPIProviderID is OpenAI's API billed per use, shown as "Codex API"
@@ -28,13 +28,18 @@ const codexAPIUltrafast = "-ultrafast"
 func codexAPIModels() []catwalk.Model {
 	levels := []string{"low", "medium", "high", "xhigh", "max"}
 	model := func(id, name string, in, out, cached, write float64) catwalk.Model {
-		return catwalk.Model{
+		m := catwalk.Model{
 			ID: id, Name: name,
-			CostPer1MIn: in, CostPer1MOut: out, CostPer1MOutCached: cached, CostPer1MInCached: write,
 			ContextWindow: 1050000, DefaultMaxTokens: 128000,
-			CanReason: true, ReasoningLevels: levels, DefaultReasoningEffort: "medium",
-			SupportsImages: true,
 		}
+		m.Pricing = catwalk.Pricing{Input: in, Output: out, CacheHit: cached, CacheCreate: write}
+		m.Reasoning = catwalk.Reasoning{
+			Thinking:           catwalk.ThinkingToggleable,
+			EffortLevels:       catwalk.NewEffortLevels(levels...),
+			DefaultEffortLevel: "medium",
+		}
+		m.Capabilities.Vision = true
+		return m
 	}
 	return []catwalk.Model{
 		model("gpt-6.1-sol", "GPT-6.1 Sol", 2, 10, 0.1, 2.5),
@@ -56,7 +61,9 @@ func (c *Config) addCodexAPIProvider() {
 	if cfg.Name == "" {
 		cfg.Name = "Codex API"
 	}
-	cfg.Type = catwalk.TypeOpenAI
+	// catwalk v3 names the endpoint format: OpenAI's Responses API, which
+	// the v2 "openai" type stood for.
+	cfg.Type = catwalk.TypeResponses
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://api.openai.com/v1"
 	}
@@ -94,10 +101,10 @@ func PriceForRequest(m catwalk.Model, inputTokens int64) catwalk.Model {
 	if inputTokens <= codexAPILongContext || !IsCodexAPIModel(m.ID) {
 		return m
 	}
-	m.CostPer1MIn *= 2
-	m.CostPer1MInCached *= 2
-	m.CostPer1MOutCached *= 2
-	m.CostPer1MOut *= 1.5
+	m.Pricing.Input *= 2
+	m.Pricing.CacheCreate *= 2
+	m.Pricing.CacheHit *= 2
+	m.Pricing.Output *= 1.5
 	return m
 }
 

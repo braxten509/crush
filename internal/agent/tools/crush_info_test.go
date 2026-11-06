@@ -9,12 +9,13 @@ import (
 	"testing"
 	"time"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/agent/tools/mcp"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/csync"
 	"github.com/charmbracelet/crush/internal/lsp"
+	"github.com/charmbracelet/crush/internal/permission"
 	"github.com/charmbracelet/crush/internal/skills"
 	"github.com/stretchr/testify/require"
 )
@@ -162,11 +163,25 @@ func TestCrushInfo_YoloMode(t *testing.T) {
 		Providers:   csync.NewMap[string, config.ProviderConfig](),
 		Permissions: &config.Permissions{},
 	})
-	cfg.Overrides().SkipPermissionRequests = true
+	cfg.Overrides().PermissionMode = permission.PermissionModeYolo
 
 	output := buildCrushInfo(config.SelectedModel{}, cfg, nil, nil, nil, nil)
 	require.Contains(t, output, "[permissions]")
 	require.Contains(t, output, "mode = yolo")
+}
+
+func TestCrushInfo_SysadminMode(t *testing.T) {
+	t.Parallel()
+
+	cfg := config.NewTestStore(&config.Config{
+		Providers:   csync.NewMap[string, config.ProviderConfig](),
+		Permissions: &config.Permissions{},
+	})
+	cfg.Overrides().PermissionMode = permission.PermissionModeSysadmin
+
+	output := buildCrushInfo(config.SelectedModel{}, cfg, nil, nil, nil, nil)
+	require.Contains(t, output, "[permissions]")
+	require.Contains(t, output, "mode = sysadmin")
 }
 
 func TestCrushInfo_AllowedTools(t *testing.T) {
@@ -312,7 +327,6 @@ func TestCrushInfo_DeterministicOrdering(t *testing.T) {
 			AllowedTools: []string{"z-perm", "a-perm"},
 		},
 	})
-	cfg.Overrides().SkipPermissionRequests = true
 
 	// Test MCP ordering via writeMCP directly.
 	var mcpBuf strings.Builder
@@ -344,8 +358,8 @@ func TestCrushInfo_EmptySectionsOmitted(t *testing.T) {
 	})
 
 	output := buildCrushInfo(config.SelectedModel{}, cfg, nil, nil, nil, nil)
-	require.NotContains(t, output, "[tools]")
 	require.NotContains(t, output, "[permissions]")
+	require.NotContains(t, output, "[tools]")
 	require.NotContains(t, output, "[lsp]")
 	require.NotContains(t, output, "[mcp]")
 	require.NotContains(t, output, "[skills]")

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -23,6 +24,11 @@ const pasteLinesThreshold = 10
 
 // If pasted text has more than 1000 columns, treat it as a file attachment.
 const pasteColsThreshold = 1000
+
+type pastedTextAttachmentMsg struct {
+	attachment message.Attachment
+	text       string
+}
 
 // mimeOf detects the MIME type of the given content.
 func mimeOf(content []byte) string {
@@ -48,7 +54,7 @@ func (m *UI) checkBangModeAfterPaste() {
 	m.textarea.SetValue(stripped)
 	col := m.textarea.Column()
 	m.textarea.SetCursorColumn(max(0, col-(len(val)-len(stripped))))
-	m.setEditorPrompt(m.yoloModeCached())
+	m.setEditorPrompt(m.permModeCached())
 }
 
 // handlePasteMsg handles a paste message.
@@ -64,23 +70,20 @@ func (m *UI) handlePasteMsg(msg tea.PasteMsg) tea.Cmd {
 		return nil
 	}
 
-	if hasPasteExceededThreshold(msg) {
+	if hasPasteExceededThreshold(msg) && !m.attachmentsLimitReached() && int64(len(msg.Content)) <= common.MaxAttachmentSize {
 		// Number the paste now: the command runs off the Update goroutine.
 		idx := m.pasteIdx()
 		return func() tea.Msg {
 			content := []byte(msg.Content)
-			if int64(len(content)) > common.MaxAttachmentSize {
-				return util.ReportWarn("Paste is too big (>5mb)")()
-			}
 			name := fmt.Sprintf("paste_%d.txt", idx)
 			mimeBufferSize := min(512, len(content))
 			mimeType := http.DetectContentType(content[:mimeBufferSize])
-			return message.Attachment{
+			return pastedTextAttachmentMsg{attachment: message.Attachment{
 				FileName: name,
 				FilePath: name,
 				MimeType: mimeType,
 				Content:  content,
-			}
+			}, text: msg.Content}
 		}
 	}
 
@@ -96,7 +99,7 @@ func (m *UI) handlePasteMsg(msg tea.PasteMsg) tea.Cmd {
 			if _, err := os.Stat(path); os.IsNotExist(err) {
 				return false
 			}
-			if !common.IsImagePath(path) {
+			if !common.IsImagePath(path) && !common.IsAudioPath(path) {
 				return false
 			}
 		}
@@ -108,8 +111,11 @@ func (m *UI) handlePasteMsg(msg tea.PasteMsg) tea.Cmd {
 		m.checkBangModeAfterPaste()
 		return cmd
 	}
-	if !m.currentModelSupportsImages() {
+	if !m.currentModelSupportsImages() && slices.ContainsFunc(paths, common.IsImagePath) {
 		return util.ReportWarn("The current model does not support image attachments")
+	}
+	if !m.currentModelSupportsAudio() && slices.ContainsFunc(paths, common.IsAudioPath) {
+		return util.ReportWarn("The current model does not support audio attachments")
 	}
 
 	// A picture over the attachment limit goes in as its path instead

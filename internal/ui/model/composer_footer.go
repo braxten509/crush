@@ -11,7 +11,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/question"
@@ -270,7 +270,7 @@ func renderFooterItems(t *styles.Styles, items []string, model *workspace.AgentM
 		}
 		if show(footerSettings) {
 			var settings []string
-			if effort := cmp.Or(model.ModelCfg.ReasoningEffort, model.CatwalkCfg.DefaultReasoningEffort); effort != "" {
+			if effort := cmp.Or(model.ModelCfg.ReasoningEffort, model.CatwalkCfg.Reasoning.DefaultEffortLevel); effort != "" {
 				settings = append(settings, strings.ToLower(effort))
 			} else if model.ModelCfg.Think {
 				settings = append(settings, "thinking")

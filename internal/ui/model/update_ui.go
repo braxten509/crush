@@ -57,7 +57,6 @@ func (m *UI) handleTerminalMsg(msg tea.Msg) (tea.Cmd, updateFlow, bool) {
 		m.updateNotificationBackend()
 	case tea.FocusMsg:
 		m.notifyWindowFocused = true
-		m.turnOutcome = ""
 		if !m.isTransparent {
 			cmds = append(cmds, tea.RequestBackgroundColor)
 		}
@@ -187,12 +186,7 @@ func (m *UI) handleUIMsg(msg tea.Msg) (tea.Cmd, bool) {
 		if msg.Type == util.InfoTypeError {
 			slog.Error("Error reported", "error", msg.Msg)
 		}
-		m.status.SetInfoMsg(msg)
-		ttl := msg.TTL
-		if ttl <= 0 {
-			ttl = DefaultStatusTTL
-		}
-		cmds = append(cmds, clearInfoMsgCmd(ttl))
+		cmds = append(cmds, m.status.Show(msg))
 	case app.UpdateAvailableMsg:
 		if selfupdate.Dir() != "" {
 			// Fork builds get the self-update offer instead.
@@ -202,15 +196,13 @@ func (m *UI) handleUIMsg(msg tea.Msg) (tea.Cmd, bool) {
 		if msg.IsDevelopment {
 			text = fmt.Sprintf("This is a development version of Crush. The latest version is v%s.", msg.LatestVersion)
 		}
-		ttl := 10 * time.Second
-		m.status.SetInfoMsg(util.InfoMsg{
+		cmds = append(cmds, m.status.Show(util.InfoMsg{
 			Type: util.InfoTypeUpdate,
 			Msg:  text,
-			TTL:  ttl,
-		})
-		cmds = append(cmds, clearInfoMsgCmd(ttl))
+			TTL:  10 * time.Second,
+		}))
 	case util.ClearStatusMsg:
-		m.status.ClearInfoMsg()
+		m.status.ClearInfoMsg(msg.Seq)
 	case completions.CompletionItemsLoadedMsg:
 		m.mention.setItems(msg)
 	default:
@@ -241,8 +233,13 @@ func (m *UI) handleTickMsg(msg tea.Msg) (tea.Cmd, bool) {
 			cmds = append(cmds, cmd)
 		}
 	case scrollbarHideMsg:
-		if m.state == uiChat {
-			cmds = append(cmds, m.chat.HideScrollbar(msg.seq))
+		if msg.chat != nil && msg.chat != m.chat {
+			// The sub-agent view's own scrollbar; a closed view's tick
+			// only touches its dropped chat.
+			msg.chat.HideScrollbar(msg.seq)
+			m.frame.invalidate()
+		} else if m.state == uiChat {
+			m.chat.HideScrollbar(msg.seq)
 		}
 	case chatWarmMsg:
 		// A resize has settled; warm the message cache one batch at a time

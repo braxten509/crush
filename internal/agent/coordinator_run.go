@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"charm.land/fantasy"
-	"github.com/charmbracelet/crush/internal/agent/hyper"
 	"github.com/charmbracelet/crush/internal/agent/notify"
 	"github.com/charmbracelet/crush/internal/agent/providers"
 	"github.com/charmbracelet/crush/internal/agent/tools/mcp"
@@ -19,12 +18,19 @@ import (
 
 // Run implements Coordinator.
 func (c *coordinator) Run(ctx context.Context, sessionID string, prompt string, attachments ...message.Attachment) (*fantasy.AgentResult, error) {
-	return c.run(ctx, nil, sessionID, prompt, attachments...)
+	return c.run(ctx, nil, nil, sessionID, prompt, attachments...)
 }
 
 // RunAccepted implements Coordinator.
 func (c *coordinator) RunAccepted(ctx context.Context, accept *AcceptedRun, sessionID string, prompt string, attachments ...message.Attachment) (*fantasy.AgentResult, error) {
-	return c.run(ctx, accept, sessionID, prompt, attachments...)
+	return c.run(ctx, accept, nil, sessionID, prompt, attachments...)
+}
+
+// runReport delivers a subagent report: it folds into a turn in progress, or
+// starts one. It runs as a turn the agent starts on its own does, so a
+// headless run that owns the chat takes it in.
+func (c *coordinator) runReport(ctx context.Context, sessionID string, report message.SubAgentReport) (*fantasy.AgentResult, error) {
+	return c.run(ctx, nil, &report, sessionID, report.PromptText())
 }
 
 type nonInteractiveKey struct{}
@@ -49,8 +55,9 @@ func (c *coordinator) interactiveTurn(ctx context.Context) bool {
 // accept is non-nil it is threaded onto the SessionAgentCall as
 // Accepted so sessionAgent.Run can consume the accept reservation under
 // dispatchMu; when nil (the in-process/local path) no accept tracking
-// applies.
-func (c *coordinator) run(ctx context.Context, accept *AcceptedRun, sessionID string, prompt string, attachments ...message.Attachment) (*fantasy.AgentResult, error) {
+// applies. A non-nil report makes the turn deliver a subagent's report
+// instead of a typed prompt.
+func (c *coordinator) run(ctx context.Context, accept *AcceptedRun, report *message.SubAgentReport, sessionID string, prompt string, attachments ...message.Attachment) (*fantasy.AgentResult, error) {
 	// Anything new in the chat replaces a planned usage-limit retry; if
 	// it hits the limit too, it plans its own. The saved copy goes with it,
 	// so a restart doesn't continue a chat you took over.
@@ -63,10 +70,10 @@ func (c *coordinator) run(ctx context.Context, accept *AcceptedRun, sessionID st
 		return nil, err
 	}
 	if c.tasks == nil {
-		return c.runTurn(ctx, accept, sessionID, prompt, attachments...)
+		return c.runTurn(ctx, accept, report, sessionID, prompt, attachments...)
 	}
 	// An app's prompt in a sub-agent's own chat goes to the sub-agent.
-	if message.SubmissionID(ctx) != "" {
+	if report == nil && message.SubmissionID(ctx) != "" {
 		if result, ok, err := c.tasks.chatMessage(ctx, accept, sessionID, prompt, attachments); ok {
 			return result, err
 		}
@@ -81,13 +88,15 @@ func (c *coordinator) run(ctx context.Context, accept *AcceptedRun, sessionID st
 		// (backend.SendMessage) and runs as its own turn. The terminal's
 		// hidden prompt ("Implement the plan.") has none either, so a hidden
 		// turn joins only when it is an agent CLI's own reply.
-		agentStarted := message.SubmissionID(ctx) == "" &&
-			(!message.HiddenUserMessage(ctx) || ctx.Value(cliContinueKey{}) != nil)
+		// A subagent's report is the agent's own work coming back, so it
+		// joins too.
+		agentStarted := report != nil || (message.SubmissionID(ctx) == "" &&
+			(!message.HiddenUserMessage(ctx) || ctx.Value(cliContinueKey{}) != nil))
 		if agentStarted {
 			run = c.tasks.joinSessionRun(sessionID)
 		}
 		if run == nil {
-			return c.runTurn(ctx, accept, sessionID, prompt, attachments...)
+			return c.runTurn(ctx, accept, report, sessionID, prompt, attachments...)
 		}
 	} else {
 		run, owner = c.tasks.beginSessionRun(ctx, sessionID)
@@ -106,7 +115,7 @@ func (c *coordinator) run(ctx context.Context, accept *AcceptedRun, sessionID st
 		if ownTurn {
 			run.turnStarted()
 		}
-		result, err := c.runTurn(turnCtx, accept, sessionID, prompt, attachments...)
+		result, err := c.runTurn(turnCtx, accept, report, sessionID, prompt, attachments...)
 		if ownTurn {
 			run.turnEnded()
 		}
@@ -115,7 +124,7 @@ func (c *coordinator) run(ctx context.Context, accept *AcceptedRun, sessionID st
 	}
 	defer c.tasks.endSessionRun(run)
 	run.turnStarted()
-	result, err := c.runTurn(run.ctx, accept, sessionID, prompt, attachments...)
+	result, err := c.runTurn(run.ctx, accept, report, sessionID, prompt, attachments...)
 	run.turnEnded()
 	run.release(err)
 	complete, hasComplete, err := run.wait()
@@ -156,7 +165,7 @@ func (c *coordinator) run(ctx context.Context, accept *AcceptedRun, sessionID st
 	return result, err
 }
 
-func (c *coordinator) runTurn(ctx context.Context, accept *AcceptedRun, sessionID string, prompt string, attachments ...message.Attachment) (result *fantasy.AgentResult, err error) {
+func (c *coordinator) runTurn(ctx context.Context, accept *AcceptedRun, report *message.SubAgentReport, sessionID string, prompt string, attachments ...message.Attachment) (result *fantasy.AgentResult, err error) {
 	defer c.recoverTurn(ctx, sessionID, &err)
 	if err := c.awaitTurnReady(ctx); err != nil {
 		return nil, err
@@ -182,6 +191,8 @@ func (c *coordinator) runTurn(ctx context.Context, accept *AcceptedRun, sessionI
 		return nil, err
 	}
 	call.model = model
+	// Inject session_id for OpenRouter sticky routing (no-op for other providers).
+	injectOpenrouterSessionID(call.ProviderOptions, sessionID)
 
 	// Coalesce per-attempt RunComplete payloads so only the final
 	// outcome reaches subscribers. Without this, the first attempt's
@@ -215,11 +226,16 @@ func (c *coordinator) runTurn(ctx context.Context, accept *AcceptedRun, sessionI
 	runID := RunIDFromContext(ctx)
 	channel := ChannelFromContext(ctx)
 	c.syncSessionChannel(ctx, sessionID, channel)
+	// Before the first turn on a session, tell it about any subagent a
+	// previous process left without a report.
+	c.reconcileDispatches(ctx, agent, sessionID)
 	call.SessionID = sessionID
 	call.SubmissionID = message.SubmissionID(ctx)
 	call.RunID = runID
 	call.Channel = channel
 	call.Prompt = prompt
+	call.Report = report
+	call.HostContext = c.hostContext.Get()
 	call.HiddenUserMessage = message.HiddenUserMessage(ctx)
 	call.CLIContinue = ctx.Value(cliContinueKey{}) != nil
 	call.Attachments = attachments
@@ -242,16 +258,10 @@ func (c *coordinator) runTurn(ctx context.Context, accept *AcceptedRun, sessionI
 		}
 	}
 
-	// Notify only if still unauthorized after retry — a successful
-	// retry means the user doesn't need to re-authenticate. AWS SSO is
-	// handled transparently inside OnAuthRefresh, so it needs no post-run
-	// notification here.
-	if originalErr != nil && isUnauthorized(originalErr) && c.notify != nil && model.ModelCfg.Provider == hyper.Name {
-		c.notify.Publish(pubsub.CreatedEvent, notify.Notification{
-			Type:       notify.TypeReAuthenticate,
-			ProviderID: model.ModelCfg.Provider,
-		})
-	}
+	// Ask only if still unauthorized after retry — a successful retry
+	// means the user doesn't need to re-authenticate. AWS SSO is handled
+	// transparently inside OnAuthRefresh, so it needs no post-run notice.
+	c.askToSignInAgain(originalErr, model)
 
 	if hasLatest && c.runComplete != nil && sessionRunFromContext(ctx, sessionID) == nil {
 		c.runComplete.PublishMustDeliver(ctx, pubsub.UpdatedEvent, latest)

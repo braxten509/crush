@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/backend"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/proto"
@@ -167,6 +167,13 @@ func (c *controllerV1) handleGetWorkspaceEvents(w http.ResponseWriter, r *http.R
 		c.handleError(w, r, err)
 		return
 	}
+	// Which session each client views, subscribed before the attach for
+	// the same reason.
+	sessions, err := c.backend.SubscribeClientSessions(r.Context(), id)
+	if err != nil {
+		c.handleError(w, r, err)
+		return
+	}
 	// watch=1 is a listener that holds nothing (owner, 2026-10-20: "only
 	// ring ONCE - from the desktop one"): the desktop hears the folders of
 	// open chats no window shows, and the workspace and engine still close
@@ -188,6 +195,11 @@ func (c *controllerV1) handleGetWorkspaceEvents(w http.ResponseWriter, r *http.R
 	// initial RoundTrip.
 	w.WriteHeader(http.StatusOK)
 	flusher.Flush()
+
+	// A client attaching after the host set its theme, or after other
+	// clients picked their sessions, learns them first.
+	c.replayHostTheme(w, r, flusher, id)
+	c.replayClientSessions(w, r, flusher, id)
 
 	for {
 		var payload any
@@ -213,18 +225,29 @@ func (c *controllerV1) handleGetWorkspaceEvents(w http.ResponseWriter, r *http.R
 			// Engine events are already addressed, so they skip
 			// deliverToClient.
 			payload = ev
+		case sev, ok := <-sessions:
+			if !ok {
+				sessions = nil
+				continue
+			}
+			payload = sev
 		}
-		wrapped := wrapEvent(payload)
-		if wrapped == nil {
-			continue
-		}
-		data, err := json.Marshal(wrapped)
-		if err != nil {
-			c.server.logError(r, "Failed to marshal event", "error", err)
-			continue
-		}
-
-		fmt.Fprintf(w, "data: %s\n\n", data)
-		flusher.Flush()
+		c.writeEvent(w, r, flusher, payload)
 	}
+}
+
+// writeEvent wraps a workspace event in its SSE envelope and writes it to
+// the stream. Events with no wire form are skipped.
+func (c *controllerV1) writeEvent(w http.ResponseWriter, r *http.Request, flusher *http.ResponseController, ev any) {
+	wrapped := wrapEvent(ev)
+	if wrapped == nil {
+		return
+	}
+	data, err := json.Marshal(wrapped)
+	if err != nil {
+		c.server.logError(r, "Failed to marshal event", "error", err)
+		return
+	}
+	fmt.Fprintf(w, "data: %s\n\n", data)
+	flusher.Flush()
 }

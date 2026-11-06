@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/ui/chat"
+	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/util"
 	"github.com/charmbracelet/crush/internal/workspace"
 )
@@ -72,6 +73,7 @@ func (m *UI) sendMessageInternal(content string, hidden bool, attachments ...mes
 
 	// Any new prompt supersedes a pending, unconfirmed plan.
 	m.setPlanReadyPending("")
+	m.turnOutcome = ""
 
 	var cmds []tea.Cmd
 	priorSessionID := m.currentSessionID()
@@ -101,6 +103,9 @@ func (m *UI) sendMessageInternal(content string, hidden bool, attachments ...mes
 
 	// Capture session ID to avoid race with main goroutine updating m.session.
 	queued := priorSessionID != "" && priorSessionID == sessionID && (m.isAgentBusy() || m.queue.interruptInFlight[sessionID])
+	if !queued {
+		common.StartTurn(sessionID)
+	}
 	submissionID := ""
 	if !hidden {
 		submissionID = m.appendPendingPrompt(sessionID, content, attachments, queued)
@@ -111,6 +116,12 @@ func (m *UI) sendMessageInternal(content string, hidden bool, attachments ...mes
 		runCtx = message.WithHiddenUserMessage(runCtx)
 	}
 	dispatchID := m.queue.track(submissionID, sessionID, cancelSubmission, queued)
+	if !queued {
+		if m.turnSubmissions == nil {
+			m.turnSubmissions = make(map[string]string)
+		}
+		m.turnSubmissions[sessionID] = submissionID
+	}
 	// Optimistically mark the agent busy: the prompt we are about to submit
 	// either starts a run or is enqueued behind one. This keeps esc pressed
 	// right after enter routing to cancelAgent instead of reading a stale
@@ -182,6 +193,7 @@ func (m *UI) runShellCommandInternal(command string, isFirstMessage bool) tea.Cm
 
 	sessionID := m.session.ID
 	contentWidth := min(m.layout.main.Dx()-2, 120)
+	m.turnOutcome = ""
 
 	// Append a pending shell item immediately so the user sees feedback.
 	pendingItem := chat.NewPendingShellItem(m.com.Styles, command)
@@ -249,6 +261,7 @@ func (m *UI) interruptAgent() tea.Cmd {
 	if m.queue.interruptInFlight[m.currentSessionID()] {
 		return nil
 	}
+	m.stopTurnClock(m.currentSessionID(), "")
 	if m.queue.interruptInFlight == nil {
 		m.queue.interruptInFlight = make(map[string]bool)
 	}

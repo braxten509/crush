@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/csync"
 	"github.com/charmbracelet/crush/internal/env"
 	"github.com/stretchr/testify/require"
@@ -21,7 +21,7 @@ func TestCodexAPIProvider(t *testing.T) {
 		p, ok := c.Providers.Get(CodexAPIProviderID)
 		require.True(t, ok)
 		require.Equal(t, "Codex API", p.Name)
-		require.Equal(t, catwalk.TypeOpenAI, p.Type)
+		require.Equal(t, catwalk.TypeResponses, p.Type)
 		require.Equal(t, "https://api.openai.com/v1", p.BaseURL)
 		require.Empty(t, p.APIKey)
 		var ids []string
@@ -92,13 +92,13 @@ func TestCodexAPILongContextPrice(t *testing.T) {
 		}
 	}
 	short := PriceForRequest(sol, 272000)
-	require.Equal(t, 12.0, short.CostPer1MIn)
+	require.Equal(t, 12.0, short.Pricing.Input)
 	long := PriceForRequest(sol, 272001)
-	require.Equal(t, 24.0, long.CostPer1MIn)
-	require.Equal(t, 1.2, long.CostPer1MOutCached)
-	require.Equal(t, 90.0, long.CostPer1MOut)
-	other := catwalk.Model{ID: "claude-opus-5-5", CostPer1MIn: 4}
-	require.Equal(t, 4.0, PriceForRequest(other, 900000).CostPer1MIn)
+	require.Equal(t, 24.0, long.Pricing.Input)
+	require.Equal(t, 1.2, long.Pricing.CacheHit)
+	require.Equal(t, 90.0, long.Pricing.Output)
+	other := catwalk.Model{ID: "claude-opus-5-5", Pricing: catwalk.Pricing{Input: 4}}
+	require.Equal(t, 4.0, PriceForRequest(other, 900000).Pricing.Input)
 }
 
 // The Codex API compacts before a request would reach OpenAI's long-context

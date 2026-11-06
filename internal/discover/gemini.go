@@ -19,8 +19,20 @@ import (
 	"testing"
 	"time"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 )
+
+// legacyGoogleType is catwalk v2's provider type for Google's own API.
+// Catwalk v3 types name the wire format instead (its gemini provider is
+// "completions"), but a provider configured before the change still carries
+// the old name when its models are discovered.
+const legacyGoogleType catwalk.Type = "google"
+
+// isGeminiProvider reports whether a provider lists its models through the
+// Gemini API: the catalog's gemini provider, or one still typed "google".
+func isGeminiProvider(cfg Config) bool {
+	return catwalk.InferenceProvider(cfg.ID) == catwalk.InferenceProviderGemini || cfg.Type == legacyGoogleType
+}
 
 // geminiModelsResponse is one page of the Gemini API's models.list.
 type geminiModelsResponse struct {
@@ -57,7 +69,7 @@ func discoverGeminiModels(ctx context.Context, cfg Config, resolver Resolver) ([
 
 	known := map[string]catwalk.Model{}
 	for _, provider := range cfg.KnownProviders {
-		if provider.Type == catwalk.TypeGoogle && provider.ID == catwalk.InferenceProviderGemini {
+		if provider.ID == catwalk.InferenceProviderGemini {
 			for _, model := range provider.Models {
 				known[model.ID] = model
 			}
@@ -251,12 +263,12 @@ func geminiCatwalkModel(id string, entry geminiModel, known map[string]catwalk.M
 		Name:             cmp.Or(entry.DisplayName, id),
 		ContextWindow:    cmp.Or(entry.InputTokenLimit, int64(200_000)),
 		DefaultMaxTokens: min(cmp.Or(entry.OutputTokenLimit, int64(32_000)), 128_000),
-		CanReason:        true,
-		SupportsImages:   true,
+		Reasoning:        catwalk.Reasoning{Thinking: catwalk.ThinkingToggleable},
+		Capabilities:     catwalk.Capabilities{Vision: true},
 	}
 	if !strings.HasPrefix(id, "gemini-2") {
-		model.ReasoningLevels = slices.Clone(geminiThinkingLevels)
-		model.DefaultReasoningEffort = "medium"
+		model.Reasoning.EffortLevels = catwalk.NewEffortLevels(geminiThinkingLevels...)
+		model.Reasoning.DefaultEffortLevel = "medium"
 	}
 	return model
 }

@@ -3,7 +3,7 @@ package config
 import (
 	"strings"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 )
 
 const (
@@ -30,12 +30,12 @@ func AbacusProviderForModel(provider ProviderConfig, model catwalk.Model) Provid
 	}
 	switch AbacusAPIFormat(model) {
 	case "anthropic":
-		provider.Type = catwalk.TypeAnthropic
+		provider.Type = catwalk.TypeMessages
 		provider.BaseURL = strings.TrimSuffix(strings.TrimRight(provider.BaseURL, "/"), "/v1")
 	case "responses":
-		provider.Type = catwalk.TypeOpenAI
+		provider.Type = catwalk.TypeResponses
 	default:
-		provider.Type = catwalk.TypeOpenAICompat
+		provider.Type = catwalk.TypeCompletions
 	}
 	return provider
 }
@@ -52,11 +52,14 @@ func SupportsFastMode(provider ProviderConfig, model catwalk.Model) bool {
 // SupportsUltracode reports whether the model has Claude Code's Ultracode.
 // Claude offers it on the models with effort levels; Haiku has neither.
 func SupportsUltracode(provider ProviderConfig, model catwalk.Model) bool {
-	return provider.Type == TypeClaudeCode && len(model.ReasoningLevels) > 0
+	return provider.Type == TypeClaudeCode && len(model.Reasoning.EffortLevels) > 0
 }
 
 func SupportsThinkingToggle(provider ProviderConfig, model catwalk.Model) bool {
-	if !model.CanReason || len(model.ReasoningLevels) > 0 {
+	// Only a model whose thinking can be switched on and off, with no effort
+	// levels to pick instead, gets the toggle; one that always thinks does
+	// not (catwalk v3: a legacy can_reason model migrates to toggleable).
+	if model.Reasoning.Thinking != catwalk.ThinkingToggleable || len(model.Reasoning.EffortLevels) > 0 {
 		return false
 	}
 	if provider.ID != AbacusProviderID {

@@ -3,7 +3,7 @@ package agent
 import (
 	"testing"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/csync"
 	"github.com/stretchr/testify/require"
@@ -14,9 +14,9 @@ import (
 func TestCompactionChoice(t *testing.T) {
 	t.Parallel()
 	providers := csync.NewMapFrom(map[string]config.ProviderConfig{
-		"deepinfra":   {Type: catwalk.TypeOpenAICompat},
+		"deepinfra":   {Type: catwalk.TypeCompletions},
 		"claude-code": {Type: config.TypeClaudeCode},
-		"off":         {Type: catwalk.TypeOpenAI, Disable: true},
+		"off":         {Type: catwalk.TypeResponses, Disable: true},
 	})
 	cheap := config.SelectedModel{Provider: "deepinfra", Model: "flash"}
 	pricey := config.SelectedModel{Provider: "codex-api", Model: "gpt-6-astra"}

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"charm.land/fantasy"
 	"charm.land/fantasy/providers/openaicompat"
 	"charm.land/x/vcr"
@@ -77,7 +77,10 @@ func testEnv(t *testing.T) fakeEnv {
 	sessions := session.NewService(q, conn)
 	messages := message.NewService(q)
 
-	permissions := permission.NewPermissionService(workingDir, true, []string{})
+	permissions := permission.NewPermissionService(workingDir, []string{}, nil)
+	// Auto-approve every tool call so headless test/record runs never block
+	// on a permission prompt.
+	permissions.SetPermissionMode(permission.PermissionModeSysadmin)
 	history := history.NewService(q, conn)
 	filetrackerService := filetracker.NewService(q)
 	lspClients := csync.NewMap[string, *lsp.Client]()
@@ -124,7 +127,6 @@ func testSessionAgent(env fakeEnv, large, small fantasy.LanguageModel, systemPro
 		Model:        largeModel,
 		HelperModel:  smallModel,
 		SystemPrompt: systemPrompt,
-		IsYolo:       true,
 		Sessions:     env.sessions,
 		Messages:     env.messages,
 		Tools:        tools,
@@ -145,7 +147,7 @@ func coderAgent(r *vcr.Recorder, env fakeEnv, large, small fantasy.LanguageModel
 	if err != nil {
 		return nil, err
 	}
-	cfg, err := config.Init(env.workingDir, "", false)
+	cfg, err := config.Init(context.Background(), env.workingDir, "", false)
 	if err != nil {
 		return nil, err
 	}
@@ -170,7 +172,7 @@ func coderAgent(r *vcr.Recorder, env fakeEnv, large, small fantasy.LanguageModel
 	}
 
 	allTools := []fantasy.AgentTool{
-		shelltool.NewBashTool(env.permissions, env.workingDir, cfg.Config().Options.DataDirectory, cfg.Config().Options.Attribution, reportStartedJob),
+		shelltool.NewBashTool(env.permissions, env.workingDir, cfg.Config().Options.DataDirectory, cfg.Config().Options.Attribution, cfg.Config().Options.GetMaxBackgroundJobs(), cfg.Config().Permissions, reportStartedJob),
 		webtool.NewDownloadTool(env.permissions, env.workingDir, r.GetDefaultClient()),
 		tools.NewEditTool(nil, env.permissions, env.history, *env.filetracker, env.workingDir),
 		tools.NewMultiEditTool(nil, env.permissions, env.history, *env.filetracker, env.workingDir),
@@ -206,4 +208,12 @@ func main() {
 `
 	err = os.WriteFile(dir+"/main.go", []byte(mainGo), 0o644)
 	require.NoError(t, err)
+}
+
+// yoloPermissions is a permission service that grants every request, as
+// the old skip-requests flag did.
+func yoloPermissions(dir string) permission.Service {
+	p := permission.NewPermissionService(dir, []string{}, nil)
+	p.SetPermissionMode(permission.PermissionModeYolo)
+	return p
 }

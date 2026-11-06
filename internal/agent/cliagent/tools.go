@@ -196,6 +196,7 @@ func (m *Model) approve(ctx context.Context, sessionID, callID, name, input stri
 	}
 	switch name {
 	case tools.BashToolName:
+		req.GrantKey = str("command")
 		req.Description = "Execute command: " + str("command")
 		req.Params = tools.BashPermissionsParams{Command: str("command"), Description: str("description"), WorkingDir: m.Dir}
 	case tools.EditToolName:

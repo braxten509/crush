@@ -141,3 +141,16 @@ func (c *coordinator) refreshApiKeyTemplate(ctx context.Context, providerCfg con
 	}
 	return nil
 }
+
+// askToSignInAgain asks the user to sign in again when an OAuth credential
+// is still refused after the refresh-and-retry. AWS SSO is handled inside
+// OnAuthRefresh and API keys are a config matter, so neither asks here.
+func (c *coordinator) askToSignInAgain(err error, model Model) {
+	if err == nil || !isUnauthorized(err) || c.notify == nil || !model.OAuth {
+		return
+	}
+	c.notify.Publish(pubsub.CreatedEvent, notify.Notification{
+		Type:       notify.TypeReAuthenticate,
+		ProviderID: model.ModelCfg.Provider,
+	})
+}

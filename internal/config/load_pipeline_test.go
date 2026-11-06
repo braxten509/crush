@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"charm.land/catwalk/pkg/catwalk"
-	"charm.land/catwalk/pkg/embedded"
+	"charm.land/catwalk/v3/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/embedded"
 	"github.com/charmbracelet/crush/internal/csync"
 	"github.com/charmbracelet/crush/internal/env"
 	"github.com/charmbracelet/crush/internal/oauth"
@@ -165,7 +165,7 @@ func TestLoadPipeline_ReloadMatchesLoad(t *testing.T) {
 	e := newPipelineEnv(t)
 	e.writeRichConfig(t)
 
-	store, err := Load(e.workDir, e.dataDir, false)
+	store, err := Load(t.Context(), e.workDir, e.dataDir, false)
 	require.NoError(t, err)
 	loaded := snapshotStore(t, store)
 
@@ -229,7 +229,7 @@ func TestLoadPipeline_AnthropicOAuthRemovedOnDisk(t *testing.T) {
 	}`
 	e.write(t, e.globalData, stale)
 
-	store, err := Load(e.workDir, e.dataDir, false)
+	store, err := Load(t.Context(), e.workDir, e.dataDir, false)
 	require.NoError(t, err)
 	_, ok := store.Config().Providers.Get("anthropic")
 	require.False(t, ok)
@@ -281,7 +281,7 @@ func TestLoadPipeline_ModelFallbackPersistence(t *testing.T) {
 	}`
 	e.write(t, e.globalData, unknown)
 
-	store, err := Load(e.workDir, e.dataDir, false)
+	store, err := Load(t.Context(), e.workDir, e.dataDir, false)
 	require.NoError(t, err)
 	small := store.Config().Models[SelectedModelTypeSmall]
 	require.Equal(t, "openai", small.Provider)
@@ -308,7 +308,7 @@ func TestLoadPipeline_UnconfiguredLoadsWithoutAgents(t *testing.T) {
 	e.write(t, e.globalData, `{"options": {"disable_default_providers": false}}`)
 	t.Setenv("CRUSH_DISABLE_DEFAULT_PROVIDERS", "")
 
-	store, err := Load(e.workDir, e.dataDir, false)
+	store, err := Load(t.Context(), e.workDir, e.dataDir, false)
 	require.NoError(t, err)
 	require.False(t, store.Config().IsConfigured())
 	require.Empty(t, store.Config().Agents)
@@ -327,7 +327,7 @@ func TestLoadPipeline_UnconfiguredLoadTracksStaleness(t *testing.T) {
 	projectConfig := filepath.Join(e.workDir, "crush.json")
 	e.write(t, projectConfig, `{"options": {"debug": false}}`)
 
-	store, err := Load(e.workDir, e.dataDir, false)
+	store, err := Load(t.Context(), e.workDir, e.dataDir, false)
 	require.NoError(t, err)
 	require.False(t, store.Config().IsConfigured())
 	require.False(t, store.ConfigStaleness().Dirty)
@@ -346,7 +346,7 @@ func TestLoadPipeline_ReloadKeepsDebugFlag(t *testing.T) {
 	e := newPipelineEnv(t)
 	e.writeRichConfig(t)
 
-	store, err := Load(e.workDir, e.dataDir, true)
+	store, err := Load(t.Context(), e.workDir, e.dataDir, true)
 	require.NoError(t, err)
 	require.True(t, store.Config().Options.Debug)
 
@@ -363,7 +363,7 @@ func TestLoadPipeline_ReloadKeepsEnvironmentDefaults(t *testing.T) {
 	e.writeRichConfig(t)
 	t.Setenv("TERM_PROGRAM", "Apple_Terminal")
 
-	store, err := Load(e.workDir, e.dataDir, false)
+	store, err := Load(t.Context(), e.workDir, e.dataDir, false)
 	require.NoError(t, err)
 	require.True(t, store.Config().Options.TUI.IsTransparent())
 

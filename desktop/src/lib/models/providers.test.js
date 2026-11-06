@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { footerText } from "../timeline.js";
-import { footerProviders, needsKeyFirst, safeProvider } from "./providers.js";
+import { flatModel, footerProviders, needsKeyFirst, safeProvider } from "./providers.js";
 import { cheapestHostOn, qualityFloorOn } from "./openrouter.js";
 
 const cfg = {
@@ -36,6 +36,67 @@ describe("footerProviders (the terminal's cfg.GetModel order)", () => {
   test("catalog providers missing from the config still name their models; before the config loads, the catalog alone", () => {
     expect(footerText(finished("anthropic", "claude-haiku-5-5"), footerProviders(cfg, catalog), 20).text).toBe("Haiku 5.5 via Anthropic in 0s");
     expect(footerProviders(null, catalog)).toEqual(catalog);
+  });
+});
+
+// Engines from v0.100.0 on send catwalk v3 models, which nest what the
+// screens read flat: a slip here silently drops the effort levels, the
+// thinking switch and pictures.
+describe("catwalk v3 models keep the thinking, effort and picture controls", () => {
+  const v3 = {
+    id: "claude-opus-5-5",
+    name: "Opus 5.5",
+    pricing: { input: 5, output: 25, cache_create: 6.25, cache_hit: 0.5 },
+    context_window: 1_000_000,
+    default_max_tokens: 64_000,
+    reasoning: {
+      thinking: "toggleable",
+      effort_levels: [
+        { value: "low", display: "Low" },
+        { value: "high", display: "High" },
+        { value: "xhigh", display: "X-High" },
+      ],
+      default_effort_level: "high",
+    },
+    capabilities: { vision: true, audio: false },
+  };
+
+  test("the nested fields give the flat names back, and stay", () => {
+    const flat = flatModel(v3);
+    expect(flat).toMatchObject({
+      can_reason: true,
+      reasoning_levels: ["low", "high", "xhigh"],
+      default_reasoning_effort: "high",
+      supports_attachments: true,
+      cost_per_1m_in: 5,
+      cost_per_1m_out: 25,
+      cost_per_1m_in_cached: 6.25,
+      cost_per_1m_out_cached: 0.5,
+    });
+    expect(flat.reasoning).toEqual(v3.reasoning);
+    expect(v3.can_reason).toBeUndefined();
+  });
+
+  test("never and unset cannot reason, always can; no effort levels leaves none", () => {
+    const never = flatModel({ id: "m", reasoning: { thinking: "never" }, capabilities: { vision: false, audio: false } });
+    expect(never).toMatchObject({ can_reason: false, supports_attachments: false });
+    expect("reasoning_levels" in never || "default_reasoning_effort" in never).toBe(false);
+    expect(flatModel({ id: "m", reasoning: { thinking: "" } }).can_reason).toBe(false);
+    const always = flatModel({ id: "r1", reasoning: { thinking: "always" } });
+    expect(always.can_reason).toBe(true);
+    expect("reasoning_levels" in always).toBe(false);
+  });
+
+  test("a model from an older engine stays as it is; its flat names win", () => {
+    const old = { id: "opus", name: "Opus", can_reason: true, reasoning_levels: ["low", "high"], default_reasoning_effort: "low", supports_attachments: true, cost_per_1m_in: 5, cost_per_1m_out: 25 };
+    expect(flatModel(old)).toEqual(old);
+    expect(flatModel({ ...v3, supports_attachments: false, reasoning_levels: ["max"] })).toMatchObject({ supports_attachments: false, reasoning_levels: ["max"] });
+  });
+
+  test("the picker's view of a configured v3 model has every control", () => {
+    expect(safeProvider("anthropic", { type: "anthropic", models: [v3] }).models).toEqual([
+      { id: "claude-opus-5-5", name: "Opus 5.5", can_reason: true, reasoning_levels: ["low", "high", "xhigh"], default_reasoning_effort: "high", default_max_tokens: 64_000, supports_attachments: true, context_window: 1_000_000, reasoning: v3.reasoning },
+    ]);
   });
 });
 

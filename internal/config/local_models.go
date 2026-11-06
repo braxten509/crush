@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/localmodel"
 )
 
@@ -33,5 +33,5 @@ func (c *Config) addLocalModels() {
 	for _, model := range models {
 		list = append(list, catwalk.Model{ID: model.ID, Name: fmt.Sprintf("%s · %.1f GiB", model.Name, float64(model.Bytes)/(1<<30)), ContextWindow: localmodel.ContextSize, DefaultMaxTokens: 4096})
 	}
-	c.Providers.Set(localmodel.ProviderID, ProviderConfig{ID: localmodel.ProviderID, Name: "Local models", Type: catwalk.TypeOpenAICompat, BaseURL: endpoint, APIKey: key, Models: list, AutoDiscoverModels: new(false)})
+	c.Providers.Set(localmodel.ProviderID, ProviderConfig{ID: localmodel.ProviderID, Name: "Local models", Type: catwalk.TypeCompletions, BaseURL: endpoint, APIKey: key, Models: list, AutoDiscoverModels: new(false)})
 }

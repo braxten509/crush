@@ -10,7 +10,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	mcp "github.com/charmbracelet/crush/internal/agent/tools/mcp"
@@ -37,8 +37,8 @@ func (m *UI) modelInfo(width int) string {
 			providerName = providerConfig.Name
 
 			// Only check reasoning if model can reason
-			if model.CatwalkCfg.CanReason {
-				if len(model.CatwalkCfg.ReasoningLevels) == 0 {
+			if model.CatwalkCfg.CanReason() {
+				if len(model.CatwalkCfg.Reasoning.EffortLevels) == 0 {
 					if !config.SupportsThinkingToggle(providerConfig, model.CatwalkCfg) {
 						reasoningInfo = "Thinking"
 					} else if model.ModelCfg.Think {
@@ -47,7 +47,7 @@ func (m *UI) modelInfo(width int) string {
 						reasoningInfo = "Thinking Off"
 					}
 				} else {
-					reasoningEffort := cmp.Or(model.ModelCfg.ReasoningEffort, model.CatwalkCfg.DefaultReasoningEffort)
+					reasoningEffort := cmp.Or(model.ModelCfg.ReasoningEffort, model.CatwalkCfg.Reasoning.DefaultEffortLevel)
 					reasoningInfo = fmt.Sprintf("Reasoning %s", common.FormatReasoningEffort(reasoningEffort))
 				}
 			}
@@ -222,7 +222,9 @@ func (m *UI) updateSidebarScrollState() {
 	skillsSection := m.skillsInfo(contentWidth, len(m.skillStatusItems()), true)
 	filesSection := m.filesInfo(m.com.Workspace.WorkingDir(), contentWidth, fileChangeCount(m.sessionFiles), true)
 
-	// Build the scrollable content.
+	// Build the scrollable content. The subagent section renders empty
+	// until something is dispatched, so it takes no space in a session
+	// that never uses them.
 	content := lipgloss.JoinVertical(
 		lipgloss.Left,
 		title,
@@ -231,6 +233,14 @@ func (m *UI) updateSidebarScrollState() {
 		"",
 		m.modelInfo(contentWidth),
 		"",
+	)
+	subAgents := m.subAgentStatuses()
+	if subAgentSection := m.subAgentsInfo(subAgents, contentWidth, len(subAgents), true); subAgentSection != "" {
+		content = lipgloss.JoinVertical(lipgloss.Left, content, subAgentSection, "")
+	}
+	content = lipgloss.JoinVertical(
+		lipgloss.Left,
+		content,
 		filesSection,
 		"",
 		lspSection,

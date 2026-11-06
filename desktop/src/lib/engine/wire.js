@@ -42,7 +42,10 @@
  *   (proto.go:125-133; no model: every chat owns its own, session.model, a SelectedModel:
  *   internal/config/config.go:50-69. The window's agent block, agentNow() in live/helpers, adds
  *   the shown chat's model (catwalk Model fields, catwalk@v0.52.49/pkg/catwalk/provider.go:91-104,
- *   where SupportsImages has the JSON name supports_attachments) and model_cfg.) */
+ *   where SupportsImages has the JSON name supports_attachments) and model_cfg. Engines from
+ *   v0.100.0 on send catwalk v3 models (catwalk/v3@v3.0.1 pkg/catwalk/provider.go:91-172), whose
+ *   nested reasoning, capabilities and pricing give those flat names back where models come in:
+ *   lib/models/providers.js flatModel.) */
 /** @typedef {{session_id:string, prompt:string, submission_id?:string, hidden_user_message?:boolean,
  *   run_id?:string, channel?:string, attachments?:{file_path:string, file_name:string, mime_type:string, content:string}[]}} AgentMessage
  *   (proto.go:149-157; attachment content is base64, message.go:651-656) */

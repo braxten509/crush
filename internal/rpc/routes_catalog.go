@@ -1,6 +1,6 @@
 package rpc
 
-import "charm.land/catwalk/pkg/catwalk"
+import "charm.land/catwalk/v3/pkg/catwalk"
 
 // A provider's catalog (OpenRouter, OrcaRouter), for picking the models to
 // save under it.

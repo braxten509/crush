@@ -7,7 +7,7 @@ import (
 	"os"
 	"testing"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/csync"
 	"github.com/charmbracelet/crush/internal/env"
 	"github.com/stretchr/testify/require"
@@ -29,17 +29,17 @@ func TestTinfoilModelList(t *testing.T) {
 	ds := byID["deepseek-v4-1-flash"]
 	require.Equal(t, "DeepSeek V4.1 Flash", ds.Name)
 	require.Equal(t, int64(1048576), ds.ContextWindow)
-	require.Equal(t, 0.65, ds.CostPer1MIn)
-	require.Equal(t, 1.45, ds.CostPer1MOut)
-	require.Equal(t, 0.13, ds.CostPer1MOutCached)
-	require.True(t, ds.CanReason)
-	require.True(t, ds.SupportsImages)
-	require.Equal(t, []string{"low", "medium", "high"}, ds.ReasoningLevels)
+	require.Equal(t, 0.65, ds.Pricing.Input)
+	require.Equal(t, 1.45, ds.Pricing.Output)
+	require.Equal(t, 0.13, ds.Pricing.CacheHit)
+	require.True(t, ds.CanReason())
+	require.True(t, ds.Capabilities.Vision)
+	require.Equal(t, []string{"low", "medium", "high"}, ds.ReasoningEffortLevels())
 	require.Positive(t, ds.DefaultMaxTokens)
 
-	require.True(t, byID["gemma4-31b"].CanReason)
-	require.Empty(t, byID["gemma4-31b"].ReasoningLevels)
-	require.False(t, byID["llama3-3-70b"].CanReason)
+	require.True(t, byID["gemma4-31b"].CanReason())
+	require.Empty(t, byID["gemma4-31b"].ReasoningEffortLevels())
+	require.False(t, byID["llama3-3-70b"].CanReason())
 
 	r, ok := TinfoilThinking("deepseek-v4-1-flash")
 	require.True(t, ok)
@@ -64,7 +64,7 @@ func TestTinfoilProvidersLoad(t *testing.T) {
 			TinfoilProviderID: {APIKey: "key-1"},
 			// An account added in Settings: a copy saved with an old list.
 			TinfoilProviderID + "-2": {
-				Name: "Tinfoil (2)", Type: catwalk.TypeOpenAICompat, BaseURL: tinfoilBaseURL, APIKey: "key-2",
+				Name: "Tinfoil (2)", Type: catwalk.TypeCompletions, BaseURL: tinfoilBaseURL, APIKey: "key-2",
 				Models: []catwalk.Model{{ID: "old-model"}},
 			},
 		})}

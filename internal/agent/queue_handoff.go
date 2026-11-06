@@ -28,10 +28,31 @@ func (h *queueHandoff) signal() {
 
 // Publish a new slice: concurrent queue displays can still own the old one.
 func appendQueuedInOrder(calls []SessionAgentCall, call SessionAgentCall) []SessionAgentCall {
-	ordered := append(slices.Clone(calls), call)
-	slices.SortStableFunc(ordered, func(first, next SessionAgentCall) int {
-		return cmp.Compare(first.queueOrder, next.queueOrder)
+	all := append(slices.Clone(calls), call)
+	order := make([]int, len(all))
+	for i := range order {
+		order[i] = i
+	}
+	slices.SortStableFunc(order, func(first, next int) int {
+		return cmp.Compare(all[first].queueOrder, all[next].queueOrder)
 	})
+	ordered := make([]SessionAgentCall, 0, len(all))
+	at := 0
+	for _, i := range order {
+		if i == len(all)-1 {
+			at = len(ordered)
+		}
+		ordered = append(ordered, all[i])
+	}
+	// The user's own prompts go ahead of queued subagent reports: delivered
+	// together they read as one message, and a short line trailing a long
+	// report gets missed.
+	if call.Report == nil {
+		for at > 0 && ordered[at-1].Report != nil {
+			ordered[at-1], ordered[at] = ordered[at], ordered[at-1]
+			at--
+		}
+	}
 	return ordered
 }
 

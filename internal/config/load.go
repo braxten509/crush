@@ -1,16 +1,118 @@
 package config
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
 	"slices"
 	"time"
+
+	"charm.land/catwalk/v3/pkg/catwalk"
+	"github.com/charmbracelet/crush/internal/config/providers"
 )
+
+// NormalizeProviderType maps a catwalk v2 provider type onto the v3
+// endpoint type describing the same API format, so configs written before
+// the migration keep working. Types that are already v3 or are not legacy
+// names (custom types with registered enrichers such as ollama or litellm,
+// and the agent CLI types) pass through unchanged. catwalk's v3 data still
+// carries v2 names for some providers (OpenAI, MiniMax, ...).
+func NormalizeProviderType(t catwalk.Type) catwalk.Type {
+	return providers.NormalizeType(t)
+}
+
+// migrateCatwalkV2 rewrites a merged user config from the catwalk v2
+// schema onto the v3 schema so pre-migration configs decode correctly. It
+// covers every model list a provider entry persists: the API-key models
+// and the ChatGPT and Grok subscription catalogs. In v3, flat model fields
+// moved into nested structures: the cost fields became pricing,
+// supports_attachments became capabilities.vision, and the can_reason/
+// reasoning_levels/default_reasoning_effort trio became the reasoning
+// object. The rewrite is pure and is a no-op for configs already written
+// with v3 fields; use migrateCatwalkV2File to persist the result.
+func migrateCatwalkV2(data []byte) ([]byte, bool) {
+	var root map[string]any
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.UseNumber()
+	if err := dec.Decode(&root); err != nil {
+		return data, false
+	}
+	providers, ok := root["providers"].(map[string]any)
+	if !ok {
+		return data, false
+	}
+
+	changed := false
+	for _, raw := range providers {
+		provider, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		for _, key := range []string{"models", "chatgpt_models", "grok_models"} {
+			models, ok := provider[key].([]any)
+			if !ok {
+				continue
+			}
+			for i, rawModel := range models {
+				model, ok := rawModel.(map[string]any)
+				if !ok {
+					continue
+				}
+				if migrateCatwalkV2Model(model) {
+					models[i] = model
+					changed = true
+				}
+			}
+		}
+	}
+	if !changed {
+		return data, false
+	}
+
+	out, err := json.Marshal(root)
+	if err != nil {
+		return data, false
+	}
+	return out, true
+}
+
+// migrateCatwalkV2File migrates a JSON config file from the catwalk v2
+// model schema onto v3 and persists the rewrite atomically, preserving
+// the file's permissions. The returned bytes are always the migrated
+// form, so loading continues even when the write fails.
+func migrateCatwalkV2File(path string, data []byte) []byte {
+	migrated, changed := migrateCatwalkV2(data)
+	if !changed {
+		return data
+	}
+	perm := os.FileMode(0o600)
+	if info, err := os.Stat(path); err == nil {
+		perm = info.Mode().Perm()
+	}
+	if err := atomicWriteFile(path, migrated, perm); err != nil {
+		slog.Warn("Failed to write migrated config", "path", path, "error", err)
+	} else {
+		slog.Info("Migrated config file to the catwalk v3 model schema", "path", path)
+	}
+	return migrated
+}
+
+// migrateCatwalkV2Model migrates a single model object in place and
+// reports whether anything changed. Legacy fields are removed after
+// being folded into their v3 counterparts so they never leak back into
+// the decoded config. The provider catalog caches share the rewrite.
+func migrateCatwalkV2Model(model map[string]any) bool {
+	return providers.MigrateV2Model(model)
+}
 
 // Load loads the configuration from the default paths and returns a
 // ConfigStore that owns both the pure-data Config and all runtime state.
-func Load(workingDir, dataDir string, debug bool) (*ConfigStore, error) {
+// ctx bounds the load: cancelling it (Ctrl+C during startup) stops the
+// provider catalog fetch and returns the context's error.
+func Load(ctx context.Context, workingDir, dataDir string, debug bool) (*ConfigStore, error) {
 	store := &ConfigStore{
 		workingDir:      workingDir,
 		globalDataPath:  GlobalConfigData(),
@@ -19,12 +121,13 @@ func Load(workingDir, dataDir string, debug bool) (*ConfigStore, error) {
 	}
 
 	store.loading.Store(true)
-	res, err := buildConfig(context.Background(), buildParams{
+	res, err := buildConfig(ctx, buildParams{
 		workingDir:      workingDir,
 		dataDir:         dataDir,
 		debug:           debug,
 		outsideWorktree: store.outsideWorktree,
 		refreshHyper:    store.refreshHyperToken,
+		discoveryDir:    store.discoveryCacheDir(),
 		// Publish the merged config before the catalog loads: the Hyper
 		// token refresher and the catalog refetches go through the store.
 		onMerged: func(cfg *Config, files configFiles) {
@@ -83,11 +186,11 @@ func (s *ConfigStore) refreshHyperToken(ctx context.Context) error {
 // config: the rest of the load must land on it rather than on a snapshot
 // the store has already replaced. Only the initial load does this, so a
 // reload never makes network calls for these catalogs.
-func (s *ConfigStore) refreshShadowCatalogs(cfg *Config) *Config {
+func (s *ConfigStore) refreshShadowCatalogs(ctx context.Context, cfg *Config) *Config {
 	if !CatwalkUpdated() {
 		return cfg
 	}
-	fetchCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	fetchCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	s.refetchOpenAIModels(fetchCtx, ScopeGlobal)
 	s.refetchGrokModels(fetchCtx, ScopeGlobal)
@@ -102,6 +205,7 @@ func (s *ConfigStore) publishBuild(res *buildResult) {
 	s.workspacePath = res.files.workspace
 	s.resolver = res.resolver
 	s.knownProviders = res.knownProviders
+	s.cachedDiscovery = res.cachedDiscovery
 }
 
 // persistModelFallbacks writes the helper model to the global config when
@@ -150,6 +254,7 @@ func (s *ConfigStore) reloadFromDiskLocked(ctx context.Context) error {
 		outsideWorktree: s.outsideWorktree,
 		modelOverrides:  s.overrides.Models,
 		refreshHyper:    s.refreshHyperToken,
+		discoveryDir:    s.discoveryCacheDir(),
 		reload:          true,
 		envOwner:        s,
 	})

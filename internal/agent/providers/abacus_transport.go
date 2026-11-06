@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/discover"
 	"github.com/charmbracelet/crush/internal/log"
@@ -155,8 +155,8 @@ func (t *abacusTransport) replacement(models []catwalk.Model, current string) st
 	model := matches[0]
 	if config.AbacusAPIFormat(model) != config.AbacusAPIFormat(t.model) ||
 		(t.model.ContextWindow > 0 && model.ContextWindow < t.model.ContextWindow) ||
-		(t.model.SupportsImages && !model.SupportsImages) ||
-		(t.selected.ReasoningEffort != "" && !slices.Contains(model.ReasoningLevels, t.selected.ReasoningEffort)) ||
+		(t.model.Capabilities.Vision && !model.Capabilities.Vision) ||
+		(t.selected.ReasoningEffort != "" && !slices.Contains(model.ReasoningEffortLevels(), t.selected.ReasoningEffort)) ||
 		(t.selected.Think && !config.SupportsThinkingToggle(config.ProviderConfig{ID: config.AbacusProviderID}, model)) ||
 		(t.selected.ServiceTier == "fast" && !config.SupportsFastMode(config.ProviderConfig{ID: config.AbacusProviderID}, model)) ||
 		(t.selected.MaxTokens > 0 && model.DefaultMaxTokens < t.selected.MaxTokens) {

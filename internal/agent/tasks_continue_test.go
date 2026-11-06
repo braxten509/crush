@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"charm.land/fantasy"
 	"github.com/stretchr/testify/require"
 
@@ -52,7 +52,7 @@ func TestContinueCanSwitchModel(t *testing.T) {
 	})
 	h := resumeTestHub(t, c)
 	c.tasks = h
-	claude := config.ProviderConfig{ID: "claude", Type: config.TypeClaudeCode, Models: []catwalk.Model{{ID: "opus", ReasoningLevels: []string{"high", "max"}}, {ID: "sonnet"}}}
+	claude := config.ProviderConfig{ID: "claude", Type: config.TypeClaudeCode, Models: []catwalk.Model{{ID: "opus", Reasoning: catwalk.Reasoning{Thinking: catwalk.ThinkingToggleable, EffortLevels: catwalk.NewEffortLevels("high", "max")}}, {ID: "sonnet"}}}
 	codex := config.ProviderConfig{ID: "codex", Type: config.TypeCodexCLI, Models: []catwalk.Model{{ID: "gpt-6.1-sol"}}}
 	c.cfg.Config().Providers.Set(claude.ID, claude)
 	c.cfg.Config().Providers.Set(codex.ID, codex)

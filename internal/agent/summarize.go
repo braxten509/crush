@@ -14,6 +14,7 @@ import (
 
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/hooks"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/session"
 )
@@ -21,7 +22,15 @@ import (
 //go:embed templates/summary.md
 var summaryPrompt []byte
 
+// Summarize compacts the session on the user's request. It returns
+// ErrCompactionBlocked when a PreCompact hook blocks it.
 func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fantasy.ProviderOptions, onAuthRefresh func(context.Context, *fantasy.ProviderError) error) error {
+	return a.summarize(ctx, sessionID, compactTriggerManual, opts, onAuthRefresh)
+}
+
+// summarize compacts the session; trigger tells the PreCompact and
+// PostCompact hooks whether the user asked for it or the turn ran long.
+func (a *sessionAgent) summarize(ctx context.Context, sessionID, trigger string, opts fantasy.ProviderOptions, onAuthRefresh func(context.Context, *fantasy.ProviderError) error) error {
 	if a.IsSessionBusy(sessionID) {
 		return ErrSessionBusy
 	}
@@ -49,7 +58,11 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 		return nil
 	}
 
-	aiMsgs, _ := a.preparePrompt(msgs, chatModel.CatwalkCfg.SupportsImages)
+	if pre := a.hooks.Run(ctx, hooks.Event{Name: hooks.EventPreCompact, SessionID: sessionID, Trigger: trigger}); pre.Blocked() {
+		return fmt.Errorf("%w: %s", ErrCompactionBlocked, pre.Reason)
+	}
+
+	aiMsgs, _ := a.preparePrompt(msgs, chatModel.CatwalkCfg.Capabilities.Vision, chatModel.CatwalkCfg.Capabilities.Audio)
 	aiMsgs = a.trimPreparedPrompt(sessionID, msgs, aiMsgs, chatModel, approxTokenCount(string(summaryPrompt))+approxTokenCount(systemPromptPrefix))
 
 	genCtx, cancel := context.WithCancel(ctx)
@@ -91,7 +104,19 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 		return a.failSummary(ctx, &summaryMessage, err)
 	}
 
-	summaryMessage.AddFinish(message.FinishReasonEndTurn, "", "")
+	for _, step := range resp.Steps {
+		summaryMessage.PrismModelID, summaryMessage.PrismModelName = extractPrismModel(step.ProviderMetadata)
+		summaryMessage.PrismHypercreditSavings, summaryMessage.PrismDollarSavings = extractPrismSavings(step.ProviderMetadata)
+	}
+	// A compaction summary that stopped short is the record the session
+	// goes on reading from, so record and log why it is incomplete
+	// rather than filing it under a clean end_turn. Unknown finishes
+	// (providers that never report one) keep the historical end_turn.
+	finishReason, finishMessage, finishDetails := turnFinish(chatModel, sessionID, resp.Response.FinishReason)
+	if finishReason == message.FinishReasonUnknown {
+		finishReason = message.FinishReasonEndTurn
+	}
+	summaryMessage.AddFinish(finishReason, finishMessage, finishDetails)
 	err = a.messages.Update(genCtx, summaryMessage)
 	if err != nil {
 		return err
@@ -100,6 +125,7 @@ func (a *sessionAgent) Summarize(ctx context.Context, sessionID string, opts fan
 	if err := a.saveSummaryUsage(genCtx, chatModel, currentSession, resp, summaryMessage); err != nil {
 		return err
 	}
+	a.hooks.Run(ctx, hooks.Event{Name: hooks.EventPostCompact, SessionID: sessionID, Trigger: trigger})
 	return a.runQueuedAfterSummary(ctx, sessionID, cancel)
 }
 
@@ -112,7 +138,7 @@ func (a *sessionAgent) summaryStreamCall(genCtx context.Context, sessionID strin
 		ProviderOptions: opts,
 		OnAuthRefresh:   onAuthRefresh,
 		ModelProvider: func() fantasy.LanguageModel {
-			return model.Model
+			return a.currentBuildOf(model)
 		},
 		PrepareStep: func(callContext context.Context, options fantasy.PrepareStepFunctionOptions) (_ context.Context, prepared fantasy.PrepareStepResult, err error) {
 			prepared.Messages = options.Messages
@@ -164,11 +190,14 @@ func (a *sessionAgent) failSummary(ctx context.Context, summaryMessage *message.
 // saveSummaryUsage records the summary's cost and makes it the session's
 // summary message, resetting the context token counts.
 func (a *sessionAgent) saveSummaryUsage(ctx context.Context, chatModel Model, currentSession session.Session, resp *fantasy.AgentResult, summaryMessage message.Message) error {
-	openrouterCost := a.stepsOpenrouterCost(resp.Steps)
+	overrideCost := a.stepsOpenrouterCost(resp.Steps)
+	if hyperCost := a.hyperStepsCost(chatModel, resp.Steps); hyperCost != nil {
+		overrideCost = hyperCost
+	}
 	// Just in case, get just the last usage info.
 	usage := resp.Response.Usage
 	_, err := a.sessions.Edit(ctx, currentSession.ID, func(current *session.Session) bool {
-		a.updateSessionUsage(chatModel, current, resp.TotalUsage, openrouterCost, false)
+		a.updateSessionUsage(chatModel, current, resp.TotalUsage, overrideCost, false)
 		current.SummaryMessageID = summaryMessage.ID
 		current.CompletionTokens = summaryCompletionTokens(usage, summaryMessage)
 		current.PromptTokens = 0

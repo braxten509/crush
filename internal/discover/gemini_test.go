@@ -9,7 +9,7 @@ import (
 	"sync"
 	"testing"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/stretchr/testify/require"
 )
 
@@ -45,15 +45,19 @@ func TestGeminiDiscoveryListsChatModels(t *testing.T) {
 
 	catalog := []catwalk.Provider{{
 		ID:   catwalk.InferenceProviderGemini,
-		Type: catwalk.TypeGoogle,
+		Type: catwalk.TypeCompletions,
 		Models: []catwalk.Model{{
-			ID: "gemini-3.8-flash", Name: "Gemini 3.8 Flash", CostPer1MIn: 0.5, CostPer1MOut: 3,
-			CanReason: true, ReasoningLevels: []string{"low", "medium", "high"}, DefaultReasoningEffort: "high",
+			ID: "gemini-3.8-flash", Name: "Gemini 3.8 Flash", Pricing: catwalk.Pricing{Input: 0.5, Output: 3},
+			Reasoning: catwalk.Reasoning{
+				Thinking:           catwalk.ThinkingToggleable,
+				EffortLevels:       catwalk.NewEffortLevels("low", "medium", "high"),
+				DefaultEffortLevel: "high",
+			},
 		}},
 	}}
 	models, err := DiscoverModels(context.Background(), Config{
 		ID:             "gemini",
-		Type:           catwalk.TypeGoogle,
+		Type:           catwalk.TypeCompletions,
 		BaseURL:        server.URL + "/v1beta/",
 		APIKey:         "test-key",
 		ExistingModels: []catwalk.Model{{ID: "mine", Name: "Mine"}},
@@ -72,19 +76,19 @@ func TestGeminiDiscoveryListsChatModels(t *testing.T) {
 	require.Equal(t, "Gemini 9 New", newModel.Name)
 	require.Equal(t, int64(2_000_000), newModel.ContextWindow)
 	require.Equal(t, int64(65536), newModel.DefaultMaxTokens)
-	require.True(t, newModel.CanReason)
-	require.True(t, newModel.SupportsImages)
-	require.Equal(t, []string{"low", "medium", "high"}, newModel.ReasoningLevels)
-	require.Equal(t, "medium", newModel.DefaultReasoningEffort)
+	require.True(t, newModel.CanReason())
+	require.True(t, newModel.Capabilities.Vision)
+	require.Equal(t, []string{"low", "medium", "high"}, newModel.ReasoningEffortLevels())
+	require.Equal(t, "medium", newModel.Reasoning.DefaultEffortLevel)
 
 	knownModel := models[2]
-	require.InDelta(t, 0.5, knownModel.CostPer1MIn, 0.000001)
-	require.Equal(t, "high", knownModel.DefaultReasoningEffort)
+	require.InDelta(t, 0.5, knownModel.Pricing.Input, 0.000001)
+	require.Equal(t, "high", knownModel.Reasoning.DefaultEffortLevel)
 	require.Equal(t, int64(1048576), knownModel.ContextWindow)
 
 	budgetModel := models[3]
-	require.True(t, budgetModel.CanReason)
-	require.Empty(t, budgetModel.ReasoningLevels)
+	require.True(t, budgetModel.CanReason())
+	require.Empty(t, budgetModel.ReasoningEffortLevels())
 }
 
 func TestGeminiDiscoveryReportsHTTPErrors(t *testing.T) {
@@ -92,7 +96,7 @@ func TestGeminiDiscoveryReportsHTTPErrors(t *testing.T) {
 		w.WriteHeader(http.StatusForbidden)
 	}))
 	defer server.Close()
-	_, err := DiscoverModels(context.Background(), Config{ID: "gemini", Type: catwalk.TypeGoogle, BaseURL: server.URL, APIKey: "bad"}, &mockResolver{})
+	_, err := DiscoverModels(context.Background(), Config{ID: "gemini", BaseURL: server.URL, APIKey: "bad"}, &mockResolver{})
 	require.ErrorContains(t, err, "403")
 }
 
@@ -135,7 +139,8 @@ func TestGeminiDiscoveryHidesModelsGoogleRefuses(t *testing.T) {
 	defer server.Close()
 
 	discoverIDs := func() []string {
-		models, err := DiscoverModels(context.Background(), Config{ID: "gemini", Type: catwalk.TypeGoogle, BaseURL: server.URL, APIKey: "k"}, &mockResolver{})
+		// A provider configured before catwalk v3 keeps its "google" type.
+		models, err := DiscoverModels(context.Background(), Config{ID: "gemini-work", Type: legacyGoogleType, BaseURL: server.URL, APIKey: "k"}, &mockResolver{})
 		require.NoError(t, err)
 		ids := make([]string, len(models))
 		for i, model := range models {

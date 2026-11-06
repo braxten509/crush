@@ -20,7 +20,7 @@ import (
 	"testing"
 	"time"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/backend"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/login"
@@ -207,17 +207,18 @@ func TestVerifyKey(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, code, "%s", out)
 
 	// A Google check puts the key in the address it asks; a failed one
-	// must not send it back.
+	// must not send it back. Catwalk v3 knows Google by the provider id
+	// gemini, not by a provider type.
 	const marker = "G56keyMARKER/+="
-	mustWorkspace(t, g).Cfg.Config().Providers.Set("gmarker", config.ProviderConfig{
-		ID: "gmarker", Name: "G56 Google", Type: catwalk.TypeGoogle, BaseURL: "http://127.0.0.1:9",
+	mustWorkspace(t, g).Cfg.Config().Providers.Set(string(catwalk.InferenceProviderGemini), config.ProviderConfig{
+		ID: string(catwalk.InferenceProviderGemini), Name: "G56 Google", Type: catwalk.TypeCompletions, BaseURL: "http://127.0.0.1:9",
 	})
-	code, out = u.call(t, http.MethodPost, path, proto.VerifyKeyRequest{ProviderID: "gmarker", APIKey: marker})
+	code, out = u.call(t, http.MethodPost, path, proto.VerifyKeyRequest{ProviderID: string(catwalk.InferenceProviderGemini), APIKey: marker})
 	require.Equal(t, http.StatusOK, code, "%s", out)
 	var google proto.VerifyKey
 	require.NoError(t, json.Unmarshal(out, &google))
 	require.False(t, google.OK)
-	require.Contains(t, google.Error, "failed to create request for provider gmarker")
+	require.Contains(t, google.Error, "failed to create request for provider "+string(catwalk.InferenceProviderGemini))
 	for _, form := range []string{marker, url.QueryEscape(marker), "G56keyMARKER"} {
 		require.NotContains(t, string(out), form, "the key is not in the answer")
 		require.NotContains(t, logs.String(), form, "the key is not in the logs")
@@ -245,7 +246,7 @@ func TestVerifyKey(t *testing.T) {
 		}
 	}()
 	mustWorkspace(t, g).Cfg.Config().Providers.Set("smarker", config.ProviderConfig{
-		ID: "smarker", Name: "G56 echo", Type: catwalk.TypeOpenAICompat, BaseURL: "http://" + ln.Addr().String() + "/v1",
+		ID: "smarker", Name: "G56 echo", Type: catwalk.TypeCompletions, BaseURL: "http://" + ln.Addr().String() + "/v1",
 	})
 	code, out = u.call(t, http.MethodPost, path, proto.VerifyKeyRequest{ProviderID: "smarker", APIKey: marker})
 	require.Equal(t, http.StatusOK, code, "%s", out)

@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/csync"
 	"github.com/charmbracelet/crush/internal/session"
@@ -52,7 +52,7 @@ func TestModelSettingsOnlyWaitForTheCurrentSession(t *testing.T) {
 				providers.Set(initial.Provider, config.ProviderConfig{
 					ID: initial.Provider,
 					Models: []catwalk.Model{
-						{ID: "first", CanReason: true, ReasoningLevels: []string{"high", "max"}},
+						{ID: "first", Reasoning: catwalk.Reasoning{Thinking: catwalk.ThinkingToggleable, EffortLevels: catwalk.NewEffortLevels("high", "max")}},
 						{ID: "second"},
 					},
 				})

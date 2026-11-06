@@ -11,7 +11,7 @@ import (
 	"github.com/charmbracelet/crush/internal/ui/dialog/auth"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/charmbracelet/crush/internal/ui/util"
@@ -349,7 +349,32 @@ func (m *UI) openAuthenticationDialogWithMethod(provider catwalk.Provider, model
 
 func (m *UI) currentModelSupportsImages() bool {
 	_, _, model, _ := m.shownModelInfo()
-	return model != nil && model.SupportsImages
+	return model != nil && model.Capabilities.Vision
+}
+
+// currentModelSupportsAudio reports whether the shown chat's model takes
+// audio attachments.
+func (m *UI) currentModelSupportsAudio() bool {
+	_, _, model, _ := m.shownModelInfo()
+	return model != nil && model.Capabilities.Audio
+}
+
+// currentModelMaxAttachments returns the maximum number of attachments the
+// shown chat's model accepts in a single request. Zero means the provider
+// does not enforce a hard limit.
+func (m *UI) currentModelMaxAttachments() int {
+	_, _, model, _ := m.shownModelInfo()
+	if model == nil {
+		return 0
+	}
+	return model.MaxAttachments
+}
+
+// attachmentsLimitReached reports whether the shown chat's model's
+// attachment limit is already exhausted by the pending attachments.
+func (m *UI) attachmentsLimitReached() bool {
+	limit := m.currentModelMaxAttachments()
+	return limit > 0 && len(m.attachments.List()) >= limit
 }
 
 // toggleThinking flips thinking for models without reasoning levels on the

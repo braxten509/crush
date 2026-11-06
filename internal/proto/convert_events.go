@@ -23,6 +23,7 @@ func PermissionRequestFromDomain(p permission.PermissionRequest) PermissionReque
 		Action:      p.Action,
 		Path:        p.Path,
 		Params:      p.Params,
+		Danger:      p.Danger,
 	}
 }
 
@@ -38,6 +39,7 @@ func PermissionRequestToDomain(p PermissionRequest) permission.PermissionRequest
 		Action:      p.Action,
 		Path:        p.Path,
 		Params:      p.Params,
+		Danger:      p.Danger,
 	}
 }
 
@@ -49,6 +51,7 @@ func PermissionNotificationFromDomain(n permission.PermissionNotification) Permi
 		ToolCallID: n.ToolCallID,
 		Granted:    n.Granted,
 		Denied:     n.Denied,
+		Cancelled:  n.Cancelled,
 	}
 }
 
@@ -60,6 +63,7 @@ func PermissionNotificationToDomain(n PermissionNotification) permission.Permiss
 		ToolCallID: n.ToolCallID,
 		Granted:    n.Granted,
 		Denied:     n.Denied,
+		Cancelled:  n.Cancelled,
 	}
 }
 

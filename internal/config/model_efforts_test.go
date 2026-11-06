@@ -3,20 +3,27 @@ package config
 import (
 	"testing"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/csync"
 	"github.com/stretchr/testify/require"
 )
 
 func effortsConfig() *Config {
 	cfg := &Config{Providers: csync.NewMap[string, ProviderConfig]()}
+	reasoning := func(defaultEffort string, levels ...string) catwalk.Reasoning {
+		return catwalk.Reasoning{
+			Thinking:           catwalk.ThinkingToggleable,
+			EffortLevels:       catwalk.NewEffortLevels(levels...),
+			DefaultEffortLevel: defaultEffort,
+		}
+	}
 	levels := []string{"low", "medium", "high", "xhigh", "max"}
 	cfg.Providers.Set("claude-code", ProviderConfig{ID: "claude-code", Models: []catwalk.Model{
-		{ID: "opus", CanReason: true, ReasoningLevels: levels, DefaultReasoningEffort: "high", DefaultMaxTokens: 32_000},
-		{ID: "sonnet", CanReason: true, ReasoningLevels: levels, DefaultReasoningEffort: "high", DefaultMaxTokens: 32_000},
+		{ID: "opus", Reasoning: reasoning("high", levels...), DefaultMaxTokens: 32_000},
+		{ID: "sonnet", Reasoning: reasoning("high", levels...), DefaultMaxTokens: 32_000},
 	}})
 	cfg.Providers.Set("openrouter", ProviderConfig{ID: "openrouter", Models: []catwalk.Model{
-		{ID: "moonshot/kimi-k3", CanReason: true, ReasoningLevels: []string{"low", "medium", "high"}, DefaultReasoningEffort: "medium"},
+		{ID: "moonshot/kimi-k3", Reasoning: reasoning("medium", "low", "medium", "high")},
 	}})
 	return cfg
 }

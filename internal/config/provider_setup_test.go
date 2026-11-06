@@ -7,7 +7,7 @@ import (
 	"os"
 	"testing"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/csync"
 	"github.com/charmbracelet/crush/internal/env"
 	"github.com/stretchr/testify/require"
@@ -653,7 +653,7 @@ func TestConfig_configureProvidersCustomProviderValidation(t *testing.T) {
 				"custom": {
 					APIKey:  "test-key",
 					BaseURL: "https://api.custom.com/v1",
-					Type:    catwalk.TypeOpenAI,
+					Type:    catwalk.TypeResponses,
 					Models: []catwalk.Model{{
 						ID: "test-model",
 					}},
@@ -681,7 +681,7 @@ func TestConfig_configureProvidersCustomProviderValidation(t *testing.T) {
 				"custom-anthropic": {
 					APIKey:  "test-key",
 					BaseURL: "https://api.anthropic.com/v1",
-					Type:    catwalk.TypeAnthropic,
+					Type:    catwalk.TypeMessages,
 					Models: []catwalk.Model{{
 						ID: "claude-3-sonnet",
 					}},
@@ -701,7 +701,7 @@ func TestConfig_configureProvidersCustomProviderValidation(t *testing.T) {
 		require.Equal(t, "custom-anthropic", customProvider.ID)
 		require.Equal(t, "test-key", customProvider.APIKey)
 		require.Equal(t, "https://api.anthropic.com/v1", customProvider.BaseURL)
-		require.Equal(t, catwalk.TypeAnthropic, customProvider.Type)
+		require.Equal(t, catwalk.TypeMessages, customProvider.Type)
 	})
 
 	t.Run("disabled custom provider is removed", func(t *testing.T) {
@@ -710,7 +710,7 @@ func TestConfig_configureProvidersCustomProviderValidation(t *testing.T) {
 				"custom": {
 					APIKey:  "test-key",
 					BaseURL: "https://api.custom.com/v1",
-					Type:    catwalk.TypeOpenAI,
+					Type:    catwalk.TypeResponses,
 					Disable: true,
 					Models: []catwalk.Model{{
 						ID: "test-model",
@@ -1219,7 +1219,7 @@ func TestConfig_configureProviders_LiteralEmptyHeaderDropped(t *testing.T) {
 			"my-llm": {
 				APIKey:  "test-key",
 				BaseURL: "https://my-llm.example.com/v1",
-				Type:    catwalk.TypeOpenAI,
+				Type:    catwalk.TypeResponses,
 				Models:  []catwalk.Model{{ID: "m"}},
 				ExtraHeaders: map[string]string{
 					"X-Custom": "",
@@ -1407,7 +1407,7 @@ func TestConfig_configureProviders_UnsetAzureEndpointSkipsProvider(t *testing.T)
 // no cost is counted and the apps don't list it as a per-use API.
 func TestConfig_configureProviders_KimiCodingIsFlatRate(t *testing.T) {
 	knownProviders := []catwalk.Provider{
-		{ID: catwalk.InferenceKimiCoding, APIKey: "$KIMI_API_KEY", APIEndpoint: "https://api.kimi.com/coding", Type: catwalk.TypeAnthropic, Models: []catwalk.Model{{ID: "k3.1-pro"}}},
+		{ID: catwalk.InferenceKimiCoding, APIKey: "$KIMI_API_KEY", APIEndpoint: "https://api.kimi.com/coding", Type: catwalk.TypeMessages, Models: []catwalk.Model{{ID: "k3.1-pro"}}},
 		{ID: "openai", APIKey: "$OPENAI_API_KEY", APIEndpoint: "https://api.openai.com/v1", Models: []catwalk.Model{{ID: "test-model"}}},
 	}
 	cfg := &Config{}

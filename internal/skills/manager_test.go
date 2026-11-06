@@ -199,7 +199,7 @@ func TestManager_SetEnabledPublishes(t *testing.T) {
 
 	wd := t.TempDir()
 	writeTestSkill(t, filepath.Join(wd, ".agents", "skills"), "toggle-skill", "Toggled in this test.")
-	store, err := config.Init(wd, "", false)
+	store, err := config.Init(t.Context(), wd, "", false)
 	require.NoError(t, err)
 
 	mgr := NewManager(nil, nil, nil, WithWorkingDir(wd))

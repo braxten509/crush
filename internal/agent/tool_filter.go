@@ -38,16 +38,28 @@ func filterToolsForChannel(agentTools []fantasy.AgentTool, channel string, state
 }
 
 // callTools is the agent's tool list for a call: scoped to its channel, and
-// without the interactive-only question tool for a non-interactive call. An
-// interactive coordinator's agents have that tool, but nothing answers a
-// [WithNonInteractive] prompt's questions.
+// with the delegation tools that fit how the call reports back. An
+// interactive coordinator's agents carry both kinds: a TUI turn delegates
+// through the detached dispatch tools, whose reports arrive as later turns,
+// so it does not get the blocking agent tool; a [WithNonInteractive] prompt
+// ends before a report could arrive, so it delegates by blocking and gets
+// neither the dispatch tools nor the question tool, which nothing answers.
 func (a *sessionAgent) callTools(call SessionAgentCall) []fantasy.AgentTool {
 	agentTools := filterToolsForChannel(a.tools.Copy(), call.Channel, mcp.GetStates())
 	if !call.NonInteractive {
-		return agentTools
+		if !slices.ContainsFunc(agentTools, func(tool fantasy.AgentTool) bool { return tool.Info().Name == AgentDispatchToolName }) {
+			return agentTools
+		}
+		return slices.DeleteFunc(agentTools, func(tool fantasy.AgentTool) bool {
+			return tool.Info().Name == AgentToolName
+		})
 	}
 	return slices.DeleteFunc(agentTools, func(tool fantasy.AgentTool) bool {
-		return tool.Info().Name == tools.QuestionToolName
+		switch tool.Info().Name {
+		case tools.QuestionToolName, AgentDispatchToolName, AgentSendToolName, AgentStatusToolName, AgentStopToolName:
+			return true
+		}
+		return false
 	})
 }
 

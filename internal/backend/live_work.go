@@ -3,7 +3,7 @@ package backend
 import (
 	"errors"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	"github.com/charmbracelet/crush/internal/agent/tools"
@@ -23,7 +23,7 @@ func (b *Backend) ListHelpers(workspaceID, sessionID string) ([]proto.Helper, er
 	tasks := agent.SessionTasks(sessionID)
 	out := make([]proto.Helper, 0, len(tasks))
 	for _, t := range tasks {
-		out = append(out, proto.HelperFromTask(t))
+		out = append(out, agent.HelperFromTask(t))
 	}
 	return out, nil
 }

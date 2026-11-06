@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/fallback"
@@ -37,7 +37,7 @@ func writePendingTestConfig(t *testing.T, workingDir string) {
 func pendingTestCoordinator(t *testing.T, env fakeEnv, clock *fakeClock) *coordinator {
 	t.Helper()
 	writePendingTestConfig(t, env.workingDir)
-	cfg, err := config.Init(env.workingDir, "", false)
+	cfg, err := config.Init(t.Context(), env.workingDir, "", false)
 	require.NoError(t, err)
 	c := &coordinator{cfg: cfg, sessions: env.sessions, messages: env.messages, interactive: true}
 	c.limitRetries.now, c.limitRetries.poll = clock.Now, time.Millisecond

@@ -49,6 +49,7 @@ func (s *stubCoordinator) QueuedPrompts(string) int          { return 0 }
 func (s *stubCoordinator) QueuedPromptsList(string) []string { return nil }
 func (s *stubCoordinator) ClearQueue(string)                 {}
 func (s *stubCoordinator) Interrupt(string)                  {}
+func (s *stubCoordinator) AddNote(string, string)            {}
 func (s *stubCoordinator) Summarize(context.Context, string) error {
 	return nil
 }
@@ -57,6 +58,8 @@ func (s *stubCoordinator) UpdateModels(context.Context) error            { retur
 func (s *stubCoordinator) SetMainAgent(string) error                     { return nil }
 func (*stubCoordinator) MainAgentName() string                           { return "coder" }
 func (s *stubCoordinator) GenerateTitle(context.Context, string, string) {}
+func (s *stubCoordinator) SetHostContext(proto.HostContext)              {}
+func (s *stubCoordinator) HostContext() proto.HostContext                { return proto.HostContext{} }
 
 // stubSessions is a minimal session.Service that returns a fixed list
 // (and supports Get by ID). All other methods return zero values; the
@@ -338,3 +341,6 @@ func TestSessionGetIncludesAttachedClients(t *testing.T) {
 }
 
 func (s *stubCoordinator) RecallQueuedPrompt(string) *message.QueuedPrompt { return nil }
+func (*stubCoordinator) ListSettledMessages(context.Context, string) ([]message.Message, error) {
+	return nil, nil
+}

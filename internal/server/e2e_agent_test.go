@@ -218,12 +218,15 @@ func (c *scriptedCoordinator) QueuedPrompts(string) int                      { r
 func (c *scriptedCoordinator) QueuedPromptsList(string) []string             { return nil }
 func (c *scriptedCoordinator) ClearQueue(string)                             {}
 func (c *scriptedCoordinator) Interrupt(string)                              {}
+func (c *scriptedCoordinator) AddNote(string, string)                        {}
 func (c *scriptedCoordinator) Summarize(context.Context, string) error       { return nil }
 func (c *scriptedCoordinator) Model() agent.Model                            { return agent.Model{} }
 func (c *scriptedCoordinator) UpdateModels(context.Context) error            { return nil }
 func (c *scriptedCoordinator) SetMainAgent(string) error                     { return nil }
 func (*scriptedCoordinator) MainAgentName() string                           { return "coder" }
 func (c *scriptedCoordinator) GenerateTitle(context.Context, string, string) {}
+func (c *scriptedCoordinator) SetHostContext(proto.HostContext)              {}
+func (c *scriptedCoordinator) HostContext() proto.HostContext                { return proto.HostContext{} }
 
 // agentE2EHarness extends the SSE harness with a scripted coordinator
 // wired into the workspace's embedded app.App, so POST /agent drives a
@@ -749,3 +752,6 @@ func TestE2E_CancelOfActiveRunAlsoCancelsAcceptedFollowUp(t *testing.T) {
 }
 
 func (c *scriptedCoordinator) RecallQueuedPrompt(string) *message.QueuedPrompt { return nil }
+func (*scriptedCoordinator) ListSettledMessages(context.Context, string) ([]message.Message, error) {
+	return nil, nil
+}

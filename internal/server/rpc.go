@@ -138,6 +138,10 @@ func errorInfo(err error) (status int, code, field string) {
 		errors.Is(err, backend.ErrUnknownCommand),
 		errors.Is(err, backend.ErrInvalidClientID):
 		return http.StatusBadRequest, "bad_request", ""
+	case errors.Is(err, backend.ErrInvalidTheme):
+		// The message names every offending color (or the unknown base
+		// theme), so a host can fix its theme mapping from the response.
+		return http.StatusBadRequest, "invalid_theme", ""
 	case errors.Is(err, backend.ErrAgentBusy):
 		// Switching the main agent mid-run could strand the run's
 		// queued prompts on the previous agent; mirror the TUI's own

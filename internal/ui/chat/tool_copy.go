@@ -206,6 +206,33 @@ func copyAgentParams(params agent.AgentParams) string {
 	return fmt.Sprintf("**Task:**\n%s", params.Prompt)
 }
 
+// copyAgentDispatchParams formats agent_dispatch parameters for the
+// clipboard.
+func copyAgentDispatchParams(params agent.AgentDispatchParams) string {
+	return fmt.Sprintf("**Task (%s):**\n%s", params.Label, params.Prompt)
+}
+
+// copyAgentSendParams formats agent_send parameters for the clipboard.
+func copyAgentSendParams(params agent.AgentSendParams) string {
+	return fmt.Sprintf("**To %s:**\n%s", params.Label, params.Message)
+}
+
+// copyAgentStatusParams formats agent_status parameters for the clipboard.
+func copyAgentStatusParams(params agent.AgentStatusParams) string {
+	if params.Label == "" {
+		return "**Subagents:** all"
+	}
+	return fmt.Sprintf("**Subagent:** %s", params.Label)
+}
+
+// copyAgentStopParams formats agent_stop parameters for the clipboard.
+func copyAgentStopParams(params agent.AgentStopParams) string {
+	if params.Reason == "" {
+		return fmt.Sprintf("**Stop:** %s", params.Label)
+	}
+	return fmt.Sprintf("**Stop:** %s\n**Reason:** %s", params.Label, params.Reason)
+}
+
 // copyDiagnosticsParams formats Diagnostics parameters for the clipboard.
 // The input is not shown.
 func copyDiagnosticsParams(string) (string, bool) {

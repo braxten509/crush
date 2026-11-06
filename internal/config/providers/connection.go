@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/config/resolve"
 )
 
@@ -93,52 +94,25 @@ func connectionTestRequest(e Endpoint, apiKey string, resolver resolve.VariableR
 	providerID := catwalk.InferenceProvider(e.ID)
 	headers = make(map[string]string)
 
-	switch providerID {
-	case catwalk.InferenceProviderMiniMax, catwalk.InferenceProviderMiniMaxChina:
+	// Providers with an SDK of their own are told by their catalog ID or,
+	// for a custom entry configured before catwalk v3, by the v2 type that
+	// named that SDK.
+	is := func(t catwalk.Type, ids ...catwalk.InferenceProvider) bool {
+		return (t != "" && e.Type == t) || slices.Contains(ids, providerID)
+	}
+
+	switch {
+	case is("", catwalk.InferenceProviderMiniMax, catwalk.InferenceProviderMiniMaxChina):
 		// NOTE: MiniMax has no good endpoint we can use to validate the API key.
 		return "", nil, true, nil
-	case catwalk.InferenceProviderAlibabaSingapore:
+	case is("", catwalk.InferenceProviderAlibabaSingapore):
 		// NOTE: Alibaba has no good endpoint we can use to validate the API key.
 		// Let's at least check the pattern.
 		if !strings.HasPrefix(apiKey, "sk-") {
 			return "", nil, true, &KeyFormatError{fmt.Sprintf("invalid API key format for provider %s", e.ID)}
 		}
 		return "", nil, true, nil
-	}
-
-	switch e.Type {
-	case catwalk.TypeOpenAI, catwalk.TypeOpenAICompat, catwalk.TypeOpenRouter:
-		baseURL, _ := resolver.ResolveValue(e.BaseURL)
-		baseURL = cmp.Or(baseURL, "https://api.openai.com/v1")
-
-		switch providerID {
-		case catwalk.InferenceProviderOpenRouter:
-			testURL = baseURL + "/credits"
-		case catwalk.InferenceProviderOpenCodeGo:
-			testURL = strings.Replace(baseURL, "/go", "", 1) + "/models"
-		default:
-			testURL = baseURL + "/models"
-		}
-
-		headers["Authorization"] = "Bearer " + apiKey
-	case catwalk.TypeAnthropic:
-		baseURL, _ := resolver.ResolveValue(e.BaseURL)
-		baseURL = cmp.Or(baseURL, "https://api.anthropic.com/v1")
-
-		switch providerID {
-		case catwalk.InferenceKimiCoding:
-			testURL = baseURL + "/v1/models"
-		default:
-			testURL = baseURL + "/models"
-		}
-
-		headers["x-api-key"] = apiKey
-		headers["anthropic-version"] = "2023-06-01"
-	case catwalk.TypeGoogle:
-		baseURL, _ := resolver.ResolveValue(e.BaseURL)
-		baseURL = cmp.Or(baseURL, "https://generativelanguage.googleapis.com")
-		testURL = baseURL + "/v1beta/models?key=" + url.QueryEscape(apiKey)
-	case catwalk.TypeBedrock:
+	case is("bedrock", catwalk.InferenceProviderBedrock, catwalk.InferenceProviderBedrockEurope):
 		// NOTE: Bedrock has a `/foundation-models` endpoint that we could in
 		// theory use, but apparently the authorization is region-specific,
 		// so it's not so trivial.
@@ -146,12 +120,49 @@ func connectionTestRequest(e Endpoint, apiKey string, resolver resolve.VariableR
 			return "", nil, true, nil
 		}
 		return "", nil, true, &KeyFormatError{"not a valid bedrock api key"}
-	case catwalk.TypeVercel:
+	case is("vercel", catwalk.InferenceProviderVercel):
 		// NOTE: Vercel does not validate API keys on the `/models` endpoint.
 		if strings.HasPrefix(apiKey, "vck_") { // Vercel API keys
 			return "", nil, true, nil
 		}
 		return "", nil, true, &KeyFormatError{"not a valid vercel api key"}
+	case is("google", catwalk.InferenceProviderGemini):
+		baseURL, _ := resolver.ResolveValue(e.BaseURL)
+		baseURL = cmp.Or(baseURL, "https://generativelanguage.googleapis.com")
+		return baseURL + "/v1beta/models?key=" + url.QueryEscape(apiKey), headers, false, nil
+	}
+
+	// The models API endpoint is determined by the provider type, which
+	// describes the API format the provider speaks.
+	switch NormalizeType(e.Type) {
+	case catwalk.TypeMessages:
+		baseURL, _ := resolver.ResolveValue(e.BaseURL)
+		baseURL = cmp.Or(baseURL, "https://api.anthropic.com")
+		// The Messages API lists models at /v1/models. An endpoint given
+		// with its /v1 (Anthropic's v2-era catalog entry) or without it
+		// (Kimi Coding's https://api.kimi.com/coding) both land there.
+		baseURL = strings.TrimSuffix(strings.TrimRight(baseURL, "/"), "/v1")
+		testURL = baseURL + "/v1/models"
+
+		headers["x-api-key"] = apiKey
+		headers["anthropic-version"] = "2023-06-01"
+	default:
+		// Completions, responses, and custom provider types all expose
+		// an OpenAI-style /models endpoint.
+		baseURL, _ := resolver.ResolveValue(e.BaseURL)
+		baseURL = cmp.Or(baseURL, "https://api.openai.com/v1")
+
+		switch providerID {
+		case catwalk.InferenceProviderOpenRouter:
+			testURL = baseURL + "/credits"
+		case catwalk.InferenceProviderOpenCodeGo:
+			// OpenCode Go lists its models on the Zen endpoint.
+			testURL = strings.Replace(baseURL, "/go", "", 1) + "/models"
+		default:
+			testURL = baseURL + "/models"
+		}
+
+		headers["Authorization"] = "Bearer " + apiKey
 	}
 	return testURL, headers, false, nil
 }

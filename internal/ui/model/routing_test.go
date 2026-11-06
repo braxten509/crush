@@ -216,7 +216,7 @@ func TestRoutingCompletionsBeatCancel(t *testing.T) {
 
 	u := newRoutingUI(t)
 	setBusy(u)
-	_ = u.mention.begin(0, image.Point{}, 1, 10)
+	_ = u.mention.begin(0, image.Point{}, 1, 10, nil)
 	u.Update(press("esc"))
 	require.False(t, interrupting(u), "esc closes the completions first")
 }

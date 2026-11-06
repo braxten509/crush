@@ -5,7 +5,6 @@ import (
 	_ "embed"
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/filetracker"
@@ -148,13 +147,7 @@ func processMultiEditWithCreation(edit editContext, params MultiEditParams, call
 	if _, err := os.Stat(params.FilePath); err == nil {
 		return fantasy.NewTextErrorResponse(fmt.Sprintf("file already exists: %s", params.FilePath)), nil
 	} else if !os.IsNotExist(err) {
-		return fantasy.ToolResponse{}, fmt.Errorf("failed to access file: %w", err)
-	}
-
-	// Create parent directories
-	dir := filepath.Dir(params.FilePath)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fantasy.ToolResponse{}, fmt.Errorf("failed to create parent directories: %w", err)
+		return fantasy.NewTextErrorResponse(fmt.Sprintf("Failed to access file: %s", err)), nil
 	}
 
 	currentContent, failedEdits, whitespaceCorrected := applyEditsToContent(firstEdit.NewString, params.Edits[1:], 1)
@@ -201,14 +194,14 @@ func processMultiEditWithCreation(edit editContext, params MultiEditParams, call
 		return deniedResponse(metadata), nil
 	}
 
-	// Write the file
-	err = os.WriteFile(params.FilePath, []byte(currentContent), 0o644)
-	if err != nil {
-		return fantasy.ToolResponse{}, fmt.Errorf("failed to write file: %w", err)
+	if err = writeFileWithParents(params.FilePath, []byte(currentContent)); err != nil {
+		return fantasy.NewTextErrorResponse(fmt.Sprintf("Failed to write file: %s", err)), nil
 	}
 
+	// The file is written; a history hiccup is logged inside recordNewFile
+	// and must not end the agent's turn.
 	if err := recordNewFile(edit, sessionID, params.FilePath, currentContent); err != nil {
-		return fantasy.ToolResponse{}, err
+		return fantasy.NewTextErrorResponse(fmt.Sprintf("File created, but recording it failed: %s", err)), nil
 	}
 
 	var message string
@@ -291,7 +284,7 @@ func processMultiEditExistingFile(edit editContext, params MultiEditParams, call
 	}
 
 	if err := commitFileChange(edit, sessionID, params.FilePath, oldContent, writeContent); err != nil {
-		return fantasy.ToolResponse{}, err
+		return fantasy.NewTextErrorResponse(fmt.Sprintf("Failed to write file: %s", err)), nil
 	}
 
 	var message string

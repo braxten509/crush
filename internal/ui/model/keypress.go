@@ -8,6 +8,7 @@ import (
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/crush/internal/permission"
 	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/completions"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
@@ -349,7 +350,7 @@ func (m *UI) submitEditor() (cmd tea.Cmd, done bool) {
 
 	if m.bangMode && value != "" {
 		m.bangMode = false
-		m.setEditorPrompt(m.yoloModeCached())
+		m.setEditorPrompt(m.permModeCached())
 		m.randomizePlaceholders()
 		m.historyReset()
 		return tea.Batch(m.runShellCommand(value), m.savePrompt("!"+value)), true
@@ -391,7 +392,7 @@ func (m *UI) typeInEditor(msg tea.KeyPressMsg) []tea.Cmd {
 	if m.bangMode && m.bangWasEmpty && msg.Code == tea.KeyBackspace {
 		m.bangMode = false
 		m.bangWasEmpty = false
-		m.setEditorPrompt(m.yoloModeCached())
+		m.setEditorPrompt(m.permModeCached())
 		return nil
 	}
 
@@ -409,7 +410,7 @@ func (m *UI) typeInEditor(msg tea.KeyPressMsg) []tea.Cmd {
 			}
 		} else {
 			depth, limit := m.com.Config().Options.TUI.Completions.Limits()
-			cmds = append(cmds, m.mention.begin(curIdx, m.completionsPosition(), depth, limit))
+			cmds = append(cmds, m.mention.begin(curIdx, m.completionsPosition(), depth, limit, hostOpenFiles(m.com.Workspace)))
 		}
 	}
 
@@ -455,7 +456,7 @@ func (m *UI) syncBangModeAfterTyping(curValue string) {
 		stripped := trimmedNew[1:]
 		m.textarea.SetValue(stripped)
 		m.textarea.SetCursorColumn(max(0, col-(len(newVal)-len(stripped))))
-		m.setEditorPrompt(m.yoloModeCached())
+		m.setEditorPrompt(m.permModeCached())
 	case m.bangMode && newVal == "" && curValue != "":
 		// Just cleared last character; mark empty, stay in bang mode.
 		m.bangWasEmpty = true
@@ -625,7 +626,8 @@ func (m *UI) handleGlobalKey(msg tea.KeyPressMsg) (cmd tea.Cmd, ok bool) {
 		if m.state != uiChat || !m.hasSession() {
 			return nil, false
 		}
-		return m.chat.ScrollToBottomAndSelectLast(), true
+		m.chat.ScrollToBottomAndSelectLast()
+		return nil, true
 	case key.Matches(msg, m.keyMap.Chat.TogglePills):
 		if m.state != uiChat || !m.hasSession() {
 			return nil, false
@@ -652,7 +654,7 @@ func (m *UI) handleGlobalKey(msg tea.KeyPressMsg) (cmd tea.Cmd, ok bool) {
 			// switches straight to YOLO coding.
 			return m.switchPlanToYolo(), true
 		}
-		if m.toggleYoloMode() {
+		if m.toggleMode(permission.PermissionModeYolo) {
 			return util.CmdHandler(util.InfoMsg{Type: util.InfoTypeYolo, Msg: yoloModeBannerMsg}), true
 		}
 		return util.ReportInfo("Yolo mode disabled"), true

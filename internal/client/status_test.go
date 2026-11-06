@@ -96,6 +96,37 @@ func clientCalls() map[string]func(context.Context, *Client) error {
 			_, err := c.GetPermissionsSkipRequests(ctx, ws)
 			return err
 		},
+		"SetPermissionMode": func(ctx context.Context, c *Client) error {
+			return c.SetPermissionMode(ctx, ws, proto.WorkspacePermissionModeNormal)
+		},
+		"AnswerPinentry": func(ctx context.Context, c *Client) error {
+			_, err := c.AnswerPinentry(ctx, ws, proto.PinentryAnswer{})
+			return err
+		},
+		"CancelPinentry": func(ctx context.Context, c *Client) error {
+			_, err := c.CancelPinentry(ctx, ws, proto.PinentryCancel{})
+			return err
+		},
+		"AnswerSSH": func(ctx context.Context, c *Client) error {
+			_, err := c.AnswerSSH(ctx, ws, proto.SSHAnswer{})
+			return err
+		},
+		"CancelSSH": func(ctx context.Context, c *Client) error {
+			_, err := c.CancelSSH(ctx, ws, proto.SSHCancel{})
+			return err
+		},
+		"SetHostTheme": func(ctx context.Context, c *Client) error {
+			_, err := c.SetHostTheme(ctx, ws, nil)
+			return err
+		},
+		"GetHostTheme": func(ctx context.Context, c *Client) error {
+			_, err := c.GetHostTheme(ctx, ws)
+			return err
+		},
+		"GetHostContext": func(ctx context.Context, c *Client) error {
+			_, err := c.GetHostContext(ctx, ws)
+			return err
+		},
 		"GetConfig": func(ctx context.Context, c *Client) error { _, err := c.GetConfig(ctx, ws); return err },
 		"SaveSession": func(ctx context.Context, c *Client) error {
 			_, err := c.SaveSession(ctx, ws, proto.Session{ID: sid})

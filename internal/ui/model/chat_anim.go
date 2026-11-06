@@ -112,20 +112,28 @@ func (m *Chat) SetAnimationsAllowed(allowed bool) {
 	m.animAllowed = allowed
 }
 
+// SetExternalAnimation records whether something outside the transcript is
+// animating, such as the header's subagent spinner. The clock is shared, and
+// its gate otherwise only looks at items currently on screen, so an animation
+// living in the chrome would never keep it running.
+func (m *Chat) SetExternalAnimation(animating bool) {
+	m.externalAnimation = animating
+}
+
 // EnsureAnimating starts the shared animation clock if a visible item is
 // spinning and no tick is outstanding. Update calls it in its tail on
 // every message so any change that puts a spinner on screen (new message,
 // tool update, scroll, session load) starts the clock without per-call-site
 // wiring. It is the only place a tick is armed apart from Tick itself.
 func (m *Chat) EnsureAnimating() tea.Cmd {
-	if !m.animAllowed {
+	if !m.animAllowed && !m.externalAnimation {
 		m.animRunning = false
 		return nil
 	}
 	if m.animRunning && m.now().Sub(m.animArmedAt) < animClockLostAfter {
 		return nil
 	}
-	if !m.hasVisibleAnimation() {
+	if (!m.animAllowed || !m.hasVisibleAnimation()) && !m.externalAnimation {
 		m.animRunning = false
 		return nil
 	}
@@ -170,11 +178,11 @@ func (m *Chat) Tick(msg animTickMsg) (changed bool, cmd tea.Cmd) {
 		return false, nil
 	}
 	m.animRunning = false
-	if m.list.Len() == 0 {
-		return false, nil
-	}
 	spinning := false
-	startIdx, endIdx := m.list.VisibleItemIndices()
+	startIdx, endIdx := 0, -1
+	if m.animAllowed && m.list.Len() > 0 {
+		startIdx, endIdx = m.list.VisibleItemIndices()
+	}
 	for idx := startIdx; idx <= endIdx; idx++ {
 		animatable, ok := m.list.ItemAt(idx).(chat.Animatable)
 		if !ok || !animatable.Spinning() {
@@ -185,7 +193,7 @@ func (m *Chat) Tick(msg animTickMsg) (changed bool, cmd tea.Cmd) {
 			changed = true
 		}
 	}
-	if !spinning {
+	if !spinning && !m.externalAnimation {
 		return changed, nil
 	}
 	return changed, m.armAnimClock()

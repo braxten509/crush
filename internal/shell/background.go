@@ -1,52 +1,35 @@
 package shell
 
 import (
-	"bytes"
+	"cmp"
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/charmbracelet/crush/internal/csync"
 	"github.com/charmbracelet/crush/internal/filechange"
 )
 
 const (
-	// MaxBackgroundJobs is the maximum number of concurrent background jobs allowed
+	// MaxBackgroundJobs is the default number of background jobs that may
+	// run at once. It is used when Start is given no positive limit of its
+	// own (the configured limit, see config.Options.GetMaxBackgroundJobs).
 	MaxBackgroundJobs = 50
-	// MaxRetainedCompletedJobs bounds how many finished jobs keep their output
-	// before the oldest ones are dropped early.
-	MaxRetainedCompletedJobs = 200
-	// CompletedJobRetentionMinutes is how long to keep completed jobs before auto-cleanup (8 hours)
-	CompletedJobRetentionMinutes = 8 * 60
+	// MaxFinishedJobs bounds how many finished jobs keep their output
+	// readable. The oldest are dropped first.
+	MaxFinishedJobs = 250
+	// MaxRetainedCompletedJobs is the older name for MaxFinishedJobs.
+	MaxRetainedCompletedJobs = MaxFinishedJobs
+	// CompletedJobRetention is how long a finished job's output stays
+	// readable.
+	CompletedJobRetention = 8 * time.Hour
+	// CompletedJobRetentionMinutes is CompletedJobRetention in minutes.
+	CompletedJobRetentionMinutes = int(CompletedJobRetention / time.Minute)
 )
-
-// syncBuffer is a thread-safe wrapper around bytes.Buffer.
-type syncBuffer struct {
-	buf bytes.Buffer
-	mu  sync.RWMutex
-}
-
-func (sb *syncBuffer) Write(p []byte) (n int, err error) {
-	sb.mu.Lock()
-	defer sb.mu.Unlock()
-	return sb.buf.Write(p)
-}
-
-func (sb *syncBuffer) WriteString(s string) (n int, err error) {
-	sb.mu.Lock()
-	defer sb.mu.Unlock()
-	return sb.buf.WriteString(s)
-}
-
-func (sb *syncBuffer) String() string {
-	sb.mu.RLock()
-	defer sb.mu.RUnlock()
-	return sb.buf.String()
-}
 
 // BackgroundShell represents a shell running in the background.
 type BackgroundShell struct {
@@ -58,8 +41,8 @@ type BackgroundShell struct {
 	WorkingDir  string
 	ctx         context.Context
 	cancel      context.CancelFunc
-	stdout      *syncBuffer
-	stderr      *syncBuffer
+	stdout      *cappedBuffer
+	stderr      *cappedBuffer
 	done        chan struct{}
 	exitErr     error
 	review      *filechange.Review
@@ -68,10 +51,11 @@ type BackgroundShell struct {
 
 // BackgroundShellManager manages background shell instances.
 type BackgroundShellManager struct {
-	shells *csync.Map[string, *BackgroundShell]
-	// startMu makes Start's limit check and its listing of the new job one
-	// step, so jobs started at once can't pass the limit together.
-	startMu sync.Mutex
+	// mu guards shells. Start holds it across its limit check and the
+	// listing of the new job, so jobs started at once can't pass the limit
+	// together.
+	mu     sync.Mutex
+	shells map[string]*BackgroundShell
 }
 
 var (
@@ -82,9 +66,7 @@ var (
 
 // newBackgroundShellManager creates a new BackgroundShellManager instance.
 func newBackgroundShellManager() *BackgroundShellManager {
-	return &BackgroundShellManager{
-		shells: csync.NewMap[string, *BackgroundShell](),
-	}
+	return &BackgroundShellManager{shells: map[string]*BackgroundShell{}}
 }
 
 // GetBackgroundShellManager returns the singleton background shell manager.
@@ -111,15 +93,21 @@ func leftoverWait(ctx context.Context) time.Duration {
 	return wait
 }
 
-// Start creates and starts a new background shell with the given command.
-func (m *BackgroundShellManager) Start(ctx context.Context, workingDir string, blockFuncs []BlockFunc, command string, description string, extraEnv ...string) (*BackgroundShell, error) {
-	// Only running jobs count toward the limit. Finished jobs are kept for
-	// their output, but must never block new work.
-	m.startMu.Lock()
-	defer m.startMu.Unlock()
-	m.Cleanup()
-	if running := m.running(); running >= MaxBackgroundJobs {
-		return nil, fmt.Errorf("maximum number of running background jobs (%d) reached. Please stop or wait for some jobs to complete", MaxBackgroundJobs)
+// Start creates and starts a new background shell with the given command,
+// unless maxJobs jobs are already running. A maxJobs of zero or less means
+// the default, MaxBackgroundJobs. Only running jobs count toward the limit:
+// finished jobs are kept for their output, but must never block new work.
+// extraEnv is added to this job's environment only.
+func (m *BackgroundShellManager) Start(ctx context.Context, workingDir string, blockFuncs []BlockFunc, command, description string, maxJobs int, extraEnv ...string) (*BackgroundShell, error) {
+	if maxJobs <= 0 {
+		maxJobs = MaxBackgroundJobs
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if running := m.prune(); running >= maxJobs {
+		return nil, fmt.Errorf("maximum number of running background jobs (%d) reached. Please stop or wait for some jobs to complete", maxJobs)
 	}
 
 	id := fmt.Sprintf("%03X", idCounter.Add(1))
@@ -141,12 +129,12 @@ func (m *BackgroundShellManager) Start(ctx context.Context, workingDir string, b
 		Shell:       shell,
 		ctx:         shellCtx,
 		cancel:      cancel,
-		stdout:      &syncBuffer{},
-		stderr:      &syncBuffer{},
+		stdout:      newCappedBuffer(maxKeptOutput),
+		stderr:      newCappedBuffer(maxKeptOutput),
 		done:        make(chan struct{}),
 	}
 
-	m.shells.Set(id, bgShell)
+	m.shells[id] = bgShell
 
 	go func() {
 		defer close(bgShell.done)
@@ -163,28 +151,78 @@ func (m *BackgroundShellManager) Start(ctx context.Context, workingDir string, b
 	return bgShell, nil
 }
 
-// Get retrieves a background shell by ID.
-func (m *BackgroundShellManager) Get(id string) (*BackgroundShell, bool) {
-	return m.shells.Get(id)
+// prune drops finished jobs that are past retention or beyond
+// MaxFinishedJobs, and reports how many jobs are still running. Callers
+// must hold m.mu.
+func (m *BackgroundShellManager) prune() (running int) {
+	cutoff := time.Now().Add(-CompletedJobRetention).Unix()
+	var finished []*BackgroundShell
+	for id, shell := range m.shells {
+		switch at := shell.completedAt.Load(); {
+		case at == 0:
+			running++
+		case at < cutoff:
+			delete(m.shells, id)
+		default:
+			finished = append(finished, shell)
+		}
+	}
+
+	if over := len(finished) - MaxFinishedJobs; over > 0 {
+		slices.SortFunc(finished, func(a, b *BackgroundShell) int {
+			return cmp.Compare(a.completedAt.Load(), b.completedAt.Load())
+		})
+		for _, shell := range finished[:over] {
+			delete(m.shells, shell.ID)
+		}
+	}
+	return running
 }
 
-// Remove removes a background shell from the manager without terminating it.
-// This is useful when a shell has already completed and you just want to clean up tracking.
-func (m *BackgroundShellManager) Remove(id string) error {
-	_, ok := m.shells.Take(id)
+// Cleanup drops finished jobs that are past retention or beyond
+// MaxFinishedJobs (oldest first) and reports how many it dropped. Start
+// already does this before every new job; Cleanup is for callers that want
+// it done on its own.
+func (m *BackgroundShellManager) Cleanup() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	before := len(m.shells)
+	m.prune()
+	return before - len(m.shells)
+}
+
+// take removes and returns the shell with the given ID.
+func (m *BackgroundShellManager) take(id string) (*BackgroundShell, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	shell, ok := m.shells[id]
 	if !ok {
-		return fmt.Errorf("background shell not found: %s", id)
+		return nil, fmt.Errorf("background shell not found: %s", id)
 	}
-	return nil
+	delete(m.shells, id)
+	return shell, nil
+}
+
+// Get retrieves a background shell by ID.
+func (m *BackgroundShellManager) Get(id string) (*BackgroundShell, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	shell, ok := m.shells[id]
+	return shell, ok
+}
+
+// Remove stops tracking a background shell without terminating it.
+func (m *BackgroundShellManager) Remove(id string) error {
+	_, err := m.take(id)
+	return err
 }
 
 // Kill terminates a background shell by ID.
 func (m *BackgroundShellManager) Kill(id string) error {
-	shell, ok := m.shells.Take(id)
-	if !ok {
-		return fmt.Errorf("background shell not found: %s", id)
+	shell, err := m.take(id)
+	if err != nil {
+		return err
 	}
-
 	shell.cancel()
 	<-shell.done
 	return nil
@@ -199,64 +237,18 @@ type BackgroundShellInfo struct {
 
 // List returns all background shell IDs.
 func (m *BackgroundShellManager) List() []string {
-	ids := make([]string, 0, m.shells.Len())
-	for id := range m.shells.Seq2() {
-		ids = append(ids, id)
-	}
-	return ids
-}
-
-// Cleanup removes completed jobs that have been finished for more than the retention period
-func (m *BackgroundShellManager) Cleanup() int {
-	now := time.Now().Unix()
-	retentionSeconds := int64(CompletedJobRetentionMinutes * 60)
-
-	var toRemove []string
-	for shell := range m.shells.Seq() {
-		completedAt := shell.completedAt.Load()
-		if completedAt > 0 && now-completedAt > retentionSeconds {
-			toRemove = append(toRemove, shell.ID)
-		}
-	}
-
-	// Past the retention cap, drop the oldest finished jobs first.
-	var completed []*BackgroundShell
-	for shell := range m.shells.Seq() {
-		if shell.completedAt.Load() > 0 && !slices.Contains(toRemove, shell.ID) {
-			completed = append(completed, shell)
-		}
-	}
-	if extra := len(completed) - MaxRetainedCompletedJobs; extra > 0 {
-		slices.SortFunc(completed, func(a, b *BackgroundShell) int {
-			return int(a.completedAt.Load() - b.completedAt.Load())
-		})
-		for _, shell := range completed[:extra] {
-			toRemove = append(toRemove, shell.ID)
-		}
-	}
-
-	for _, id := range toRemove {
-		m.Remove(id)
-	}
-
-	return len(toRemove)
-}
-
-func (m *BackgroundShellManager) running() int {
-	count := 0
-	for shell := range m.shells.Seq() {
-		if !shell.IsDone() {
-			count++
-		}
-	}
-	return count
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return slices.Collect(maps.Keys(m.shells))
 }
 
 // KillAll terminates all background shells. The provided context bounds how
 // long the function waits for each shell to exit.
 func (m *BackgroundShellManager) KillAll(ctx context.Context) {
-	shells := slices.Collect(m.shells.Seq())
-	m.shells.Reset(map[string]*BackgroundShell{})
+	m.mu.Lock()
+	shells := m.shells
+	m.shells = map[string]*BackgroundShell{}
+	m.mu.Unlock()
 
 	var wg sync.WaitGroup
 	for _, shell := range shells {
@@ -289,6 +281,11 @@ func (bs *BackgroundShell) IsDone() bool {
 	default:
 		return false
 	}
+}
+
+// Done returns a channel that is closed when the background shell exits.
+func (bs *BackgroundShell) Done() <-chan struct{} {
+	return bs.done
 }
 
 // Wait blocks until the background shell completes.

@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/stretchr/testify/require"
@@ -28,8 +28,8 @@ func TestCodexAPIRequest(t *testing.T) {
 				_, _ = w.Write([]byte(`{"id":"resp-test","object":"response","status":"completed","output":[{"type":"message","id":"msg-test","role":"assistant","status":"completed","content":[{"type":"output_text","text":"ok","annotations":[]}]}],"usage":{"input_tokens":10,"output_tokens":2,"total_tokens":12}}`))
 			}))
 			defer server.Close()
-			catalog := catwalk.Model{ID: test.id, CanReason: true, ReasoningLevels: []string{"low", "medium", "high", "xhigh", "max"}, DefaultReasoningEffort: "medium"}
-			provider := config.ProviderConfig{ID: config.CodexAPIProviderID, Type: catwalk.TypeOpenAI, BaseURL: server.URL + "/v1", APIKey: "test-key", Models: []catwalk.Model{catalog}}
+			catalog := catwalk.Model{ID: test.id, Reasoning: catwalk.Reasoning{Thinking: catwalk.ThinkingToggleable, EffortLevels: catwalk.NewEffortLevels("low", "medium", "high", "xhigh", "max"), DefaultEffortLevel: "medium"}}
+			provider := config.ProviderConfig{ID: config.CodexAPIProviderID, Type: catwalk.TypeResponses, BaseURL: server.URL + "/v1", APIKey: "test-key", Models: []catwalk.Model{catalog}}
 			selected := config.SelectedModel{Provider: provider.ID, Model: test.id, ReasoningEffort: "xhigh"}
 			b := Builder{Config: config.NewTestStore(&config.Config{Options: &config.Options{}})}
 			fp, err := b.Provider(provider, selected, false)

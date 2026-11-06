@@ -199,6 +199,7 @@ func (m *UI) switchTheme(themeName string) tea.Cmd {
 		}
 		m.applyTheme(newStyles)
 		m.theme.endPreview()
+		m.userAppliedTheme()
 		m.theme.userSelected = true
 		m.dialog.CloseDialog(dialog.ThemeID)
 		return util.ReportInfo("Theme switched to " + themeName)
@@ -255,6 +256,7 @@ func (m *UI) saveThemePalette(msg dialog.ActionSaveThemePalette) tea.Cmd {
 			}
 			m.applyTheme(newStyles)
 			m.theme.endPreview()
+			m.userAppliedTheme()
 		}
 		m.dialog.CloseDialog(dialog.ThemeEditorID)
 		if td, ok := m.dialog.Dialog(dialog.ThemeID).(*theme.Theme); ok {
@@ -294,6 +296,10 @@ func (m *UI) revertOverriddenTheme(name string) tea.Cmd {
 		}
 		if reloaded {
 			m.applyTheme(newStyles)
+			// A preview snapshot holds the styles from before the
+			// revert; esc must not bring them back.
+			m.theme.endPreview()
+			m.userAppliedTheme()
 		}
 		m.dialog.CloseDialog(dialog.ThemeID)
 		m.openThemeDialog()
@@ -396,6 +402,7 @@ func (m *UI) deleteTheme(name string) tea.Cmd {
 		if isActive {
 			m.applyTheme(newStyles)
 			m.theme.endPreview()
+			m.userAppliedTheme()
 		}
 		m.dialog.CloseDialog(dialog.ThemeID)
 		m.openThemeDialog()
@@ -410,7 +417,7 @@ func (m *UI) deleteTheme(name string) tea.Cmd {
 // invalidating the markdown renderer cache and re-rendering the entire
 // transcript for no visible change.
 // A theme explicitly selected in the config always wins, so provider
-// changes never discard the user's choice.
+// changes never discard the user's choice. An active host theme wins too.
 func (m *UI) applyThemeForProvider(providerID string) {
 	// A theme the user explicitly selected always wins over the
 	// per-provider default, so provider or session changes never discard
@@ -419,7 +426,12 @@ func (m *UI) applyThemeForProvider(providerID string) {
 	if !m.theme.swapForProvider(providerID, common.ThemeNameFromConfig(m.com.Config()) != "") {
 		return
 	}
-	m.applyTheme(styles.ThemeForProvider(providerID))
+	// An active host theme wins too: the provider's theme is only
+	// recorded, to revert to once the host clears its theme.
+	if m.hostTheme.active {
+		return
+	}
+	m.applyTheme(styles.ThemeForKey(m.theme.key))
 }
 
 // applyTheme replaces the active styles with the given theme, drops the
@@ -458,10 +470,9 @@ func (m *UI) refreshStyles() {
 	m.attachments.SetStyles(t.Attachments)
 	m.todoSpinner.Style = t.Pills.TodoSpinner
 	m.status.help.Styles = t.Help
-	if d := m.dialog.Dialog(dialog.ThemeID); d != nil {
-		if td, ok := d.(*theme.Theme); ok {
-			td.RefreshStyles()
-		}
+	m.dialog.RefreshStyles()
+	if r, ok := m.activeInline.(dialog.StyleRefresher); ok {
+		r.RefreshStyles()
 	}
 }
 

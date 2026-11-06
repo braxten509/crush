@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/app"
@@ -202,6 +202,14 @@ func (c *shareTestCoordinator) ClearQueue(sessionID string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.clears = append(c.clears, sessionID)
+}
+
+func (c *shareTestCoordinator) AddNote(string, string)           {}
+func (c *shareTestCoordinator) SetHostContext(proto.HostContext) {}
+func (c *shareTestCoordinator) HostContext() proto.HostContext   { return proto.HostContext{} }
+
+func (c *shareTestCoordinator) ListSettledMessages(context.Context, string) ([]message.Message, error) {
+	return nil, nil
 }
 
 func (c *shareTestCoordinator) Summarize(_ context.Context, sessionID string) error {
@@ -402,7 +410,7 @@ func shareTestConfig(t *testing.T) *config.ConfigStore {
     "small": {"provider": "phone-test", "model": "thinker"}
   }
 }`), 0o600))
-	store, err := config.Load(t.TempDir(), t.TempDir(), false)
+	store, err := config.Load(t.Context(), t.TempDir(), t.TempDir(), false)
 	require.NoError(t, err)
 	_, ok := store.Config().Agents[config.AgentCoder]
 	require.True(t, ok, "the test provider sets up the coder")
@@ -671,7 +679,7 @@ func TestRemoteEngineActionTexts(t *testing.T) {
 	b, ws := shareTestWorkspace(t, coord)
 	ws.Cfg = config.NewTestStore(&config.Config{
 		Providers: csync.NewMapFrom(map[string]config.ProviderConfig{
-			"plain": {ID: "plain", Type: catwalk.TypeOpenAICompat, Models: []catwalk.Model{{ID: "m"}}},
+			"plain": {ID: "plain", Type: catwalk.TypeCompletions, Models: []catwalk.Model{{ID: "m"}}},
 		}),
 		Agents: map[string]config.Agent{config.AgentCoder: {ID: config.AgentCoder}},
 	})

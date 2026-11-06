@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"charm.land/fantasy"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -51,7 +51,7 @@ func resumeTestCoordinator(t *testing.T, run func(context.Context, SessionAgentC
 	c := sessionRunTestCoordinator(t, run)
 	c.interactive = true
 	c.cfg.Config().Providers.Set("fake", config.ProviderConfig{
-		ID: "fake", Name: "Fake", Type: catwalk.TypeOpenAICompat, BaseURL: url, APIKey: "test-key",
+		ID: "fake", Name: "Fake", Type: catwalk.TypeCompletions, BaseURL: url, APIKey: "test-key",
 		Models: []catwalk.Model{{ID: "fake-model", Name: "Fake", ContextWindow: 8192, DefaultMaxTokens: 128}},
 	})
 	return c
@@ -143,7 +143,7 @@ func countStarts(t *testing.T, h *taskHub, id string) func() int {
 func watchedJob(t *testing.T, h *taskHub, sessionID, command string) *shell.BackgroundShell {
 	t.Helper()
 	jobs := shell.GetBackgroundShellManager()
-	job, err := jobs.Start(t.Context(), t.TempDir(), nil, command, "job", h.env(sessionID)...)
+	job, err := jobs.Start(t.Context(), t.TempDir(), nil, command, "job", 0, h.env(sessionID)...)
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		_ = jobs.Kill(job.ID)

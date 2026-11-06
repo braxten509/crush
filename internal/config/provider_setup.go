@@ -10,12 +10,11 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"sync"
 	"testing"
-	"time"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/agent/hyper"
+	"github.com/charmbracelet/crush/internal/config/providers"
 	"github.com/charmbracelet/crush/internal/discover"
 	"github.com/charmbracelet/crush/internal/env"
 	"github.com/charmbracelet/crush/internal/home"
@@ -72,6 +71,11 @@ type providerSetup struct {
 	// other provider in the config is a custom one.
 	known   map[string]bool
 	pending []pendingWrite
+	// discoveryDir caches the models discovered for custom providers;
+	// empty disables the cache.
+	discoveryDir string
+	// cached lists the providers whose models the discovery cache answered.
+	cached []discoveryJob
 }
 
 // configureProviders resolves the known and custom providers in c against
@@ -80,15 +84,25 @@ type providerSetup struct {
 // configuration fails part-way, matching the disk state an inline write
 // would have left behind.
 func (c *Config) configureProviders(ctx context.Context, env env.Env, resolver VariableResolver, knownProviders []catwalk.Provider) ([]pendingWrite, error) {
+	pending, _, err := c.configureProvidersCached(ctx, env, resolver, knownProviders, "")
+	return pending, err
+}
+
+// configureProvidersCached is configureProviders with the custom-provider
+// discovery cache in dir (empty disables it): a custom provider with cached
+// models takes them without touching the network. It also returns those
+// providers, so the store can re-probe them in the background.
+func (c *Config) configureProvidersCached(ctx context.Context, env env.Env, resolver VariableResolver, knownProviders []catwalk.Provider, dir string) ([]pendingWrite, []discoveryJob, error) {
 	restore := PushPopCrushEnv()
 	defer restore()
 
 	s := &providerSetup{
-		cfg:      c,
-		env:      env,
-		resolver: resolver,
-		catalog:  knownProviders,
-		known:    make(map[string]bool),
+		cfg:          c,
+		env:          env,
+		resolver:     resolver,
+		catalog:      knownProviders,
+		known:        make(map[string]bool),
+		discoveryDir: dir,
 	}
 
 	// When disable_default_providers is enabled, skip all default/embedded
@@ -104,7 +118,7 @@ func (c *Config) configureProviders(ctx context.Context, env env.Env, resolver V
 
 	for _, p := range knownProviders {
 		if err := s.configureKnownProvider(p); err != nil {
-			return s.pending, err
+			return s.pending, s.cached, err
 		}
 	}
 
@@ -127,16 +141,16 @@ func (c *Config) configureProviders(ctx context.Context, env env.Env, resolver V
 	c.addCLIProviders(env.Get("PATH"))
 
 	if err := s.validateCustomProviders(discovered); err != nil {
-		return s.pending, err
+		return s.pending, s.cached, err
 	}
 
 	if c.Providers.Len() == 0 && c.Options.DisableDefaultProviders {
-		return s.pending, fmt.Errorf("default providers are disabled and there are no custom providers are configured")
+		return s.pending, s.cached, fmt.Errorf("default providers are disabled and there are no custom providers are configured")
 	}
 
 	s.dropVendorWords()
 
-	return s.pending, nil
+	return s.pending, s.cached, nil
 }
 
 // dropVendorWords drops the vendor word OpenRouter and OrcaRouter put
@@ -272,11 +286,14 @@ func prepareKnownProvider(p catwalk.Provider, config ProviderConfig, headers map
 	return prepared
 }
 
+// kimiCodingProvider is Kimi Coding's catalog provider ID.
+const kimiCodingProvider catwalk.InferenceProvider = "kimi-coding"
+
 // planProvider lists the catalog providers sold as a paid plan, not billed
 // per use: Kimi Coding (owner, 2026-10-24). They come out flat-rate, so no
 // cost is counted and the apps don't list them as per-use APIs.
 func planProvider(id catwalk.InferenceProvider) bool {
-	return id == catwalk.InferenceKimiCoding
+	return id == kimiCodingProvider
 }
 
 // resolveProviderHeaders expands every header value in place, dropping
@@ -396,14 +413,12 @@ type discoveryResult struct {
 // discoverCustomModels discovers models concurrently for the custom
 // providers that need it. A provider needs discovery when discover_models
 // is explicitly true, or when the models list is empty (auto-trigger,
-// unless opted out). The whole round is bounded to a few seconds.
+// unless opted out). A custom provider whose models are cached takes them
+// without touching the network; the rest are probed, the whole round
+// bounded to a few seconds.
 func (s *providerSetup) discoverCustomModels(ctx context.Context) map[string]discoveryResult {
 	results := make(map[string]discoveryResult)
-	var mu sync.Mutex
-	var wg sync.WaitGroup
-
-	discoverCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-	defer cancel()
+	var misses []discoveryJob
 	for id, pc := range s.cfg.Providers.Seq2() {
 		dynamic := dynamicModelProvider(id)
 		if s.known[id] && !dynamic {
@@ -421,29 +436,18 @@ func (s *providerSetup) discoverCustomModels(ctx context.Context) map[string]dis
 		} else if !needsModelDiscovery(pc) {
 			continue
 		}
-		providerType := cmp.Or(pc.Type, catwalk.TypeOpenAICompat)
-		cfg := discover.Config{
-			ID:             cmp.Or(pc.ID, id),
-			Type:           providerType,
-			BaseURL:        pc.BaseURL,
-			APIKey:         pc.APIKey,
-			ExtraHeaders:   pc.ExtraHeaders,
-			ExistingModels: pc.Models,
-			KnownProviders: s.catalog,
+		job := newDiscoveryJob(id, pc, s.catalog, dynamic)
+		if models, ok := cachedDiscovery(s.discoveryDir, job, s.resolver); ok {
+			results[id] = discoveryResult{models: models}
+			s.cached = append(s.cached, job)
+			continue
 		}
-		wg.Go(func() {
-			models, err := discover.DiscoverModels(discoverCtx, cfg, s.resolver)
-			if err == nil && len(models) > 0 {
-				if enricher := discover.GetEnricher(string(providerType)); enricher != nil {
-					models, _ = enricher.EnrichModels(discoverCtx, cfg, s.resolver, models)
-				}
-			}
-			mu.Lock()
-			results[id] = discoveryResult{models: models, err: err}
-			mu.Unlock()
-		})
+		misses = append(misses, job)
 	}
-	wg.Wait()
+
+	probeCtx, cancel := context.WithTimeout(ctx, discoveryProbeTimeout)
+	defer cancel()
+	maps.Copy(results, probeDiscovery(probeCtx, misses, s.resolver, s.discoveryDir))
 	return results
 }
 
@@ -464,7 +468,7 @@ func needsModelDiscovery(pc ProviderConfig) bool {
 // 2026-10-24). Their catalog models supply the details of the ids that
 // come back, and nothing is listed that the API does not return.
 func dynamicModelProvider(id string) bool {
-	return catwalk.InferenceProvider(id) == catwalk.InferenceKimiCoding
+	return catwalk.InferenceProvider(id) == kimiCodingProvider
 }
 
 // applyDynamicModels writes a dynamic provider's freshly read model list
@@ -509,8 +513,18 @@ func (s *providerSetup) validateCustomProvider(id string, providerConfig *Provid
 	// Make sure the provider ID is set.
 	providerConfig.ID = id
 	providerConfig.Name = cmp.Or(providerConfig.Name, id) // Use ID as name if not set
-	// Default to OpenAI if not set.
-	providerConfig.Type = cmp.Or(providerConfig.Type, catwalk.TypeOpenAICompat)
+	// Migrate legacy provider types onto the catwalk v3 endpoint types.
+	// A v2 type that named its own SDK (google, google-vertex, azure,
+	// bedrock, openrouter, vercel) is kept as written so the provider
+	// builder still picks that SDK; it normalizes the endpoint format
+	// itself. Discovery already ran with the type as written, so a
+	// provider still typed "google" listed its models through the Gemini
+	// API.
+	if !providers.IsLegacySDKType(providerConfig.Type) {
+		providerConfig.Type = NormalizeProviderType(providerConfig.Type)
+	}
+	// Default to OpenAI chat completions if not set.
+	providerConfig.Type = cmp.Or(providerConfig.Type, catwalk.TypeCompletions)
 	if !isSupportedCustomProviderType(providerConfig.Type) {
 		slog.Warn("Skipping custom provider due to unsupported provider type", "provider", id)
 		return false, nil
@@ -543,7 +557,9 @@ func (s *providerSetup) validateCustomProvider(id string, providerConfig *Provid
 				return false, nil
 			}
 		} else if len(result.models) > 0 {
-			providerConfig.Models = result.models
+			// Models from the config win over discovered ones with the same
+			// ID; the rest of the discovered list follows them.
+			providerConfig.Models = mergeModels(providerConfig.Models, result.models)
 			slog.Info("Discovered models for provider", "provider", id, "count", len(result.models))
 		}
 	}
@@ -566,7 +582,7 @@ func (s *providerSetup) validateCustomProvider(id string, providerConfig *Provid
 // isSupportedCustomProviderType reports whether a custom provider's type
 // is one Crush can talk to.
 func isSupportedCustomProviderType(t catwalk.Type) bool {
-	return slices.Contains(catwalk.KnownProviderTypes(), t) ||
+	return slices.Contains(catwalk.KnownProviderTypes(), NormalizeProviderType(t)) ||
 		t == hyper.Name ||
 		IsCLIProviderType(t) ||
 		discover.IsKnownCustomProvider(string(t))

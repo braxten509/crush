@@ -74,7 +74,9 @@ func (c *coordinator) agenticFetchTool(_ context.Context, client *http.Client) (
 }
 
 // runAgenticFetch handles one agentic_fetch call: it asks for permission,
-// prepares the page or search prompt and runs a fetch sub-agent on it.
+// prepares the page or search prompt and runs a fetch subagent on it. In an
+// interactive turn a fetch that outruns the background threshold moves to the
+// background and reports later, like a dispatched subagent.
 func (c *coordinator) runAgenticFetch(ctx context.Context, client *http.Client, params tools.AgenticFetchParams, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
 	validationResult, err := validateAgenticFetchParams(ctx, params)
 	if err != nil {
@@ -124,7 +126,7 @@ func (c *coordinator) runAgenticFetch(ctx context.Context, client *http.Client, 
 		return fantasy.ToolResponse{}, err
 	}
 
-	return c.runSubAgent(ctx, subAgentParams{
+	return c.runSubAgentMaybeBackground(ctx, tools.AgenticFetchToolName, accessRead, subAgentParams{
 		Agent:          agent,
 		SessionID:      validationResult.SessionID,
 		AgentMessageID: validationResult.AgentMessageID,
@@ -211,7 +213,7 @@ func (c *coordinator) newAgenticFetchAgent(ctx context.Context, client *http.Cli
 		tools.NewViewTool(c.lspManager, c.permissions, c.filetracker, nil, tmpDir),
 	}
 
-	// Sub-agent tools run without hook interception. The top-level
+	// Subagent tools run without hook interception. The top-level
 	// `agentic_fetch` call itself is already wrapped from the coder's
 	// side; firing hooks again for every inner tool call would run
 	// the user's hooks N times per delegated turn.
@@ -222,9 +224,10 @@ func (c *coordinator) newAgenticFetchAgent(ctx context.Context, client *http.Cli
 		SystemPromptPrefix:   helperProviderCfg.SystemPromptPrefix,
 		SystemPrompt:         systemPrompt,
 		DisableAutoSummarize: c.cfg.Config().Options.DisableAutoSummarize,
-		IsYolo:               c.permissions.SkipRequests(),
+		Permissions:          c.permissions,
 		Sessions:             c.sessions,
 		Messages:             c.messages,
 		Tools:                fetchTools,
+		titles:               &c.titles,
 	}), nil
 }

@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/csync"
 	"github.com/charmbracelet/crush/internal/home"
 	"github.com/stretchr/testify/require"
@@ -72,9 +72,9 @@ fi
 	models, err := cliDiscovery[TypeOpenCodeZenCLI](t.Context(), filepath.Join(dir, "opencode"))
 	require.NoError(t, err)
 	require.Len(t, models, 1)
-	require.Equal(t, []string{"low", "high", "max"}, models[0].ReasoningLevels)
-	require.Equal(t, "low", models[0].DefaultReasoningEffort)
-	require.True(t, models[0].CanReason)
+	require.Equal(t, []string{"low", "high", "max"}, models[0].ReasoningEffortLevels())
+	require.Equal(t, "low", models[0].Reasoning.DefaultEffortLevel)
+	require.True(t, models[0].CanReason())
 }
 
 func TestOpenCodeZenRegistersAsFreeProvider(t *testing.T) {
@@ -159,22 +159,22 @@ echo '{"id":2,"result":{"data":[{"id":"gpt-6-astra","inputModalities":["text"]},
 	models, err := discoverCodex(t.Context(), filepath.Join(dir, "codex"))
 	require.NoError(t, err)
 	require.Len(t, models, 3)
-	require.False(t, models[0].SupportsImages)
-	require.True(t, models[1].SupportsImages)
-	require.True(t, models[2].SupportsImages)
+	require.False(t, models[0].Capabilities.Vision)
+	require.True(t, models[1].Capabilities.Vision)
+	require.True(t, models[2].Capabilities.Vision)
 	// Refresh must not overwrite the catalog's explicit text-only capability
 	// with the built-in fallback, and new capabilities must survive caching.
 	refreshCLIModels(dir)
 	models = cachedModels(string(TypeCodexCLI))
 	require.Len(t, models, 3)
-	require.NotEmpty(t, models[0].ReasoningLevels, "older CLI metadata without effort fields keeps the known fallback")
-	require.False(t, models[0].SupportsImages)
-	require.True(t, models[1].SupportsImages)
-	require.True(t, models[2].SupportsImages)
+	require.NotEmpty(t, models[0].ReasoningEffortLevels(), "older CLI metadata without effort fields keeps the known fallback")
+	require.False(t, models[0].Capabilities.Vision)
+	require.True(t, models[1].Capabilities.Vision)
+	require.True(t, models[2].Capabilities.Vision)
 	for _, provider := range cliProviders {
 		if provider.cfg.Type == TypeCodexCLI {
 			for _, model := range provider.cfg.Models {
-				require.True(t, model.SupportsImages, model.ID)
+				require.True(t, model.Capabilities.Vision, model.ID)
 			}
 		}
 	}

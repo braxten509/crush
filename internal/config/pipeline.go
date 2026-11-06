@@ -11,7 +11,7 @@ import (
 	"slices"
 	"strings"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/env"
 	"github.com/charmbracelet/crush/internal/fsext"
 	"github.com/charmbracelet/crush/internal/shellconfig"
@@ -38,6 +38,10 @@ type buildParams struct {
 	modelOverrides map[SelectedModelType]SelectedModel
 	// refreshHyper lets the provider catalog fetch retry Hyper on a 401.
 	refreshHyper HyperTokenRefresher
+	// discoveryDir is where the models discovered for custom providers are
+	// cached, so a later load can use them without the network; empty
+	// disables the cache.
+	discoveryDir string
 	// onMerged, when set, receives the merged config and the files it came
 	// from just before the provider catalog loads. Load uses it to publish
 	// the in-progress config, which refreshHyper and onCatalog read
@@ -45,7 +49,7 @@ type buildParams struct {
 	onMerged func(cfg *Config, files configFiles)
 	// onCatalog, when set, runs after the provider catalog loads and
 	// returns the config to continue with, which may be a replacement.
-	onCatalog func(cfg *Config) *Config
+	onCatalog func(ctx context.Context, cfg *Config) *Config
 	// reload selects the reload wording for errors and log messages.
 	reload bool
 	// envOwner is the store whose config sets the top-level env vars, so
@@ -79,6 +83,9 @@ type buildResult struct {
 	configured bool
 	// models is the resolved model selection, valid when configured.
 	models resolvedModels
+	// cachedDiscovery lists the custom providers whose models came from
+	// the discovery cache; RefreshDiscoveredModels re-probes them later.
+	cachedDiscovery []discoveryJob
 }
 
 // buildConfig runs the whole config load pipeline: it reads and merges the
@@ -101,12 +108,17 @@ func buildConfig(ctx context.Context, p buildParams) (*buildResult, error) {
 	if p.onMerged != nil {
 		p.onMerged(cfg, files)
 	}
-	providers, err := p.loadCatalog(cfg)
+	providers, err := p.loadCatalog(ctx, cfg)
+	// An interrupted startup (Ctrl+C) stops here rather than going on with
+	// whatever the cut-short catalog fetch returned.
+	if ctxErr := p.interrupted(ctx); ctxErr != nil {
+		return nil, ctxErr
+	}
 	if err != nil {
 		return nil, err
 	}
 	if p.onCatalog != nil {
-		cfg = p.onCatalog(cfg)
+		cfg = p.onCatalog(ctx, cfg)
 	}
 
 	vars := env.New()
@@ -122,9 +134,12 @@ func buildConfig(ctx context.Context, p buildParams) (*buildResult, error) {
 	// like AWS_PROFILE are visible to the AWS SDK credential chain.
 	cfg.applyEnv(resolver, p.envOwner)
 
-	res.pending, err = cfg.configureProviders(ctx, vars, resolver, providers)
+	res.pending, res.cachedDiscovery, err = cfg.configureProvidersCached(ctx, vars, resolver, providers, p.discoveryDir)
 	if err != nil {
 		return res, p.errorf("failed to configure providers", "failed to configure providers during reload", err)
+	}
+	if ctxErr := p.interrupted(ctx); ctxErr != nil {
+		return res, ctxErr
 	}
 
 	if !cfg.IsConfigured() {
@@ -204,6 +219,7 @@ func (c *Config) applyWorkspaceOverlay(workingDir, path string) (bool, error) {
 	if !json.Valid(wsData) {
 		return false, fmt.Errorf("invalid JSON in config file %s", path)
 	}
+	wsData = migrateCatwalkV2File(path, wsData)
 	merged, err := loadFromBytes(append([][]byte{mustMarshalConfig(c)}, wsData))
 	if err != nil {
 		return false, nil
@@ -245,12 +261,8 @@ func (c *Config) applyEnvironmentDefaults(outsideWorktree, logWarnings bool) {
 // refresh still yields the cached or embedded catalog, so only an empty
 // list is fatal: starting up without providers is worse than starting up
 // with slightly stale ones.
-func (p buildParams) loadCatalog(cfg *Config) ([]catwalk.Provider, error) {
-	var refreshers []HyperTokenRefresher
-	if p.refreshHyper != nil {
-		refreshers = append(refreshers, p.refreshHyper)
-	}
-	providers, err := Providers(cfg, refreshers...)
+func (p buildParams) loadCatalog(ctx context.Context, cfg *Config) ([]catwalk.Provider, error) {
+	providers, err := LoadProviders(ctx, cfg, p.refreshHyper)
 	if err != nil {
 		if len(providers) == 0 {
 			if p.reload {
@@ -261,6 +273,17 @@ func (p buildParams) loadCatalog(cfg *Config) ([]catwalk.Provider, error) {
 		slog.Warn(p.pick("Continuing with the previously known providers", "Reload continuing with the previously known providers"), "error", err)
 	}
 	return providers, nil
+}
+
+// interrupted returns the context's error when the initial load was
+// cancelled (Ctrl+C during startup). A reload keeps going: it leaves the
+// store untouched on failure, and the writes that trigger it must not lose
+// their reload to a caller's short-lived context.
+func (p buildParams) interrupted(ctx context.Context) error {
+	if p.reload {
+		return nil
+	}
+	return ctx.Err()
 }
 
 // pick returns the load or the reload variant of a message.
@@ -370,6 +393,7 @@ func loadFromConfigPaths(ctx context.Context, configPaths []string) (*Config, []
 			if !json.Valid(data) {
 				return nil, nil, fmt.Errorf("invalid JSON in config file %s", path)
 			}
+			data = migrateCatwalkV2File(path, data)
 			addTopLevelKeys(jsonDirKeys, dir, data)
 			configs = append(configs, data)
 			loaded = append(loaded, path)
@@ -427,6 +451,10 @@ func loadFromBytes(configs [][]byte) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Safety net for sources that cannot be rewritten on disk (e.g.
+	// crushrc builtins producing JSON): migrate the merged result in
+	// memory so decoding always sees the v3 schema.
+	data, _ = migrateCatwalkV2(data)
 	var config Config
 	if err := json.Unmarshal(data, &config); err != nil {
 		return nil, err

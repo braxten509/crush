@@ -183,7 +183,7 @@ func (t *viewTool) run(ctx context.Context, params ViewParams, call fantasy.Tool
 		if os.IsNotExist(err) {
 			return fileNotFoundResponse(filePath), nil
 		}
-		return fantasy.ToolResponse{}, fmt.Errorf("error accessing file: %w", err)
+		return fantasy.NewTextErrorResponse(fmt.Sprintf("Failed to access file: %s", err)), nil
 	}
 
 	// Check if it's a directory
@@ -243,13 +243,12 @@ func viewImage(ctx context.Context, filePath string, size int64, mimeType string
 			size, MaxViewSize)), nil
 	}
 	if !GetSupportsImagesFromContext(ctx) {
-		modelName := GetModelNameFromContext(ctx)
-		return fantasy.NewTextErrorResponse(fmt.Sprintf("This model (%s) does not support image data.", modelName)), nil
+		return UnsupportedMediaResponse(GetModelNameFromContext(ctx)), nil
 	}
 
 	imageData, readErr := os.ReadFile(filePath)
 	if readErr != nil {
-		return fantasy.ToolResponse{}, fmt.Errorf("error reading image file: %w", readErr)
+		return fantasy.NewTextErrorResponse(fmt.Sprintf("Failed to read image file: %s", readErr)), nil
 	}
 
 	// Some tools save files with a mismatched extension
@@ -277,7 +276,7 @@ func (t *viewTool) viewText(ctx context.Context, params ViewParams, sessionID, f
 			return fantasy.NewTextErrorResponse(fmt.Sprintf("Content section is too large (%d bytes). Maximum size is %d bytes",
 				tooLarge.Size, tooLarge.Max)), nil
 		}
-		return fantasy.ToolResponse{}, fmt.Errorf("error reading file: %w", err)
+		return fantasy.NewTextErrorResponse(fmt.Sprintf("Failed to read file: %s", err)), nil
 	}
 	if !utf8.ValidString(content) {
 		return fantasy.NewTextErrorResponse("File content is not valid UTF-8"), nil

@@ -5,7 +5,7 @@ import (
 	"slices"
 	"testing"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 )
 
 // Provider types backed by an installed agent CLI instead of an HTTP API.
@@ -51,10 +51,10 @@ var cliProviders = []cliProvider{
 		Type:     TypeClaudeCode,
 		FlatRate: true,
 		Models: []catwalk.Model{
-			{ID: "opus", Name: "Claude Opus", ContextWindow: 400_000, DefaultMaxTokens: 32_000, CanReason: true, ReasoningLevels: claudeEfforts, DefaultReasoningEffort: "high", SupportsImages: true},
-			{ID: "fable", Name: "Claude Fable", ContextWindow: 400_000, DefaultMaxTokens: 32_000, CanReason: true, ReasoningLevels: claudeEfforts, DefaultReasoningEffort: "high", SupportsImages: true},
-			{ID: "sonnet", Name: "Claude Sonnet", ContextWindow: 400_000, DefaultMaxTokens: 32_000, CanReason: true, ReasoningLevels: claudeEfforts, DefaultReasoningEffort: "high", SupportsImages: true},
-			{ID: "haiku", Name: "Claude Haiku", ContextWindow: 400_000, DefaultMaxTokens: 32_000, SupportsImages: true},
+			{ID: "opus", Name: "Claude Opus", ContextWindow: 400_000, DefaultMaxTokens: 32_000, Reasoning: cliReasoning(claudeEfforts, "high"), Capabilities: catwalk.Capabilities{Vision: true}},
+			{ID: "fable", Name: "Claude Fable", ContextWindow: 400_000, DefaultMaxTokens: 32_000, Reasoning: cliReasoning(claudeEfforts, "high"), Capabilities: catwalk.Capabilities{Vision: true}},
+			{ID: "sonnet", Name: "Claude Sonnet", ContextWindow: 400_000, DefaultMaxTokens: 32_000, Reasoning: cliReasoning(claudeEfforts, "high"), Capabilities: catwalk.Capabilities{Vision: true}},
+			{ID: "haiku", Name: "Claude Haiku", ContextWindow: 400_000, DefaultMaxTokens: 32_000, Capabilities: catwalk.Capabilities{Vision: true}},
 		},
 	}, "haiku"},
 	{"codex", ProviderConfig{
@@ -63,10 +63,10 @@ var cliProviders = []cliProvider{
 		Type:     TypeCodexCLI,
 		FlatRate: true,
 		Models: []catwalk.Model{
-			{ID: "gpt-6-astra", Name: "GPT-6 Astra", ContextWindow: 872_000, DefaultMaxTokens: 64_000, CanReason: true, ReasoningLevels: []string{"low", "medium", "high", "xhigh", "max", "ultra"}, DefaultReasoningEffort: "medium", SupportsImages: true},
-			{ID: "gpt-6-sol", Name: "GPT-6 Sol", ContextWindow: 400_000, DefaultMaxTokens: 64_000, CanReason: true, ReasoningLevels: []string{"low", "medium", "high", "xhigh", "max", "ultra"}, DefaultReasoningEffort: "medium", SupportsImages: true},
-			{ID: "gpt-6-luna", Name: "GPT-6 Luna", ContextWindow: 400_000, DefaultMaxTokens: 64_000, CanReason: true, ReasoningLevels: []string{"low", "medium", "high", "xhigh", "max"}, DefaultReasoningEffort: "medium", SupportsImages: true},
-			{ID: "gpt-5.6-terra", Name: "GPT-5.6 Terra", ContextWindow: 400_000, DefaultMaxTokens: 64_000, CanReason: true, ReasoningLevels: []string{"low", "medium", "high", "xhigh", "max", "ultra"}, DefaultReasoningEffort: "medium", SupportsImages: true},
+			{ID: "gpt-6-astra", Name: "GPT-6 Astra", ContextWindow: 872_000, DefaultMaxTokens: 64_000, Reasoning: cliReasoning([]string{"low", "medium", "high", "xhigh", "max", "ultra"}, "medium"), Capabilities: catwalk.Capabilities{Vision: true}},
+			{ID: "gpt-6-sol", Name: "GPT-6 Sol", ContextWindow: 400_000, DefaultMaxTokens: 64_000, Reasoning: cliReasoning([]string{"low", "medium", "high", "xhigh", "max", "ultra"}, "medium"), Capabilities: catwalk.Capabilities{Vision: true}},
+			{ID: "gpt-6-luna", Name: "GPT-6 Luna", ContextWindow: 400_000, DefaultMaxTokens: 64_000, Reasoning: cliReasoning([]string{"low", "medium", "high", "xhigh", "max"}, "medium"), Capabilities: catwalk.Capabilities{Vision: true}},
+			{ID: "gpt-5.6-terra", Name: "GPT-5.6 Terra", ContextWindow: 400_000, DefaultMaxTokens: 64_000, Reasoning: cliReasoning([]string{"low", "medium", "high", "xhigh", "max", "ultra"}, "medium"), Capabilities: catwalk.Capabilities{Vision: true}},
 		},
 	}, "gpt-6-luna"},
 	{"grok", ProviderConfig{
@@ -235,7 +235,7 @@ func (c *Config) defaultCLIModels() (SelectedModel, SelectedModel, bool) {
 		}
 		large := cfg.Models[0]
 		small, _ := c.CLISmallModel(cfg.ID)
-		return SelectedModel{Provider: cfg.ID, Model: large.ID, MaxTokens: large.DefaultMaxTokens, ReasoningEffort: large.DefaultReasoningEffort},
+		return SelectedModel{Provider: cfg.ID, Model: large.ID, MaxTokens: large.DefaultMaxTokens, ReasoningEffort: large.Reasoning.DefaultEffortLevel},
 			small, true
 	}
 	return SelectedModel{}, SelectedModel{}, false
@@ -253,7 +253,7 @@ func (c *Config) CLISmallModel(providerID string) (SelectedModel, bool) {
 	if j := slices.IndexFunc(cfg.Models, func(m catwalk.Model) bool { return m.ID == cliProviders[i].small }); j >= 0 {
 		m = cfg.Models[j]
 	}
-	return SelectedModel{Provider: providerID, Model: m.ID, MaxTokens: m.DefaultMaxTokens, ReasoningEffort: m.DefaultReasoningEffort}, true
+	return SelectedModel{Provider: providerID, Model: m.ID, MaxTokens: m.DefaultMaxTokens, ReasoningEffort: m.Reasoning.DefaultEffortLevel}, true
 }
 
 func (p cliProvider) models() []catwalk.Model {
@@ -264,7 +264,7 @@ func (p cliProvider) models() []catwalk.Model {
 	if p.cfg.Type != TypeCodexCLI {
 		// Crush hands every other CLI its images. Codex's catalog says per model.
 		for i := range models {
-			models[i].SupportsImages = true
+			models[i].Capabilities.Vision = true
 		}
 	}
 	return models

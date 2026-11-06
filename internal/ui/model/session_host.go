@@ -51,7 +51,7 @@ func (m *UI) sessionHostStatus() sessionhost.Status {
 	}
 	if model := m.shownChatModel(); model != nil {
 		st.Model = model.CatwalkCfg.Name
-		if effort := cmp.Or(model.ModelCfg.ReasoningEffort, model.CatwalkCfg.DefaultReasoningEffort); effort != "" && model.CatwalkCfg.CanReason {
+		if effort := cmp.Or(model.ModelCfg.ReasoningEffort, model.CatwalkCfg.Reasoning.DefaultEffortLevel); effort != "" && model.CatwalkCfg.CanReason() {
 			st.Model += " · " + common.FormatReasoningEffort(effort)
 		}
 		if model.ModelCfg.ServiceTier == "fast" {

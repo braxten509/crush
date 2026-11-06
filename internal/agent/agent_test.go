@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"charm.land/fantasy"
 	"charm.land/x/vcr"
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
@@ -42,14 +42,9 @@ func TestMain(m *testing.M) {
 	killGrace = 200 * time.Millisecond
 	shell.LeftoverWait = 300 * time.Millisecond
 	cliagent.WindDownGrace = 200 * time.Millisecond
-	// A new chat's model seeds the last pick; tests never write the real one.
-	if os.Getenv("CRUSH_GLOBAL_DATA") == "" {
-		if dir, err := os.MkdirTemp("", "crush-agent-test-data-"); err == nil {
-			os.Setenv("CRUSH_GLOBAL_DATA", dir)
-			defer os.RemoveAll(dir)
-		}
-	}
-	m.Run()
+	// Global config and data (a new chat's model seeds the last pick) go to
+	// a temporary home, so tests never read or write the real ones.
+	os.Exit(runIsolated(m))
 }
 
 var modelPairs = []modelPair{
@@ -714,7 +709,7 @@ func TestPreparePrompt_FiltersImageAttachments(t *testing.T) {
 
 	// When supportsImages is false, image attachments should be stripped
 	// from history AND from the files list.
-	history, files := agent.preparePrompt(msgs, false, imageAtt)
+	history, files := agent.preparePrompt(msgs, false, false, imageAtt)
 	// First message is the system reminder, second is the user message.
 	require.Len(t, history, 2)
 	require.Len(t, history[1].Content, 1)
@@ -726,7 +721,7 @@ func TestPreparePrompt_FiltersImageAttachments(t *testing.T) {
 
 	// When supportsImages is true, image attachments should remain in
 	// history and be included in the files list.
-	history, files = agent.preparePrompt(msgs, true, imageAtt)
+	history, files = agent.preparePrompt(msgs, true, false, imageAtt)
 	require.Len(t, history, 2)
 	require.Len(t, history[1].Content, 2)
 	text, ok = fantasy.AsMessagePart[fantasy.TextPart](history[1].Content[0])
@@ -737,6 +732,39 @@ func TestPreparePrompt_FiltersImageAttachments(t *testing.T) {
 	require.Equal(t, "image.png", file.Filename)
 	require.Len(t, files, 1, "new-turn image attachment should be included when model supports images")
 	require.Equal(t, "screenshot.png", files[0].Filename)
+}
+
+func TestPreparePrompt_FiltersAudioAttachments(t *testing.T) {
+	env := testEnv(t)
+	sa := testSessionAgent(env, nil, nil, "test prompt")
+	agent := sa.(*sessionAgent)
+
+	ctx := t.Context()
+	sess, err := env.sessions.Create(ctx, "test")
+	require.NoError(t, err)
+
+	msgs, err := env.messages.List(ctx, sess.ID)
+	require.NoError(t, err)
+
+	audioAtt := message.Attachment{
+		FileName: "voice-note.mp3",
+		MimeType: "audio/mpeg",
+		Content:  []byte("fake-audio"),
+	}
+
+	// When supportsAudio is false, audio attachments should be dropped from
+	// the files list.
+	_, files := agent.preparePrompt(msgs, false, false, audioAtt)
+	require.Empty(t, files, "audio files should be excluded when model does not support audio")
+
+	// Vision support alone must not forward audio attachments.
+	_, files = agent.preparePrompt(msgs, true, false, audioAtt)
+	require.Empty(t, files, "audio files should be excluded when model only supports images")
+
+	// When supportsAudio is true, audio attachments are included.
+	_, files = agent.preparePrompt(msgs, false, true, audioAtt)
+	require.Len(t, files, 1, "audio attachment should be included when model supports audio")
+	require.Equal(t, "voice-note.mp3", files[0].Filename)
 }
 
 func TestCreateUserMessage_RetainsAllAttachments(t *testing.T) {
@@ -758,7 +786,7 @@ func TestCreateUserMessage_RetainsAllAttachments(t *testing.T) {
 		},
 	}
 
-	msg, err := agent.createUserMessage(ctx, call)
+	msg, err := agent.createUserMessage(ctx, call, "")
 	require.NoError(t, err)
 
 	// All attachments should be present as BinaryContent parts.
@@ -823,7 +851,7 @@ func TestPreparePrompt_OrphanedToolUse(t *testing.T) {
 	msgs, err := env.messages.List(ctx, sess.ID)
 	require.NoError(t, err)
 
-	history, _ := agent.preparePrompt(msgs, true)
+	history, _ := agent.preparePrompt(msgs, true, false)
 
 	// The history must contain a synthetic tool result for the orphaned call.
 	found := false
@@ -897,7 +925,7 @@ func TestPreparePrompt_OrphanedToolUseMixed(t *testing.T) {
 	msgs, err := env.messages.List(ctx, sess.ID)
 	require.NoError(t, err)
 
-	history, _ := agent.preparePrompt(msgs, true)
+	history, _ := agent.preparePrompt(msgs, true, false)
 
 	// Should have a synthetic result only for the orphaned call.
 	var syntheticCount int
@@ -1030,7 +1058,7 @@ func TestPreparePrompt_NonAdjacentToolResults(t *testing.T) {
 
 	require.Equal(t, message.User, msgs[2].Role, "interleaved user should be between assistant and results in DB order")
 
-	history, _ := agent.preparePrompt(msgs, false)
+	history, _ := agent.preparePrompt(msgs, false, false)
 
 	requireToolCallAdjacency(t, history)
 
@@ -1080,7 +1108,7 @@ func TestPreparePrompt_ResultBeforeAssistant(t *testing.T) {
 	msgs, err := env.messages.List(ctx, sess.ID)
 	require.NoError(t, err)
 
-	history, _ := agent.preparePrompt(msgs, false)
+	history, _ := agent.preparePrompt(msgs, false, false)
 
 	requireToolCallAdjacency(t, history)
 
@@ -1147,7 +1175,7 @@ func TestPreparePrompt_BundledResultsAcrossAssistants(t *testing.T) {
 	msgs, err := env.messages.List(ctx, sess.ID)
 	require.NoError(t, err)
 
-	history, _ := agent.preparePrompt(msgs, false)
+	history, _ := agent.preparePrompt(msgs, false, false)
 
 	requireToolCallAdjacency(t, history)
 
@@ -1197,7 +1225,7 @@ func TestPreparePrompt_DropsOrphanedToolResults(t *testing.T) {
 	msgs, err := env.messages.List(ctx, sess.ID)
 	require.NoError(t, err)
 
-	history, _ := agent.preparePrompt(msgs, false)
+	history, _ := agent.preparePrompt(msgs, false, false)
 
 	for _, msg := range history {
 		require.NotEqual(t, fantasy.MessageRoleTool, msg.Role, "orphaned tool results must be dropped")
@@ -1231,7 +1259,7 @@ func TestWorkaroundProviderMediaLimitations_TextOnlyModel(t *testing.T) {
 	largeModel := Model{
 		ModelCfg: config.SelectedModel{Provider: "openai"},
 		CatwalkCfg: catwalk.Model{
-			SupportsImages: false,
+			Capabilities: catwalk.Capabilities{Vision: false},
 		},
 	}
 
@@ -1275,7 +1303,7 @@ func TestWorkaroundProviderMediaLimitations_VisionModel(t *testing.T) {
 	largeModel := Model{
 		ModelCfg: config.SelectedModel{Provider: "openai"},
 		CatwalkCfg: catwalk.Model{
-			SupportsImages: true,
+			Capabilities: catwalk.Capabilities{Vision: true},
 		},
 	}
 
@@ -1324,11 +1352,11 @@ func TestWorkaroundProviderMediaLimitations_AnthropicProvider(t *testing.T) {
 	}
 
 	// Anthropic provider — should return messages unchanged regardless of
-	// SupportsImages, since Anthropic handles media in tool results natively.
+	// Capabilities.Vision, since Anthropic handles media in tool results natively.
 	largeModel := Model{
 		ModelCfg: config.SelectedModel{Provider: string(catwalk.InferenceProviderAnthropic)},
 		CatwalkCfg: catwalk.Model{
-			SupportsImages: true,
+			Capabilities: catwalk.Capabilities{Vision: true},
 		},
 	}
 

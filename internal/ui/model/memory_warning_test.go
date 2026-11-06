@@ -24,7 +24,7 @@ func TestMemoryWarningStaysWhileHighAndClears(t *testing.T) {
 	require.Equal(t, "Copied", m.status.msg.Msg)
 
 	// ...and the warning comes back once it has expired.
-	m.status.ClearInfoMsg()
+	m.status.ClearInfoMsg(m.status.msgSeq)
 	high.Percent = 90
 	m.handleMemoryCheck(memoryCheckMsg{status: high})
 	require.Equal(t, high.Message(), m.status.msg.Msg)

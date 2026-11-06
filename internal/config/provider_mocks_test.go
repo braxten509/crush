@@ -3,7 +3,7 @@ package config
 import (
 	"context"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 )
 
 // mockCatwalkClient is a providers.CatwalkClient returning canned data.

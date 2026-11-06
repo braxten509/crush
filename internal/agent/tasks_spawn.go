@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"charm.land/fantasy"
 	"github.com/google/uuid"
 
@@ -194,7 +194,7 @@ func (h *taskHub) subAgent(ctx context.Context, provider config.ProviderConfig, 
 			cm.Env = []string{TasksDirEnv + "=" + h.dir}
 		}
 	}
-	m := Model{Model: lm, CatwalkCfg: model, ModelCfg: selected, FlatRate: provider.FlatRate}
+	m := builtModel(lm, model, selected, provider)
 	var subTasks *taskHub
 	if !config.IsCLIProviderType(provider.Type) {
 		subTasks = h
@@ -205,13 +205,15 @@ func (h *taskHub) subAgent(ctx context.Context, provider config.ProviderConfig, 
 		SystemPromptPrefix:   provider.SystemPromptPrefix,
 		IsSubAgent:           true,
 		DisableAutoSummarize: h.c.cfg.Config().Options.DisableAutoSummarize,
-		IsYolo:               h.c.permissions.SkipRequests(),
+		Permissions:          h.c.permissions,
 		Sessions:             h.c.sessions,
 		Messages:             h.c.messages,
 		Cfg:                  h.c.cfg,
 		Tasks:                subTasks,
 		Notify:               h.c.notify,
 		RunComplete:          h.c.runComplete,
+		Hooks:                h.c.hookRunner,
+		titles:               &h.c.titles,
 	})
 	if !config.IsCLIProviderType(provider.Type) {
 		agentCfg := apiSubAgentConfig(h.c.cfg.Config().Agents, readOnly)
@@ -269,7 +271,7 @@ func apiSubAgentConfig(agents map[string]config.Agent, readOnly bool) config.Age
 // every command inside the read-only sandbox, as read-only agent CLIs do.
 func (h *taskHub) lockCommands(agentTools []fantasy.AgentTool) []fantasy.AgentTool {
 	options := h.c.cfg.Config().Options
-	locked := guardTools([]fantasy.AgentTool{shelltool.NewReadOnlyBashTool(h.c.permissions, h.c.cfg.WorkingDir(), options.DataDirectory, options.Attribution, reportStartedJob)})[0]
+	locked := guardTools([]fantasy.AgentTool{shelltool.NewReadOnlyBashTool(h.c.permissions, h.c.cfg.WorkingDir(), options.DataDirectory, options.Attribution, options.GetMaxBackgroundJobs(), h.c.cfg.Config().Permissions, reportStartedJob)})[0]
 	for i, tool := range agentTools {
 		if tool.Info().Name == tools.BashToolName {
 			agentTools[i] = locked
@@ -383,13 +385,13 @@ func (h *taskHub) startRun(ctx context.Context, release func(), t *Task, sub Ses
 // the effort must be one of the model's levels, and only Claude and Codex
 // have a fast mode.
 func taskModel(provider config.ProviderConfig, model catwalk.Model, req TaskRequest) (config.SelectedModel, error) {
-	selected := config.SelectedModel{Provider: provider.ID, Model: model.ID, ReasoningEffort: model.DefaultReasoningEffort}
+	selected := config.SelectedModel{Provider: provider.ID, Model: model.ID, ReasoningEffort: model.Reasoning.DefaultEffortLevel}
 	if effort := strings.ToLower(strings.TrimSpace(req.Effort)); effort != "" {
-		if !slices.Contains(model.ReasoningLevels, effort) {
-			if len(model.ReasoningLevels) == 0 {
+		if !slices.Contains(model.ReasoningEffortLevels(), effort) {
+			if len(model.ReasoningEffortLevels()) == 0 {
 				return selected, fmt.Errorf("%s model %q has no effort levels", taskProviderName(provider), model.ID)
 			}
-			return selected, fmt.Errorf("%s model %q takes effort %s, not %q", taskProviderName(provider), model.ID, strings.Join(model.ReasoningLevels, ", "), effort)
+			return selected, fmt.Errorf("%s model %q takes effort %s, not %q", taskProviderName(provider), model.ID, strings.Join(model.ReasoningEffortLevels(), ", "), effort)
 		}
 		selected.ReasoningEffort = effort
 	}

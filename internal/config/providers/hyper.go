@@ -11,7 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/agent/hyper"
 	xetag "github.com/charmbracelet/x/etag"
 )
@@ -155,7 +155,7 @@ func (r HyperAPIClient) doGet(ctx context.Context, etag string) (catwalk.Provide
 	req, err := http.NewRequestWithContext(
 		ctx,
 		http.MethodGet,
-		r.BaseURL+"/api/v1/provider",
+		r.BaseURL+"/api/v1/provider/v3",
 		nil,
 	)
 	if err != nil {

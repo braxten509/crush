@@ -67,23 +67,23 @@ func TestOrcaRouterCatalog(t *testing.T) {
 	require.Equal(t, "Claude Fable 5", fable.Name)
 	require.EqualValues(t, 1000000, fable.ContextWindow)
 	require.EqualValues(t, 32000, fable.DefaultMaxTokens)
-	require.True(t, fable.SupportsImages)
-	require.InDelta(t, 10, fable.CostPer1MIn, 1e-9)
-	require.InDelta(t, 50, fable.CostPer1MOut, 1e-9)
-	require.InDelta(t, 1, fable.CostPer1MInCached, 1e-9)
-	require.True(t, fable.CanReason)
-	require.Equal(t, []string{"low", "medium", "high"}, fable.ReasoningLevels)
-	require.Equal(t, "medium", fable.DefaultReasoningEffort)
+	require.True(t, fable.Capabilities.Vision)
+	require.InDelta(t, 10, fable.Pricing.Input, 1e-9)
+	require.InDelta(t, 50, fable.Pricing.Output, 1e-9)
+	require.InDelta(t, 1, fable.Pricing.CacheCreate, 1e-9)
+	require.True(t, fable.CanReason())
+	require.Equal(t, []string{"low", "medium", "high"}, fable.ReasoningEffortLevels())
+	require.Equal(t, "medium", fable.Reasoning.DefaultEffortLevel)
 
 	glm := models[4]
-	require.True(t, glm.CanReason, "reasoning_effort alone counts as thinking")
-	require.Equal(t, []string{"low", "medium", "high"}, glm.ReasoningLevels)
+	require.True(t, glm.CanReason(), "reasoning_effort alone counts as thinking")
+	require.Equal(t, []string{"low", "medium", "high"}, glm.ReasoningEffortLevels())
 	require.EqualValues(t, 16000, glm.DefaultMaxTokens)
 
 	plain := models[5]
-	require.False(t, plain.CanReason)
-	require.Empty(t, plain.ReasoningLevels)
-	require.Zero(t, plain.CostPer1MIn)
+	require.False(t, plain.CanReason())
+	require.Empty(t, plain.ReasoningEffortLevels())
+	require.Zero(t, plain.Pricing.Input)
 }
 
 // OrcaRouter's /models list leaves out its locked OrcaCyber models, which
@@ -129,16 +129,16 @@ func TestOrcaRouterCatalogLockedModels(t *testing.T) {
 	require.Equal(t, "OrcaCyber Zero 1.5", zero.Name)
 	require.EqualValues(t, 1000000, zero.ContextWindow)
 	require.EqualValues(t, 32000, zero.DefaultMaxTokens)
-	require.InDelta(t, 3, zero.CostPer1MIn, 1e-9)
-	require.InDelta(t, 7.5, zero.CostPer1MOut, 1e-9)
-	require.InDelta(t, 0.75, zero.CostPer1MInCached, 1e-9)
-	require.True(t, zero.CanReason)
-	require.Equal(t, []string{"low", "medium", "high"}, zero.ReasoningLevels)
-	require.Equal(t, "medium", zero.DefaultReasoningEffort)
+	require.InDelta(t, 3, zero.Pricing.Input, 1e-9)
+	require.InDelta(t, 7.5, zero.Pricing.Output, 1e-9)
+	require.InDelta(t, 0.75, zero.Pricing.CacheCreate, 1e-9)
+	require.True(t, zero.CanReason())
+	require.Equal(t, []string{"low", "medium", "high"}, zero.ReasoningEffortLevels())
+	require.Equal(t, "medium", zero.Reasoning.DefaultEffortLevel)
 
 	glm := models[2]
 	require.Equal(t, "GLM 5.3 Flash Abliterated", glm.Name)
-	require.True(t, glm.SupportsImages)
-	require.Zero(t, glm.CostPer1MIn, "priced per request, and free")
-	require.True(t, glm.CanReason)
+	require.True(t, glm.Capabilities.Vision)
+	require.Zero(t, glm.Pricing.Input, "priced per request, and free")
+	require.True(t, glm.CanReason())
 }

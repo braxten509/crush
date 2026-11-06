@@ -3,6 +3,7 @@ package agent
 import (
 	"cmp"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -15,7 +16,6 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/exp/charmtone"
 
-	"github.com/charmbracelet/crush/internal/agent/hyper"
 	"github.com/charmbracelet/crush/internal/agent/providers"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/stringext"
@@ -26,13 +26,18 @@ import (
 // tells the originating channel.
 func (t *turn) handleStreamError(result *fantasy.AgentResult, err error) (*fantasy.AgentResult, error) {
 	a := t.a
-	isHyper := t.chatModel.ModelCfg.Provider == hyper.Name
 	isCancelErr := errors.Is(err, context.Canceled)
 	slog.Info("Agent stream returned error",
 		"error", err.Error(),
 		"error_type", fmt.Sprintf("%T", err),
-		"is_hyper", isHyper,
+		"oauth", t.chatModel.OAuth,
 		"is_cancel", isCancelErr)
+	// Fire once the turn's final state is written, whichever return below
+	// is taken, and outlive the cancelled run context. A turn cut for a
+	// progress update goes on in its queued follow-up, which fires it.
+	if !t.wasInterruptedForProgress() {
+		defer a.fireTurnHook(context.WithoutCancel(t.ctx), t.call, turnEndEvent(err, t.currentAssistant))
+	}
 	if t.currentAssistant == nil {
 		// Cancel-before-assistant-creation window: the run was
 		// canceled after activeRequests.Set but before PrepareStep
@@ -57,10 +62,9 @@ func (t *turn) handleStreamError(result *fantasy.AgentResult, err error) (*fanta
 	// timeout bounds the cleanup writes.
 	cleanupCtx, cleanupCancel := context.WithTimeout(context.WithoutCancel(t.ctx), 5*time.Second)
 	defer cleanupCancel()
-	if err := t.closeDanglingToolCalls(cleanupCtx, isCancelErr); err != nil {
-		return nil, err
-	}
-	reason, title, details := classifyRunError(err, isHyper, t.chatModel.CatwalkCfg.Name)
+	// Ensure we finish thinking on error to close the reasoning state.
+	t.currentAssistant.FinishThinking()
+	reason, title, details := classifyRunError(err, t.chatModel)
 	if t.wasInterruptedForProgress() {
 		reason, title, details = message.FinishReasonCanceled, "Interrupted for a progress update", ""
 	}
@@ -86,76 +90,115 @@ func (t *turn) handleStreamError(result *fantasy.AgentResult, err error) (*fanta
 	if channelErrorReplyWanted(t.call.Channel, err) {
 		a.sendChannelReply(t.ctx, t.call,
 			"Something went wrong while handling your message. Please try again.",
-			t.completedToolCalls)
+			t.completedToolCalls.Copy())
 	}
 	return nil, err
 }
 
-// closeDanglingToolCalls finishes the assistant's unfinished tool calls and
-// gives every call without a result an error result, so the history stays
-// valid for the next request.
-func (t *turn) closeDanglingToolCalls(cleanupCtx context.Context, isCancelErr bool) error {
-	a := t.a
-	// Ensure we finish thinking on error to close the reasoning state.
-	t.currentAssistant.FinishThinking()
-	toolCalls := t.currentAssistant.ToolCalls()
-	// INFO: we use the cleanup context here because the genCtx has been cancelled.
-	msgs, createErr := a.messages.List(cleanupCtx, t.currentAssistant.SessionID)
-	if createErr != nil {
-		return createErr
+// progressInterruptedToolCallResult is the reply to a call a progress
+// update cut short; the task goes on after the update.
+const progressInterruptedToolCallResult = "Tool call interrupted so the agent can update the user before continuing."
+
+// settle answers every call in the turn's last assistant message that has
+// no reply yet, so a call can never outlive the turn that made it. Every way
+// a native turn ends reaches this; an agent CLI runs its own tools, so its
+// turn settles only when it fails. Replies go through the file review,
+// which keeps what an interrupted call already changed. Failures are
+// logged: the turn's own outcome matters more.
+func (t *turn) settle(runErr error) {
+	if t.currentAssistant == nil || (t.isCLI && runErr == nil) {
+		return
 	}
-	for _, tc := range toolCalls {
+	// Final writes use a context detached from the run: workspace
+	// shutdown cancels it before agent goroutines finish, and the turn's
+	// ending must still land.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(t.ctx), 5*time.Second)
+	defer cancel()
+	if err := t.settleOpenToolCalls(ctx, runErr); err != nil {
+		slog.Error("Failed to settle unanswered tool calls",
+			"session_id", t.call.SessionID, "error", err)
+	}
+}
+
+func (t *turn) settleOpenToolCalls(ctx context.Context, runErr error) error {
+	a := t.a
+	t.toolResultMu.Lock()
+	defer t.toolResultMu.Unlock()
+	var open []message.ToolCall
+	for _, tc := range t.currentAssistant.ToolCalls() {
+		if _, ok := t.answeredToolCalls.Get(tc.ID); !ok {
+			open = append(open, tc)
+		}
+	}
+	if len(open) == 0 {
+		return nil
+	}
+	// A reply may be stored without the callback having seen it saved.
+	msgs, err := a.messages.List(ctx, t.currentAssistant.SessionID)
+	if err != nil {
+		return err
+	}
+	stored := make(map[string]struct{})
+	for _, msg := range msgs {
+		for _, tr := range msg.ToolResults() {
+			stored[tr.ToolCallID] = struct{}{}
+		}
+	}
+	open = slices.DeleteFunc(open, func(tc message.ToolCall) bool {
+		_, ok := stored[tc.ID]
+		return ok
+	})
+	if len(open) == 0 {
+		return nil
+	}
+
+	reason := turnEndReason(t.currentAssistant, runErr)
+	if t.wasInterruptedForProgress() {
+		reason = progressInterruptedToolCallResult
+	}
+	updated := false
+	for _, tc := range open {
+		slog.Warn("Settling a tool call that will never be answered",
+			"session_id", t.currentAssistant.SessionID,
+			"tool_call_id", tc.ID,
+			"tool_name", tc.Name,
+			"reason", reason)
 		if !tc.Finished {
 			tc.Finished = true
-			tc.Input = "{}"
+			// Partial arguments are kept when they are whole JSON, so
+			// the model sees what it wrote; anything else could not be
+			// sent back to the provider.
+			if !json.Valid([]byte(tc.Input)) {
+				tc.Input = "{}"
+			}
 			t.currentAssistant.AddToolCall(tc)
-			updateErr := a.messages.Update(cleanupCtx, *t.currentAssistant)
-			if updateErr != nil {
-				return updateErr
-			}
+			updated = true
 		}
-
-		found := false
-		for _, msg := range msgs {
-			if msg.Role == message.Tool {
-				for _, tr := range msg.ToolResults() {
-					if tr.ToolCallID == tc.ID {
-						found = true
-						break
-					}
-				}
-			}
-			if found {
-				break
-			}
+	}
+	if updated {
+		if err := a.messages.Update(ctx, *t.currentAssistant); err != nil {
+			return fmt.Errorf("failed to settle tool calls: %w", err)
 		}
-		if found {
-			continue
-		}
-		content := "There was an error while executing the tool"
-		if t.wasInterruptedForProgress() {
-			content = "Tool call interrupted so the agent can update the user before continuing."
-		} else if isCancelErr {
-			content = "Error: user cancelled assistant tool calling"
-		}
-		toolResult := message.ToolResult{
+	}
+	for _, tc := range open {
+		if err := t.fileReview.save(ctx, message.ToolResult{
 			ToolCallID: tc.ID,
 			Name:       tc.Name,
-			Content:    content,
+			Content:    reason,
 			IsError:    true,
+		}); err != nil {
+			return fmt.Errorf("failed to record settled tool result: %w", err)
 		}
-		createErr = t.fileReview.save(cleanupCtx, toolResult)
-		if createErr != nil {
-			return createErr
-		}
+		t.answeredToolCalls.Set(tc.ID, struct{}{})
 	}
 	return nil
 }
 
 // classifyRunError turns the error a turn's stream ended with into the
-// finish reason, title and details its assistant message records.
-// modelName names the model in errors about it.
-func classifyRunError(err error, isHyper bool, modelName string) (message.FinishReason, string, string) {
+// finish reason, title and details its assistant message records. model is
+// the model the turn ran on.
+func classifyRunError(err error, model Model) (message.FinishReason, string, string) {
+	modelName := model.CatwalkCfg.Name
 	var fantasyErr *fantasy.Error
 	var providerErr *fantasy.ProviderError
 	var requestTimedOutErr *providers.RequestTimeoutError
@@ -167,8 +210,8 @@ func classifyRunError(err error, isHyper bool, modelName string) (message.Finish
 		// Checked before the provider branches so a deadline our own
 		// request timeout imposed is never reported as a provider error.
 		return message.FinishReasonError, "Request timed out", requestTimedOutErr.UserMessage()
-	case isHyper && errors.As(err, &providerErr) && providerErr.StatusCode == http.StatusUnauthorized:
-		return message.FinishReasonError, "Unauthorized", `Please re-authenticate with Hyper. You can also run "crush auth" to re-authenticate.`
+	case model.OAuth && errors.As(err, &providerErr) && providerErr.StatusCode == http.StatusUnauthorized:
+		return message.FinishReasonError, "Unauthorized", signInAgainMessage(model)
 	case errors.As(err, &providerErr):
 		if providerErr.Message == "The requested model is not supported." {
 			url := "https://github.com/settings/copilot/features"
@@ -197,25 +240,36 @@ func (t *turn) finish(result *fantasy.AgentResult) (*fantasy.AgentResult, error)
 	// Finish before summarization or a recursive queued turn starts touching
 	// the folder; its changes belong to that turn's own review.
 	t.fileReview.finish(t.ctx)
+	// A turn cut short for compaction with tool calls still pending is
+	// continued by a queued follow-up, which replies and fires TurnEnd
+	// when it actually finishes.
+	continued := false
 	if t.shouldSummarize {
 		a.activeRequests.Del(t.call.SessionID)
-		if summarizeErr := a.Summarize(t.genCtx, t.call.SessionID, t.call.ProviderOptions, t.call.OnAuthRefresh); summarizeErr != nil {
+		summarizeErr := a.summarize(t.genCtx, t.call.SessionID, compactTriggerAuto, t.call.ProviderOptions, t.call.OnAuthRefresh)
+		switch {
+		case errors.Is(summarizeErr, ErrCompactionBlocked):
+			// Uncompacted, the next step would only hit the limit
+			// again, so the turn ends here.
+			slog.Info("PreCompact hook blocked compaction", "session_id", t.call.SessionID)
+		case summarizeErr != nil:
 			return nil, summarizeErr
-		}
-		// If the agent wasn't done...
-		if len(t.currentAssistant.ToolCalls()) > 0 {
+		case t.currentAssistant != nil && len(t.currentAssistant.ToolCalls()) > 0:
+			// The agent wasn't done.
 			t.queueContinuation()
+			continued = true
 		}
 	}
+	finished := t.currentAssistant != nil && !continued
 
 	// Route the finished turn's response back to the channel it came
-	// from, unless the turn was cut short for summarization with work
-	// still pending — the queued continuation carries the channel and
-	// replies when it actually finishes. Runs before the busy state is
-	// released so a follow-up push queued behind this turn cannot
-	// overtake its reply.
-	if t.currentAssistant != nil && (!t.shouldSummarize || len(t.currentAssistant.ToolCalls()) == 0) {
-		a.sendChannelReply(t.ctx, t.call, t.currentAssistant.Content().String(), t.completedToolCalls)
+	// from. Runs before the busy state is released so a follow-up push
+	// queued behind this turn cannot overtake its reply. The reply text
+	// carries a closing note when the response stopped short, because a
+	// channel recipient sees only the text, never the TUI banner.
+	if finished {
+		a.sendChannelReply(t.ctx, t.call, channelReplyText(t.currentAssistant), t.completedToolCalls.Copy())
+		a.fireTurnHook(t.ctx, t.call, turnEndEvent(nil, t.currentAssistant))
 	}
 
 	// Terminal publication precedes the deferred atomic batch dispatch.
@@ -237,6 +291,8 @@ func (t *turn) queueContinuation() {
 	t.call.Prompt = fmt.Sprintf("The previous session was interrupted because it got too long, the initial user request was: `%s`", t.call.Prompt)
 	t.call.NotRecallable = true
 	t.call.userMessagesCreated = true
+	// The rewritten prompt is a new message, not the report.
+	t.call.Report = nil
 	t.call.onQueuedInput = nil
 	if len(t.consumedCalls) > 0 {
 		t.call.batch = slices.Concat(t.call.originalCalls(), t.consumedCalls)
@@ -251,4 +307,73 @@ func (t *turn) queueContinuation() {
 	existing = append(existing, t.call)
 	a.messageQueue.Set(t.call.SessionID, existing)
 	queueMu.Unlock()
+}
+
+// providerStoppedTurnMessage is the banner title recorded when a provider
+// ends a response from its own side without an error reaching the run.
+const providerStoppedTurnMessage = "Provider stopped the response"
+
+// turnFinish maps the upstream finish reason of a step onto what the
+// assistant message records: the reason itself plus the banner copy the
+// agent owns for the stops it has to explain (empty copy means the TUI
+// supplies its own). Abnormal stops are logged because they otherwise
+// look exactly like a turn that completed normally — the response just
+// stops short.
+func turnFinish(model Model, sessionID string, reason fantasy.FinishReason) (message.FinishReason, string, string) {
+	switch reason {
+	case fantasy.FinishReasonStop:
+		return message.FinishReasonEndTurn, "", ""
+	case fantasy.FinishReasonToolCalls:
+		return message.FinishReasonToolUse, "", ""
+	case fantasy.FinishReasonLength:
+		// The turn looks like a normal, completed answer that simply
+		// stops mid-sentence, so leave a trace in the log even though
+		// the TUI owns the display copy.
+		slog.Warn(
+			"Model response truncated at the output token limit",
+			"session_id", sessionID,
+			"provider", model.ModelCfg.Provider,
+			"model", model.ModelCfg.Model,
+			"finish_reason", string(reason),
+		)
+		return message.FinishReasonMaxTokens, "", ""
+	case fantasy.FinishReasonContentFilter:
+		// Provider safety classifier stopped the model
+		// (Anthropic stop_reason=refusal, OpenAI content_filter).
+		// The TUI owns the display copy; we only persist the
+		// reason so the UI can show a REFUSED banner.
+		slog.Warn(
+			"Provider content filter stopped the model",
+			"session_id", sessionID,
+			"finish_reason", string(reason),
+		)
+		return message.FinishReasonContentFilter, "", ""
+	case fantasy.FinishReasonError, fantasy.FinishReasonOther:
+		// The provider gave up on the response from its own side
+		// (e.g. insufficient_system_resource) but the stream still
+		// completed, so no error reaches the run's error path. Record
+		// it as an error finish, with copy generic enough for any
+		// provider reason, or the turn renders as a normal completed
+		// answer that stops short.
+		slog.Warn(
+			"Provider stopped the model",
+			"session_id", sessionID,
+			"provider", model.ModelCfg.Provider,
+			"model", model.ModelCfg.Model,
+			"finish_reason", string(reason),
+		)
+		return message.FinishReasonError, providerStoppedTurnMessage, fmt.Sprintf(
+			"The provider ended this response before it was complete (finish_reason=%s). Try again, or use a different model.",
+			string(reason),
+		)
+	}
+	return message.FinishReasonUnknown, "", ""
+}
+
+// signInAgainMessage tells the user how to replace a credential the provider
+// refused after a refresh.
+func signInAgainMessage(m Model) string {
+	name := cmp.Or(m.ProviderName, m.ModelCfg.Provider)
+	return fmt.Sprintf("Please sign in to %s again. You can also run \"crush login %s --force\".",
+		name, m.ModelCfg.Provider)
 }

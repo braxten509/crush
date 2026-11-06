@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/fsext"
@@ -283,17 +283,17 @@ func (h *hub) modelLocked() modelView {
 			ultra := selected.Ultracode
 			mv.Ultra = &ultra
 		}
-		if m != nil && m.CanReason && len(m.ReasoningLevels) == 0 && config.SupportsThinkingToggle(p, *m) {
+		if m != nil && m.CanReason() && len(m.Reasoning.EffortLevels) == 0 && config.SupportsThinkingToggle(p, *m) {
 			think := selected.Think
 			mv.Think = &think
 		}
 	}
 	if m != nil {
 		mv.Name = cmp.Or(m.Name, m.ID)
-		mv.Images = m.SupportsImages
-		if m.CanReason && len(m.ReasoningLevels) > 0 {
-			mv.Efforts = m.ReasoningLevels
-			mv.Effort = cmp.Or(selected.ReasoningEffort, m.DefaultReasoningEffort)
+		mv.Images = m.Capabilities.Vision
+		if m.CanReason() && len(m.Reasoning.EffortLevels) > 0 {
+			mv.Efforts = m.ReasoningEffortLevels()
+			mv.Effort = cmp.Or(selected.ReasoningEffort, m.Reasoning.DefaultEffortLevel)
 		}
 	}
 	mv.Name = cmp.Or(mv.Name, mv.Model)
@@ -317,8 +317,8 @@ func (h *hub) clisLocked() []cliView {
 				continue
 			}
 			opt := modelOption{ID: m.ID, Name: cmp.Or(m.Name, m.ID)}
-			if m.CanReason {
-				opt.Efforts = m.ReasoningLevels
+			if m.CanReason() && len(m.Reasoning.EffortLevels) > 0 {
+				opt.Efforts = m.ReasoningEffortLevels()
 			}
 			cv.Models = append(cv.Models, opt)
 		}

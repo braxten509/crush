@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/csync"
 	"github.com/charmbracelet/crush/internal/env"
 	"github.com/stretchr/testify/require"
@@ -18,7 +18,7 @@ func TestOpenRouterModelNamesDropTheVendorWord(t *testing.T) {
 	off := false
 	cfg := &Config{Providers: csync.NewMap[string, ProviderConfig]()}
 	cfg.Providers.Set("openrouter", ProviderConfig{
-		Name: "OpenRouter", Type: catwalk.TypeOpenRouter, BaseURL: "https://openrouter.ai/api/v1",
+		Name: "OpenRouter", Type: catwalk.TypeCompletions, BaseURL: "https://openrouter.ai/api/v1",
 		APIKey: "key", AutoDiscoverModels: &off,
 		Models: []catwalk.Model{
 			{ID: "deepseek/deepseek-v4.1-flash-1017", Name: "DeepSeek: DeepSeek V4.1 Flash 1017"},
@@ -27,7 +27,7 @@ func TestOpenRouterModelNamesDropTheVendorWord(t *testing.T) {
 		},
 	})
 	cfg.Providers.Set("plain", ProviderConfig{
-		Type: catwalk.TypeOpenAICompat, BaseURL: "https://example.invalid/v1",
+		Type: catwalk.TypeCompletions, BaseURL: "https://example.invalid/v1",
 		APIKey: "key", AutoDiscoverModels: &off,
 		Models: []catwalk.Model{{ID: "m", Name: "Maker: Model"}},
 	})

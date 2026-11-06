@@ -40,7 +40,7 @@ crush models --json`,
 			config.RefreshCLIModels()
 		}
 
-		cfg, err := config.Init(cwd, dataDir, debug)
+		cfg, err := config.Init(cmd.Context(), cwd, dataDir, debug)
 		if err != nil {
 			return err
 		}
@@ -72,7 +72,7 @@ crush models --json`,
 			// credential. Signed in with ChatGPT or Grok, only the
 			// models the subscription grants are usable; an API key
 			// lists the regular catalog.
-			models := provider.AvailableModels()
+			models := provider.UsableModels()
 
 			for _, model := range models {
 				if term != "" {
@@ -197,7 +197,7 @@ func printModelsJSON(w io.Writer, cfg *config.Config, term string) error {
 			}
 			list = append(list, modelInfo{
 				Provider: providerID, ProviderName: provider.Name, Model: model.ID, Name: model.Name,
-				ReasoningLevels: append([]string{}, model.ReasoningLevels...), DefaultReasoningEffort: model.DefaultReasoningEffort,
+				ReasoningLevels: append([]string{}, model.ReasoningEffortLevels()...), DefaultReasoningEffort: model.Reasoning.DefaultEffortLevel,
 				Fast: cfg.ValidateFastMode(providerID, model.ID) == nil,
 			})
 		}

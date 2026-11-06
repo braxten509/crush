@@ -113,6 +113,7 @@ type ResourceStyles struct {
 	Name            lipgloss.Style // Resource name (e.g. "gopls")
 	StatusText      lipgloss.Style // Row status description (e.g. "starting...")
 	OfflineIcon     lipgloss.Style // Offline/unstarted/stopped status icon
+	WorkingIcon     lipgloss.Style // In-progress icon style with no preset glyph
 	DisabledIcon    lipgloss.Style // Disabled status icon
 	BusyIcon        lipgloss.Style // Busy/starting status icon
 	ErrorIcon       lipgloss.Style // Error status icon
@@ -142,15 +143,18 @@ type StatusStyles struct {
 	Help lipgloss.Style
 
 	// Mode badges shown before the help hints.
-	ModeBadgePlan   lipgloss.Style
-	ModeBadgeYolo   lipgloss.Style
-	ModeBadgeRemote lipgloss.Style // Remote Control is sharing the chat
+	ModeBadgePlan     lipgloss.Style
+	ModeBadgeYolo     lipgloss.Style
+	ModeBadgeSysadmin lipgloss.Style
+	ModeBadgeRemote   lipgloss.Style // Remote Control is sharing the chat
 
 	// Full-width banners shown when switching modes.
-	ModeBannerPlan      lipgloss.Style
-	ModeBannerPlanBadge lipgloss.Style
-	ModeBannerYolo      lipgloss.Style
-	ModeBannerYoloBadge lipgloss.Style
+	ModeBannerPlan          lipgloss.Style
+	ModeBannerPlanBadge     lipgloss.Style
+	ModeBannerYolo          lipgloss.Style
+	ModeBannerYoloBadge     lipgloss.Style
+	ModeBannerSysadmin      lipgloss.Style
+	ModeBannerSysadminBadge lipgloss.Style
 
 	ErrorIndicator   lipgloss.Style
 	WarnIndicator    lipgloss.Style

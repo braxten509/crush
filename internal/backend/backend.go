@@ -35,6 +35,7 @@ var (
 	ErrServerShuttingDown      = errors.New("server is shutting down")
 	ErrServerNotIdle           = errors.New("server is hosting live workspaces")
 	ErrClientRetired           = errors.New("client has been retired")
+	ErrInvalidTheme            = errors.New("invalid host theme")
 	ErrChannelOptInMismatch    = errors.New("requested channels differ from the existing workspace; channels are an explicit opt-in and are not shared across duplicate creates")
 )
 
@@ -107,6 +108,7 @@ type Backend struct {
 	// to run unlocked; CreateWorkspace refuses once it is set. That
 	// makes the shutdown-vs-create decision atomic: a create can never
 	// be handed a workspace on a process that is already leaving.
+	// [Backend.ShutdownWorkspaces] sets it too, for an external stop.
 	closing bool
 	// retired holds the IDs of clients that announced their exit via
 	// RetireClient. Creates from a retired client are refused, which is what

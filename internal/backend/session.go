@@ -72,6 +72,8 @@ func (b *Backend) ListSessionMessages(ctx context.Context, workspaceID, sessionI
 	if err != nil {
 		return nil, err
 	}
+	// Ops.ListMessages settles calls a dead process left waiting, so
+	// every remote client sees them answered.
 	return o.ListMessages(ctx, sessionID)
 }
 

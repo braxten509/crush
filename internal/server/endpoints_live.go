@@ -187,7 +187,7 @@ func wrapLiveEvent(ev any) (*pubsub.Payload, bool) {
 	case pubsub.Event[agent.Task]:
 		return envelope(pubsub.PayloadTypeHelper, pubsub.Event[proto.Helper]{
 			Type:    e.Type,
-			Payload: proto.HelperFromTask(e.Payload),
+			Payload: agent.HelperFromTask(e.Payload),
 		}), true
 	default:
 		return nil, false

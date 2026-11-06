@@ -5,14 +5,25 @@ import (
 	"log/slog"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/app"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/permission"
+	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/crush/internal/question"
 	"github.com/charmbracelet/x/powernap/pkg/lsp/protocol"
 )
+
+// SubscribeClientSessions returns a per-caller channel of the session
+// changes of the clients of a workspace.
+func (b *Backend) SubscribeClientSessions(ctx context.Context, workspaceID string) (<-chan pubsub.Event[proto.ClientSession], error) {
+	ws, err := b.GetWorkspace(workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	return ws.clientSessionBroker().Subscribe(ctx), nil
+}
 
 // SubscribeEvents returns a per-caller event channel for a workspace.
 // Each caller receives all events; multiple callers do not compete.
@@ -27,12 +38,12 @@ func (b *Backend) SubscribeEvents(ctx context.Context, workspaceID string) (<-ch
 
 // maxSessionAncestryDepth bounds how far [Backend.RootSessionID] walks
 // the parent chain when resolving a session to its top-level session.
-// Sub-agents cannot spawn sub-agents today, so one hop suffices in
+// Subagents cannot spawn subagents today, so one hop suffices in
 // practice; the extra slack guards against cycles and future nesting.
 const maxSessionAncestryDepth = 4
 
 // RootSessionID resolves sessionID to its top-level session by walking
-// the parent chain. Sub-agent sessions (created by the agent tool or
+// the parent chain. Subagent sessions (created by the agent tool or
 // agentic fetch) carry derived IDs; their interactive prompts are
 // scoped to the top-level session a user can actually view. A session
 // with no parent resolves to itself. The sessionID is returned
@@ -144,6 +155,14 @@ func (b *Backend) GetLSPDiagnostics(workspaceID, lspName string) (map[protocol.D
 		if name == lspName {
 			return client.GetDiagnostics(), nil
 		}
+	}
+
+	// GetLSPStates also lists servers that are no longer running (failed
+	// init, stopped, or started by another workspace), so callers iterate
+	// over names this manager does not hold. Report those as having no
+	// diagnostics, like the local workspace does, instead of a 404.
+	if _, ok := app.GetLSPState(lspName); ok {
+		return map[protocol.DocumentURI][]protocol.Diagnostic{}, nil
 	}
 
 	return nil, ErrLSPClientNotFound

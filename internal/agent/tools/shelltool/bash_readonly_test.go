@@ -30,7 +30,7 @@ func TestReadOnlyBashCantChangeProject(t *testing.T) {
 	t.Cleanup(func() { os.RemoveAll(project) })
 
 	permissions := &mockBashPermissionService{Broker: pubsub.NewBroker[permission.PermissionRequest]()}
-	tool := NewReadOnlyBashTool(permissions, project, t.TempDir(), &config.Attribution{TrailerStyle: config.TrailerStyleNone}, nil)
+	tool := NewReadOnlyBashTool(permissions, project, t.TempDir(), &config.Attribution{TrailerStyle: config.TrailerStyleNone}, config.DefaultMaxBackgroundJobs, nil, nil)
 	ctx := context.WithValue(t.Context(), tools.SessionIDContextKey, "read-only-bash")
 	resp := runBashTool(t, tool, ctx, tools.BashParams{Command: `pwd; echo "it's" read; touch project-file`, Description: "write attempt"})
 	require.Contains(t, resp.Content, project, "commands run in the project")

@@ -123,21 +123,28 @@ func (t *fetchTool) fetch(ctx context.Context, params tools.FetchParams, format 
 		defer cancel()
 	}
 
+	// A failed request is something the agent can recover from (fix the
+	// URL, try another source), so it comes back as a tool error rather
+	// than one that ends the turn.
 	req, err := http.NewRequestWithContext(requestCtx, "GET", params.URL, nil)
 	if err != nil {
-		return fantasy.ToolResponse{}, fmt.Errorf("failed to create request: %w", err)
+		return fantasy.NewTextErrorResponse("Failed to create request: " + err.Error()), nil
 	}
 
 	req.Header.Set("User-Agent", "crush/1.0")
 
 	resp, err := t.client.Do(req)
 	if err != nil {
-		return fantasy.ToolResponse{}, fmt.Errorf("failed to fetch URL: %w", err)
+		return fantasy.NewTextErrorResponse("Failed to fetch URL: " + err.Error()), nil
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fantasy.NewTextErrorResponse(fmt.Sprintf("Request failed with status code: %d", resp.StatusCode)), nil
+		return fantasy.NewTextErrorResponse(fmt.Sprintf(
+			"Request failed with status code: %d %s",
+			resp.StatusCode,
+			http.StatusText(resp.StatusCode),
+		)), nil
 	}
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, tools.MaxFetchSize))

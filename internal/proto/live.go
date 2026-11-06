@@ -1,10 +1,6 @@
 package proto
 
-import (
-	"time"
-
-	"github.com/charmbracelet/crush/internal/agent"
-)
+import "time"
 
 // Live work, ownership and the smaller gaps (engine-design.md 5.3, 5.4,
 // 5.5 and 5.9).
@@ -26,27 +22,6 @@ type Helper struct {
 	Ended          time.Time `json:"ended,omitzero"`
 	Delivered      bool      `json:"delivered,omitempty"`
 	StartedBy      string    `json:"started_by,omitempty"` // owning app's client ID (5.5); "" = no app
-}
-
-// HelperFromTask is the wire form of a helper.
-func HelperFromTask(t agent.Task) Helper {
-	return Helper{
-		ID:             t.ID,
-		SessionID:      t.SessionID,
-		ChildSessionID: t.ChildID,
-		Name:           t.Name,
-		CLI:            t.CLI,
-		Model:          t.Model,
-		Account:        t.Account,
-		Effort:         t.Effort,
-		Fast:           t.Fast,
-		ReadOnly:       t.ReadOnly,
-		Status:         string(t.Status),
-		Started:        t.Started,
-		Ended:          t.Ended,
-		Delivered:      t.Delivered,
-		StartedBy:      t.StartedBy,
-	}
 }
 
 // Job is a command running in the background for a chat.

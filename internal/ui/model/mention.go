@@ -37,9 +37,11 @@ func (c *mentionCompletions) triggers(key, value string) bool {
 }
 
 // begin opens the popup for an @ typed at startIndex, shown at position.
-func (c *mentionCompletions) begin(startIndex int, position image.Point, depth, limit int) tea.Cmd {
+// hostFiles lists the files open in the host editor, ranked first; nil
+// when Crush runs on its own.
+func (c *mentionCompletions) begin(startIndex int, position image.Point, depth, limit int, hostFiles func() []string) tea.Cmd {
 	c.start("@", startIndex, position)
-	return c.popup.Open(depth, limit)
+	return c.popup.Open(depth, limit, hostFiles)
 }
 
 // beginSkills opens the popup listing skills for a $ typed at startIndex,

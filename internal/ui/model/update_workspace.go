@@ -11,10 +11,12 @@ import (
 	"github.com/charmbracelet/crush/internal/history"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/permission"
+	"github.com/charmbracelet/crush/internal/pinentry"
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/crush/internal/question"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/skills"
+	"github.com/charmbracelet/crush/internal/sshaskpass"
 	"github.com/charmbracelet/crush/internal/ui/notification"
 	"github.com/charmbracelet/crush/internal/workspace"
 )
@@ -31,6 +33,7 @@ func (m *UI) handleWorkspaceEvent(msg tea.Msg) (tea.Cmd, updateFlow, bool) {
 			cmds = append(cmds, cmd)
 		}
 	case pubsub.Event[notify.RunComplete]:
+		m.stopTurnClock(msg.Payload.SessionID, msg.Payload.SubmissionID)
 		if msg.Payload.Cancelled {
 			cmds = append(cmds, m.finishPendingPrompt(msg.Payload.SubmissionID, false))
 		} else if msg.Payload.Error != "" {
@@ -101,8 +104,26 @@ func (m *UI) handleWorkspaceEvent(msg tea.Msg) (tea.Cmd, updateFlow, bool) {
 		}
 	case pubsub.Event[question.Notification]:
 		m.handleQuestionNotification(msg.Payload)
+	case pubsub.Event[pinentry.Event]:
+		cmds = append(cmds, m.handlePinentryEvent(msg.Payload))
+	case pubsub.Event[pinentry.PromptRequest]:
+		cmds = append(cmds, m.openPinentryDialog(msg.Payload))
+	case pubsub.Event[pinentry.Notification]:
+		m.handlePinentryNotification(msg.Payload)
+	case pubsub.Event[sshaskpass.PromptRequest]:
+		cmds = append(cmds, m.handleSSHPrompt(msg.Payload)...)
+	case pubsub.Event[sshaskpass.Notification]:
+		m.handleSSHNotification(msg.Payload)
 	case workspace.ConnectionEvent:
 		cmds = append(cmds, m.handleConnectionEvent(msg)...)
+	case workspace.HostThemeEvent:
+		if cmd := m.handleHostThemeEvent(msg); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+	case hostThemeStylesMsg:
+		if cmd := m.handleHostThemeStyles(msg); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 	default:
 		return nil, flowContinue, false
 	}

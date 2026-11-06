@@ -101,7 +101,7 @@ func (t *replaceSymbolTool) run(ctx context.Context, params ReplaceSymbolParams,
 
 	content, err := os.ReadFile(params.FilePath)
 	if err != nil {
-		return fantasy.ToolResponse{}, fmt.Errorf("failed to read file: %w", err)
+		return fantasy.NewTextErrorResponse(fmt.Sprintf("Failed to read file: %s", err)), nil
 	}
 
 	lines := strings.Split(string(content), "\n")
@@ -137,7 +137,7 @@ func (t *replaceSymbolTool) run(ctx context.Context, params ReplaceSymbolParams,
 	}
 
 	if err := os.WriteFile(params.FilePath, []byte(newContent), 0o644); err != nil {
-		return fantasy.ToolResponse{}, fmt.Errorf("failed to write file: %w", err)
+		return fantasy.NewTextErrorResponse(fmt.Sprintf("Failed to write file: %s", err)), nil
 	}
 
 	if sessionID != "" {

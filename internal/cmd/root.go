@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"os/signal"
 	"sync"
 
 	tea "charm.land/bubbletea/v2"
@@ -27,6 +28,7 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/exp/charmtone"
 	"github.com/charmbracelet/x/term"
+	"github.com/pkg/browser"
 	"github.com/spf13/cobra"
 )
 
@@ -79,8 +81,11 @@ cat README.md | crush run "make this more glamorous" > GLAMOROUS_README.md
 # Run with debug logging in a specific directory
 crush --debug --cwd /path/to/project
 
-# Run in yolo mode (auto-accept all permissions; use with care)
-crush --yolo
+# Run in yolo mode (skip permission prompts)
+crush -y
+
+# Run in sysadmin mode (skip prompts and the exec-time block list too)
+crush -yy
 
 # Run with custom data directory
 crush --data-dir /path/to/custom/.crush
@@ -132,12 +137,16 @@ crush --single
 
 		inputFilter := ui.NewFilter()
 		var env uv.Environ = os.Environ()
+		// Don't leak the errors to the TUI
+		browser.Stderr = nil
+		browser.Stdout = nil
 		program := tea.NewProgram(
 			model,
 			tea.WithEnvironment(env),
 			tea.WithContext(cmd.Context()),
 			tea.WithFilter(inputFilter.Filter),
 		)
+		model.SetProgram(program)
 		go ws.Subscribe(program)
 		sessionhost.QuitOnHangup(program.Quit)
 
@@ -262,12 +271,24 @@ func Execute() {
 		_, _ = w.WriteString(heartbit.String())
 		rootCmd.SetVersionTemplate(b.String() + "\n" + defaultVersionTemplate)
 	}
-	if err := fang.Execute(
-		context.Background(),
+	ctx, stop := signal.NotifyContext(context.Background(), terminationSignals()...)
+	err := fang.Execute(
+		ctx,
 		rootCmd,
 		fang.WithVersion(version.Version),
-		fang.WithNotifySignal(os.Interrupt),
-	); err != nil {
+		fang.WithErrorHandler(func(w io.Writer, styles fang.Styles, err error) {
+			if ctx.Err() == nil {
+				fang.DefaultErrorHandler(w, styles, err)
+			}
+		}),
+	)
+	interrupted := ctx.Err() != nil
+	stop()
+	switch {
+	case interrupted:
+		// An interrupt is not a failure worth printing; exit like a shell would.
+		os.Exit(130)
+	case err != nil:
 		os.Exit(1)
 	}
 }

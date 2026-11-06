@@ -107,6 +107,52 @@ func (c *controllerV1) workspaceEndpoints() []apigen.Endpoint {
 			Fails(400, 404).
 			Build(),
 
+		apigen.For(rpc.GetHostTheme).
+			Summary("Get host theme").
+			Description("Returns the theme a host application set for the "+
+				"workspace; theme is null when none is set.").
+			Tags("workspaces").
+			PathParam("id", "Workspace ID").
+			Fails(404).
+			Handle(c.handleGetWorkspaceTheme),
+
+		apigen.For(rpc.SetHostTheme).
+			Summary("Set host theme").
+			Description("Sets the theme a host application (e.g. an editor "+
+				"running Crush in a pane) supplies for every client of the "+
+				"workspace, or clears it with a null theme. Palette keys are "+
+				"theme-file keys and syntax keys are code highlighting tokens; "+
+				"unknown keys are ignored, invalid colors and an unknown base "+
+				"theme are rejected. The theme is kept in memory only. A change "+
+				"is broadcast as a host_theme event, and clients attaching "+
+				"later receive the current theme first. Setting the current "+
+				"theme again is a no-op. Responds with the resulting state.").
+			Tags("workspaces").
+			PathParam("id", "Workspace ID").
+			QueryParam("client_id", "Client ID (UUID) of the caller; only logged").
+			Fails(400, 404, 413).
+			Handle(c.handlePostWorkspaceTheme),
+
+		route(c, rpc.GetHostContext, c.getHostContext).
+			Summary("Get host context").
+			Description("Returns what the host application (e.g. an editor "+
+				"running Crush) has in view; empty when none is set.").
+			Tags("workspaces").
+			PathParam("id", "Workspace ID").
+			Fails(404).
+			Build(),
+
+		apigen.For(rpc.SetHostContext).
+			Summary("Set host context").
+			Description("Records what the host application has in view: its "+
+				"open files and the file and line the user is on. The agent "+
+				"gets it with each prompt, and file completions list the open "+
+				"files first. An empty body clears it.").
+			Tags("workspaces").
+			PathParam("id", "Workspace ID").
+			Fails(400, 404).
+			Handle(c.handlePostWorkspaceHostContext),
+
 		route(c, rpc.WorkspaceConfig, c.getWorkspaceConfig).
 			Summary("Get workspace config").
 			Description("Returns the resolved workspace configuration (config.Config).").
@@ -318,8 +364,19 @@ func (c *controllerV1) interactionEndpoints() []apigen.Endpoint {
 			Fails(404, 500).
 			Build(),
 
+		route(c, rpc.SetPermissionMode, c.setPermissionMode).
+			Summary("Set permission mode").
+			Description("Sets normal, yolo (prompts skipped, exec-time block list "+
+				"kept) or sysadmin (block list dropped too).").
+			Tags("permissions").
+			PathParam("id", "Workspace ID").
+			Fails(400, 404, 500).
+			Build(),
+
 		route(c, rpc.GetPermissionsSkip, c.getPermissionsSkip).
 			Summary("Get skip permissions status").
+			Description("The on/off form of the permission mode: skip is true in "+
+				"yolo and sysadmin mode.").
 			Tags("permissions").
 			PathParam("id", "Workspace ID").
 			Fails(404, 500).
@@ -327,6 +384,8 @@ func (c *controllerV1) interactionEndpoints() []apigen.Endpoint {
 
 		route(c, rpc.SetPermissionsSkip, c.setPermissionsSkip).
 			Summary("Set skip permissions").
+			Description("The on/off form of the permission mode: skip turns yolo "+
+				"on (keeping sysadmin when set), no skip returns to normal.").
 			Tags("permissions").
 			PathParam("id", "Workspace ID").
 			Fails(400, 404, 500).
@@ -352,6 +411,34 @@ func (c *controllerV1) interactionEndpoints() []apigen.Endpoint {
 			PathParam("id", "Workspace ID").
 			Fails(400, 404, 500).
 			Build(),
+
+		apigen.For(rpc.AnswerPinentry).
+			Summary("Answer pinentry prompt").
+			Tags("pinentry").
+			PathParam("id", "Workspace ID").
+			Fails(400, 404, 500).
+			Handle(c.handlePostWorkspacePinentryAnswer),
+
+		apigen.For(rpc.CancelPinentry).
+			Summary("Cancel pinentry prompt").
+			Tags("pinentry").
+			PathParam("id", "Workspace ID").
+			Fails(400, 404, 500).
+			Handle(c.handlePostWorkspacePinentryCancel),
+
+		apigen.For(rpc.AnswerSSH).
+			Summary("Answer SSH prompt").
+			Tags("ssh").
+			PathParam("id", "Workspace ID").
+			Fails(400, 404, 500).
+			Handle(c.handlePostWorkspaceSSHAnswer),
+
+		apigen.For(rpc.CancelSSH).
+			Summary("Cancel SSH prompt").
+			Tags("ssh").
+			PathParam("id", "Workspace ID").
+			Fails(400, 404, 500).
+			Handle(c.handlePostWorkspaceSSHCancel),
 	}
 }
 
@@ -515,6 +602,16 @@ func (c *controllerV1) agentEndpoints() []apigen.Endpoint {
 			Fails(400, 404, 500).
 			Handle(c.handlePostWorkspaceAgentSessionPromptRecall),
 
+		route(c, rpc.AddSessionNote, c.addSessionNote).
+			Summary("Add a note for the next prompt").
+			Description("Keeps text for the session's next prompt, which the agent reads "+
+				"with it. Starts no run and is not shown in the chat.").
+			Tags("agent").
+			PathParam("id", "Workspace ID").
+			PathParam("sid", "Session ID").
+			Fails(400, 404, 500).
+			Build(),
+
 		route(c, rpc.SummarizeSession, c.summarizeSession).
 			Summary("Summarize session").
 			Tags("agent").
@@ -533,7 +630,6 @@ func (c *controllerV1) agentEndpoints() []apigen.Endpoint {
 			QueryParam("request_id", "Live output events for this request go to client_id").
 			Fails(400, 404, 500).
 			Build(),
-
 	}
 }
 

@@ -71,8 +71,9 @@ type ToolStyles struct {
 	ChangesDel lipgloss.Style
 
 	// Parameter list styles
-	ParamMain lipgloss.Style
-	ParamKey  lipgloss.Style
+	ParamMain   lipgloss.Style
+	ParamKey    lipgloss.Style
+	Description lipgloss.Style // A tool's own summary of what it is doing
 
 	// Content rendering styles
 	ContentLine           lipgloss.Style // Individual content line with background and width
@@ -118,6 +119,9 @@ type ToolStyles struct {
 	// Agent task styles
 	AgentTaskTag lipgloss.Style // Agent task tag (blue background, bold)
 	AgentPrompt  lipgloss.Style // Agent prompt text
+	AgentName    lipgloss.Style // Subagent first name
+	AgentLabel   lipgloss.Style // Label a subagent was dispatched with, after its first name
+	AgentMessage lipgloss.Style // Message sent to a subagent
 
 	// Agentic fetch styles
 	AgenticFetchPromptTag lipgloss.Style // Agentic fetch prompt tag (green background, bold)

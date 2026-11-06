@@ -5,11 +5,54 @@
 // token's expiry times (oauth_times) instead of the key and the token.
 import { api } from "../engine/api.js";
 
-const MODEL_FIELDS = ["id", "name", "can_reason", "reasoning_levels", "default_reasoning_effort", "default_max_tokens", "supports_attachments", "context_window"];
+// reasoning: catwalk v3's own, kept for its thinking word ("always" has no
+// thinking switch, footer.js supportsThinkingToggle).
+const MODEL_FIELDS = ["id", "name", "can_reason", "reasoning_levels", "default_reasoning_effort", "default_max_tokens", "supports_attachments", "context_window", "reasoning"];
+
+const PRICES = [
+  ["cost_per_1m_in", "input"],
+  ["cost_per_1m_out", "output"],
+  ["cost_per_1m_in_cached", "cache_create"],
+  ["cost_per_1m_out_cached", "cache_hit"],
+];
+
+// A catwalk model with the flat names the screens read. Engines from v0.100.0
+// on send catwalk v3, which nests them: reasoning {thinking, effort_levels
+// [{value, display}], default_effort_level}, capabilities {vision} and
+// pricing {input, output, cache_create, cache_hit}
+// (catwalk/v3@v3.0.1 pkg/catwalk/provider.go:91-172). Each nested one gives
+// its old name back as the engine's own config migration maps them
+// (internal/config/load.go migrateCatwalkV2Model): thinking "always" or
+// "toggleable" is can_reason (catwalk's CanReason), vision is
+// supports_attachments. A flat name the model already has (an engine from
+// before v0.100.0, still running after an update) stays as it is.
+export function flatModel(model) {
+  if (!model || typeof model !== "object") return model;
+  const out = { ...model };
+  const reasoning = model.reasoning;
+  if (reasoning && typeof reasoning === "object") {
+    const thinking = String(reasoning.thinking ?? "");
+    if (out.can_reason === undefined) out.can_reason = thinking !== "" && thinking !== "never";
+    const levels = (Array.isArray(reasoning.effort_levels) ? reasoning.effort_levels : [])
+      .map((level) => (typeof level === "string" ? level : level?.value))
+      .filter((value) => typeof value === "string" && value !== "");
+    if (out.reasoning_levels === undefined && levels.length > 0) out.reasoning_levels = levels;
+    const effort = reasoning.default_effort_level;
+    if (out.default_reasoning_effort === undefined && typeof effort === "string" && effort !== "") out.default_reasoning_effort = effort;
+  }
+  const vision = model.capabilities?.vision;
+  if (out.supports_attachments === undefined && typeof vision === "boolean") out.supports_attachments = vision;
+  const pricing = model.pricing;
+  if (pricing && typeof pricing === "object") {
+    for (const [flat, nested] of PRICES) if (out[flat] === undefined && pricing[nested] !== undefined) out[flat] = pricing[nested];
+  }
+  return out;
+}
 
 function pickModel(model) {
+  const flat = flatModel(model);
   const out = {};
-  for (const key of MODEL_FIELDS) if (model?.[key] !== undefined) out[key] = structuredClone(model[key]);
+  for (const key of MODEL_FIELDS) if (flat?.[key] !== undefined) out[key] = structuredClone(flat[key]);
   return out;
 }
 

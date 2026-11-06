@@ -7,11 +7,10 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/charmbracelet/crush/internal/message"
-
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/message"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -59,14 +58,18 @@ func (m *mockSessionAgent) Interrupt(sessionID string) {
 		m.interrupt(sessionID)
 	}
 }
+func (m *mockSessionAgent) AddNote(sessionID, text string) {}
 func (m *mockSessionAgent) Summarize(context.Context, string, fantasy.ProviderOptions, func(context.Context, *fantasy.ProviderError) error) error {
 	return nil
 }
 func (m *mockSessionAgent) GenerateTitle(context.Context, string, string) {}
+func (m *mockSessionAgent) ListSettledMessages(context.Context, string) ([]message.Message, error) {
+	return nil, nil
+}
 
 // newTestCoordinator creates a minimal coordinator for unit testing runSubAgent.
 func newTestCoordinator(t *testing.T, env fakeEnv, providerID string, providerCfg config.ProviderConfig) *coordinator {
-	cfg, err := config.Init(env.workingDir, "", false)
+	cfg, err := config.Init(t.Context(), env.workingDir, "", false)
 	require.NoError(t, err)
 	cfg.Config().Providers.Set(providerID, providerCfg)
 	return &coordinator{
@@ -223,7 +226,33 @@ func TestRunSubAgent(t *testing.T) {
 		})
 		require.NoError(t, err)
 		assert.True(t, resp.IsError)
-		assert.Equal(t, "Sub-agent completed but produced no text output.", resp.Content)
+		assert.Equal(t, "Subagent completed but produced no text output.", resp.Content)
+	})
+
+	t.Run("refused or truncated run says why it stopped", func(t *testing.T) {
+		narration := fantasy.ResponseContent{fantasy.TextContent{Text: "Now processes, network, and systemd state."}}
+		for _, tc := range []struct {
+			reason fantasy.FinishReason
+			want   string
+		}{
+			{fantasy.FinishReasonContentFilter, subAgentRefused},
+			{fantasy.FinishReasonLength, subAgentTruncated},
+		} {
+			resp := subAgentResponse(&fantasy.AgentResult{
+				Steps: []fantasy.StepResult{
+					{Response: fantasy.Response{Content: narration, FinishReason: fantasy.FinishReasonToolCalls}},
+					{Response: fantasy.Response{FinishReason: tc.reason}},
+				},
+				Response: fantasy.Response{Content: narration},
+			})
+			assert.True(t, resp.IsError, tc.reason)
+			assert.Equal(t, tc.want, resp.Content, "earlier narration must not pass for a report")
+		}
+
+		resp := subAgentResponse(&fantasy.AgentResult{
+			Steps: []fantasy.StepResult{{Response: fantasy.Response{Content: narration, FinishReason: fantasy.FinishReasonContentFilter}}},
+		})
+		assert.Equal(t, subAgentRefused+"\n\nIts last output before stopping:\n\n"+narration.Text(), resp.Content)
 	})
 
 	t.Run("empty result returns error response", func(t *testing.T) {
@@ -247,7 +276,7 @@ func TestRunSubAgent(t *testing.T) {
 		})
 		require.NoError(t, err)
 		assert.True(t, resp.IsError)
-		assert.Equal(t, "Sub-agent completed but produced no text output.", resp.Content)
+		assert.Equal(t, "Subagent completed but produced no text output.", resp.Content)
 	})
 
 	t.Run("ModelCfg.MaxTokens overrides default", func(t *testing.T) {
@@ -423,7 +452,7 @@ func TestRunSubAgent(t *testing.T) {
 func TestUpdateParentSessionCost(t *testing.T) {
 	t.Run("accumulates cost correctly", func(t *testing.T) {
 		env := testEnv(t)
-		cfg, err := config.Init(env.workingDir, "", false)
+		cfg, err := config.Init(t.Context(), env.workingDir, "", false)
 		require.NoError(t, err)
 		coord := &coordinator{cfg: cfg, sessions: env.sessions}
 
@@ -448,7 +477,7 @@ func TestUpdateParentSessionCost(t *testing.T) {
 
 	t.Run("accumulates multiple child costs", func(t *testing.T) {
 		env := testEnv(t)
-		cfg, err := config.Init(env.workingDir, "", false)
+		cfg, err := config.Init(t.Context(), env.workingDir, "", false)
 		require.NoError(t, err)
 		coord := &coordinator{cfg: cfg, sessions: env.sessions}
 
@@ -479,7 +508,7 @@ func TestUpdateParentSessionCost(t *testing.T) {
 
 	t.Run("child session not found", func(t *testing.T) {
 		env := testEnv(t)
-		cfg, err := config.Init(env.workingDir, "", false)
+		cfg, err := config.Init(t.Context(), env.workingDir, "", false)
 		require.NoError(t, err)
 		coord := &coordinator{cfg: cfg, sessions: env.sessions}
 
@@ -493,7 +522,7 @@ func TestUpdateParentSessionCost(t *testing.T) {
 
 	t.Run("parent session not found", func(t *testing.T) {
 		env := testEnv(t)
-		cfg, err := config.Init(env.workingDir, "", false)
+		cfg, err := config.Init(t.Context(), env.workingDir, "", false)
 		require.NoError(t, err)
 		coord := &coordinator{cfg: cfg, sessions: env.sessions}
 
@@ -509,7 +538,7 @@ func TestUpdateParentSessionCost(t *testing.T) {
 
 	t.Run("zero cost handled correctly", func(t *testing.T) {
 		env := testEnv(t)
-		cfg, err := config.Init(env.workingDir, "", false)
+		cfg, err := config.Init(t.Context(), env.workingDir, "", false)
 		require.NoError(t, err)
 		coord := &coordinator{cfg: cfg, sessions: env.sessions}
 

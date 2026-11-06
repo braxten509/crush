@@ -135,7 +135,7 @@ func TestSessionStaysUnfinishedAfterBackgroundJobExits(t *testing.T) {
 	defer cancel()
 	h := registerTestHub(t)
 	manager := shell.GetBackgroundShellManager()
-	job, err := manager.Start(ctx, t.TempDir(), nil, "true", "finished job")
+	job, err := manager.Start(ctx, t.TempDir(), nil, "true", "finished job", 0)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = manager.Remove(job.ID) })
 	require.True(t, job.WaitContext(ctx))

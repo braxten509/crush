@@ -288,6 +288,7 @@ func (m *UI) applyLoadedSession(msg loadSessionMsg) []tea.Cmd {
 		if cmd := m.resetPlanModeState(); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
+		m.turnOutcome = ""
 	}
 	m.setState(uiChat, m.focus)
 	m.session = sess
@@ -392,6 +393,12 @@ func prepareTranscript(ctx context.Context, ws workspace.Workspace, sty *styles.
 		}
 	}
 	loadNestedTools(ctx, ws, sty, workingDir, p.items)
+	// Settle dispatched subagents that finished while the transcript was
+	// stored. Done here, off the UI thread, because asking whether a
+	// subagent session is still live is a workspace read.
+	replayDispatchReports(p.items, ptrs, func(messageID, toolCallID string) bool {
+		return ws.AgentIsSessionBusy(ws.CreateAgentToolSessionID(messageID, toolCallID))
+	})
 	return p
 }
 

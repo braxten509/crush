@@ -60,7 +60,7 @@ func TestScrollbarDragEndsWhenReleaseGoesToOverlay(t *testing.T) {
 			t.Parallel()
 			u := newFrameTestUI(t)
 			u.View()
-			handled, _ := u.chat.HandleScrollbarPress(u.chat.scrollbarEdge, 1)
+			handled := u.chat.HandleScrollbarPress(u.chat.scrollbarEdge, 1)
 			require.True(t, handled)
 			require.True(t, u.chat.DraggingScrollbar())
 

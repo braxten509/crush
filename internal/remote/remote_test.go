@@ -15,7 +15,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	"github.com/charmbracelet/crush/internal/agent/notify"
@@ -144,7 +144,10 @@ func TestThePhoneShowsTheChatsOwnModel(t *testing.T) {
 		Providers: csync.NewMapFrom(map[string]config.ProviderConfig{
 			"p": {ID: "p", Name: "P", Models: []catwalk.Model{
 				{ID: "a", Name: "Model A", ContextWindow: 100},
-				{ID: "b", Name: "Model B", ContextWindow: 200, CanReason: true, ReasoningLevels: []string{"low", "high"}},
+				{ID: "b", Name: "Model B", ContextWindow: 200, Reasoning: catwalk.Reasoning{
+					Thinking:     catwalk.ThinkingToggleable,
+					EffortLevels: catwalk.NewEffortLevels("low", "high"),
+				}},
 			}},
 		}),
 	}

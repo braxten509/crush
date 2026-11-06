@@ -3,7 +3,7 @@ package config
 import (
 	"testing"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/config/providers"
 	"github.com/stretchr/testify/require"
 )
@@ -34,7 +34,7 @@ func TestIFMProviderCatalog(t *testing.T) {
 				return
 			}
 			require.Equal(t, "IFM", provider.Name)
-			require.Equal(t, catwalk.TypeOpenAICompat, provider.Type)
+			require.Equal(t, catwalk.TypeCompletions, provider.Type)
 			require.Equal(t, "https://api.ifm.ai/v1", provider.APIEndpoint)
 			require.Equal(t, "$IFM_API_KEY", provider.APIKey)
 			require.Len(t, provider.Models, 1)
@@ -43,9 +43,9 @@ func TestIFMProviderCatalog(t *testing.T) {
 			require.Equal(t, model.ID, provider.DefaultLargeModelID)
 			require.Equal(t, model.ID, provider.DefaultSmallModelID)
 			require.Equal(t, int64(524288), model.ContextWindow)
-			require.True(t, model.CanReason)
-			require.Equal(t, []string{"low", "medium", "high"}, model.ReasoningLevels)
-			require.Equal(t, "high", model.DefaultReasoningEffort)
+			require.True(t, model.CanReason())
+			require.Equal(t, []string{"low", "medium", "high"}, model.ReasoningEffortLevels())
+			require.Equal(t, "high", model.Reasoning.DefaultEffortLevel)
 		})
 	}
 }

@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"context"
 	"errors"
 	"fmt"
@@ -35,14 +36,14 @@ func TestClassifyRunError(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			reason, title, details := classifyRunError(test.err, test.isHyper, "Model")
+			reason, title, details := classifyRunError(test.err, Model{OAuth: test.isHyper, CatwalkCfg: catwalk.Model{Name: "Model"}})
 			require.Equal(t, test.reason, reason)
 			require.Equal(t, test.title, title)
 			require.Equal(t, test.details, details)
 		})
 	}
 
-	_, title, details := classifyRunError(&fantasy.ProviderError{Message: "The requested model is not supported."}, false, "GPT Model")
+	_, title, details := classifyRunError(&fantasy.ProviderError{Message: "The requested model is not supported."}, Model{CatwalkCfg: catwalk.Model{Name: "GPT Model"}})
 	require.Equal(t, "Copilot model not enabled", title)
 	require.Contains(t, details, `"GPT Model" is not enabled in Copilot.`)
 	require.Contains(t, details, "https://github.com/settings/copilot/features")

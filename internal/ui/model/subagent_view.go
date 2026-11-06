@@ -179,7 +179,13 @@ func (m *UI) handleSubagentView(msg tea.Msg) (tea.Cmd, bool) {
 	if m.inputOwner() != ownerSubagentView {
 		return nil, false
 	}
-	return m.handleSubagentInput(v, msg)
+	cmd, ok := m.handleSubagentInput(v, msg)
+	if ok {
+		// Handled input skips the update tail, which is where scrolls
+		// arm the scrollbar's auto-hide.
+		cmd = tea.Batch(cmd, v.chat.EnsureScrollbarHide())
+	}
+	return cmd, ok
 }
 
 // handleSubagentInput handles the keys and the mouse over the sub-agent
@@ -203,8 +209,8 @@ func (m *UI) handleSubagentInput(v *subagentView, msg tea.Msg) (cmd tea.Cmd, ok 
 			m.closeSubagentView()
 		} else if msg.Button == uv.MouseLeft && image.Pt(msg.X, msg.Y).In(main) {
 			v.returnFocused = false
-			if handled, cmd := v.chat.HandleScrollbarPress(msg.X-main.Min.X, msg.Y-main.Min.Y); handled {
-				return cmd, true
+			if v.chat.HandleScrollbarPress(msg.X-main.Min.X, msg.Y-main.Min.Y) {
+				return nil, true
 			}
 			_, cmd := v.chat.HandleMouseDown(msg.X-main.Min.X, msg.Y-main.Min.Y)
 			if cmd != nil {
@@ -214,7 +220,8 @@ func (m *UI) handleSubagentInput(v *subagentView, msg tea.Msg) (cmd tea.Cmd, ok 
 		return nil, true
 	case tea.MouseMotionMsg:
 		if v.chat.DraggingScrollbar() {
-			return v.chat.HandleScrollbarDrag(msg.Y - main.Min.Y), true
+			v.chat.HandleScrollbarDrag(msg.Y - main.Min.Y)
+			return nil, true
 		}
 		v.chat.HandleMouseDrag(msg.X-main.Min.X, msg.Y-main.Min.Y)
 		return nil, true

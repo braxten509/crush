@@ -3,6 +3,7 @@ package model
 import (
 	"context"
 	"os"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -221,6 +222,10 @@ type UI struct {
 	// agent read started by an older one is dropped. See config_refresh.go.
 	configRefreshGen uint64
 
+	// hostTheme tracks the theme a host application pushes through the
+	// server (see hosttheme.go).
+	hostTheme hostThemeState
+
 	focus uiFocusState
 	state uiState
 	mode  uiInputMode
@@ -241,10 +246,6 @@ type UI struct {
 	// modeSwitching is true while the async agent-model update kicked off
 	// by setInputMode is still in flight; sending is blocked meanwhile.
 	modeSwitching bool
-
-	// cycleYolo is true while YOLO was enabled by the Shift+Tab input-mode
-	// cycle, which is the only case where the cycle may disable it again.
-	cycleYolo bool
 
 	keyMap KeyMap
 	keyenh tea.KeyboardEnhancementsMsg
@@ -274,9 +275,9 @@ type UI struct {
 	widthProbePending  bool
 	progressBarEnabled bool
 
-	// turnOutcome is the result of the last agent turn reported to the
-	// terminal as program status (done or error) until the user has seen
-	// it, or empty.
+	// turnOutcome is the result of the last agent turn (done or error),
+	// reported to the terminal until the user has seen it. See
+	// trackTurnOutcome.
 	turnOutcome tea.ProgramState
 
 	// caps hold different terminal capabilities that we query for.
@@ -377,11 +378,12 @@ type UI struct {
 	// queue is the prompts sent but not answered yet: queued behind the
 	// running turn, being submitted, recalled or held; see prompt_queue.go.
 	queue promptQueue
-	// agentBusyCache / yoloCache memoize the workspace busy and permission
-	// probes (synchronous HTTP round-trips in client/server mode). Reads
-	// never probe; refreshes happen off-thread (see workspace_cache.go).
+	// agentBusyCache / permModeCache memoize the workspace busy and
+	// permission-mode probes (synchronous HTTP round-trips in client/server
+	// mode). Reads never probe; refreshes happen off-thread (see
+	// workspace_cache.go).
 	agentBusyCache    ttlCache
-	yoloCache         ttlCache
+	permModeCache     modeTTLCache
 	busyFetchInFlight bool
 	// agentReady memoizes the coordinator readiness (AgentIsReady is a
 	// synchronous HTTP GET in client/server mode, and modelInfo renders it
@@ -406,10 +408,36 @@ type UI struct {
 	todoSpinner    spinner.Model
 	todoIsSpinning bool
 
+	// program is the running Bubble Tea program, set via SetProgram. It is
+	// needed to release and restore the terminal when a terminal-based GPG
+	// pinentry dialog takes over the screen.
+	program *tea.Program
+
+	// pinentryActive tracks whether the terminal is currently handed over
+	// to a pinentry dialog; pinentryTouchPending tracks whether the status
+	// bar shows the security key touch hint.
+	pinentryActive       bool
+	pinentryTouchPending bool
+	// pinentryCtrlL tracks whether the active pinentry dialog is an
+	// ncurses flavor that repaints its UI on Ctrl-L.
+	pinentryCtrlL bool
+	// pinentryTermMu serializes terminal release/restore commands, which
+	// Bubble Tea runs on separate goroutines.
+	pinentryTermMu sync.Mutex
+
 	// mouse highlighting related state
 	lastClickTime time.Time
 	hoverX        int
 	hoverY        int
+
+	// subAgentsRunning is how many subagents were still working as of the
+	// last update. Counting them walks the whole transcript, and the header
+	// needs the number on every frame, so it is counted once per update
+	// rather than once per frame.
+	subAgentsRunning int
+	// turnSubmissions identifies the active locally submitted turn in each
+	// session, so a canceled queued prompt cannot stop another turn's clock.
+	turnSubmissions map[string]string
 
 	// hyperCredits is the remaining Hyper credits as last fetched from
 	// the /v1/credits endpoint. It is nil when no fetch has reported a
@@ -520,11 +548,11 @@ func New(com *common.Common, initialSessionID string, continueLast bool) *UI {
 		ui.theme.revision = styles.ThemeFileRevision(ui.theme.shown)
 	}
 
-	// Seed the yolo cache once at construction; afterwards it is kept
-	// fresh by write-through toggles and off-thread refreshes so Update
+	// Seed the permission-mode cache once at construction; afterwards it is
+	// kept fresh by write-through toggles and off-thread refreshes so Update
 	// and View never probe the workspace synchronously.
-	yolo := com.Workspace.PermissionSkipRequests()
-	ui.yoloCache.set(yolo)
+	permMode := com.Workspace.PermissionMode()
+	ui.permModeCache.set(permMode)
 
 	// Seed the memoized agent ready state the same way so the first frame
 	// renders the model info; the busy probe keeps it fresh afterwards.
@@ -532,7 +560,7 @@ func New(com *common.Common, initialSessionID string, continueLast bool) *UI {
 		ui.agentReady = true
 	}
 	ui.mode = uiInputModeCode
-	ui.setEditorPrompt(yolo)
+	ui.setEditorPrompt(permMode)
 	ui.randomizePlaceholders()
 	ui.textarea.Placeholder = ui.readyPlaceholder
 	ui.status = status
@@ -566,6 +594,14 @@ func New(com *common.Common, initialSessionID string, continueLast bool) *UI {
 	chat.SetThoughtLineSetting(ui.showThoughtLine)
 
 	return ui
+}
+
+// SetProgram gives the model a handle to the running Bubble Tea program.
+// It is used to release and restore the terminal when a terminal-based GPG
+// pinentry dialog takes over the screen. Must be called before the program
+// starts processing pinentry events.
+func (m *UI) SetProgram(program *tea.Program) {
+	m.program = program
 }
 
 // Init initializes the UI model.

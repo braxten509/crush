@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"charm.land/fantasy"
@@ -16,11 +17,15 @@ import (
 // underlying error so callers can still match [context.DeadlineExceeded]
 // through the chain.
 type RequestTimeoutError struct {
-	// Timeout is the budget the request exhausted.
+	// Timeout is the window that actually ran out, which is wider than the
+	// configured value when the deadline fired before the first part.
 	Timeout time.Duration
 	// Idle reports a stream that went silent rather than a request that
 	// never answered.
 	Idle bool
+	// First reports that nothing at all arrived before the deadline, so
+	// the model never started answering rather than stopping midway.
+	First bool
 	// Cause is the error the deadline produced.
 	Cause error
 }
@@ -42,22 +47,37 @@ func (e *RequestTimeoutError) Unwrap() error { return e.Cause }
 // ran before giving up and how to change the limit.
 func (e *RequestTimeoutError) UserMessage() string {
 	hint := "Increase the limit with \"option request-timeout SECONDS\" or set it to 0 to disable the timeout."
+	if e.Idle && e.First {
+		return fmt.Sprintf("The model did not send any data within %s. %s", e.Timeout, hint)
+	}
 	if e.Idle {
 		return fmt.Sprintf("The model stopped sending data for %s. %s", e.Timeout, hint)
 	}
 	return fmt.Sprintf("The model did not respond within %s. %s", e.Timeout, hint)
 }
 
+// defaultFirstPartTimeout is the floor for the wait on a stream's first
+// part. Prefill and the thinking that happens before the first token are
+// model work, not a stalled connection: after a tool result lands in the
+// transcript a provider can stay silent for minutes before answering, and
+// the inter-part window is far too small to absorb that. A stream that
+// stays silent longer than this is treated as dead.
+const defaultFirstPartTimeout = 5 * time.Minute
+
 // requestTimeoutModel wraps a [fantasy.LanguageModel] so requests are
 // bounded by the configured request_timeout. Non-streaming calls get a hard
 // per-request deadline, applied per call so fantasy's retry loop gives every
-// attempt a fresh budget — the same per-request semantics the provider SDKs
-// expose. Streams instead get an idle timeout: the budget resets whenever a
-// part arrives and only fires when the provider goes silent, so a slow but
-// actively streaming response is never aborted.
+// attempt a fresh budget, the same per-request semantics the provider SDKs
+// expose. Streams get an idle timeout instead: the clock only runs while we
+// wait on the provider, so neither a slow but active response nor work on
+// this side (a long-running tool, a heavy database write) is ever mistaken
+// for a dead provider.
 type requestTimeoutModel struct {
 	fantasy.LanguageModel
+	// timeout is the inactivity window between stream parts.
 	timeout time.Duration
+	// firstPart is the window granted until the first part arrives.
+	firstPart time.Duration
 }
 
 // newRequestTimeoutModel bounds each request to m with the given timeout. A
@@ -66,7 +86,11 @@ func newRequestTimeoutModel(m fantasy.LanguageModel, timeout time.Duration) fant
 	if m == nil || timeout <= 0 {
 		return m
 	}
-	return requestTimeoutModel{LanguageModel: m, timeout: timeout}
+	return requestTimeoutModel{
+		LanguageModel: m,
+		timeout:       timeout,
+		firstPart:     max(timeout, defaultFirstPartTimeout),
+	}
 }
 
 // wrapTimedOut replaces err with the RequestTimeoutError when this model's
@@ -78,7 +102,7 @@ func wrapTimedOut(ctx context.Context, timeoutErr *RequestTimeoutError, err erro
 	if err == nil || context.Cause(ctx) != timeoutErr {
 		return err
 	}
-	if errors.Is(err, context.Canceled) {
+	if errors.Is(err, timeoutErr) || errors.Is(err, context.Canceled) {
 		timeoutErr.Cause = context.DeadlineExceeded
 	} else {
 		timeoutErr.Cause = err
@@ -99,15 +123,27 @@ func (m requestTimeoutModel) Generate(ctx context.Context, call fantasy.Call) (*
 
 // Stream implements [fantasy.LanguageModel].
 //
-// The stream is consumed after Stream returns, so the timer must outlive
-// this call: it fires only after timeout seconds without any part arriving,
-// and is released when iteration ends, whether the stream finishes, breaks,
-// or the idle timeout aborts it. Both the initial connection and gaps
-// between parts share the same budget.
+// The clock measures provider silence and nothing else. It runs from the
+// call until the first part arrives, under the wider first-part budget,
+// and then from the moment the consumer is done with a part until the next
+// one arrives. Time spent on this side, in a stream callback or in a tool
+// waiting on a long-running job, is never charged to the model, so the
+// timer only starts once that work has stopped. It is released when
+// iteration ends, whether the stream finishes, breaks, or the idle timeout
+// aborts it.
 func (m requestTimeoutModel) Stream(ctx context.Context, call fantasy.Call) (fantasy.StreamResponse, error) {
 	timeoutErr := &RequestTimeoutError{Timeout: m.timeout, Idle: true}
 	ctx, cancel := context.WithCancelCause(ctx)
-	timer := time.AfterFunc(m.timeout, func() { cancel(timeoutErr) })
+
+	var arrived atomic.Bool
+	timer := time.AfterFunc(m.firstPart, func() {
+		if !arrived.Load() {
+			// Nothing ever arrived, so the first-part budget is the
+			// window that ran out.
+			timeoutErr.Timeout, timeoutErr.First = m.firstPart, true
+		}
+		cancel(timeoutErr)
+	})
 
 	inner, err := m.LanguageModel.Stream(ctx, call)
 	if err != nil {
@@ -119,9 +155,17 @@ func (m requestTimeoutModel) Stream(ctx context.Context, call fantasy.Call) (fan
 		defer timer.Stop()
 		defer cancel(nil)
 		inner(func(part fantasy.StreamPart) bool {
-			timer.Reset(m.timeout)
+			arrived.Store(true)
+			// The provider is alive. Hold the clock while the consumer
+			// works on this part and re-arm only once we are waiting on
+			// the next one.
+			timer.Stop()
 			part.Error = wrapTimedOut(ctx, timeoutErr, part.Error)
-			return yield(part)
+			keepGoing := yield(part)
+			if keepGoing {
+				timer.Reset(m.timeout)
+			}
+			return keepGoing
 		})
 	}, nil
 }

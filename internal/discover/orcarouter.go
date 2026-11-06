@@ -10,7 +10,7 @@ import (
 	"slices"
 	"strings"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 )
 
 // orcaRouterEfforts are the effort levels every OrcaRouter model that
@@ -106,9 +106,9 @@ func OrcaRouterCatalog(ctx context.Context, baseURL, apiKey string, headers map[
 		entry.SupportedParameters = price.SupportedParameters
 		model := orcaRouterCatwalkModel(entry)
 		if price.QuotaType == 0 {
-			model.CostPer1MIn = price.ModelRatio * 2
-			model.CostPer1MOut = model.CostPer1MIn * price.CompletionRatio
-			model.CostPer1MInCached = model.CostPer1MIn * price.CacheRatio
+			model.Pricing.Input = price.ModelRatio * 2
+			model.Pricing.Output = model.Pricing.Input * price.CompletionRatio
+			model.Pricing.CacheCreate = model.Pricing.Input * price.CacheRatio
 		}
 		models = append(models, model)
 	}
@@ -148,9 +148,11 @@ func orcaRouterCatwalkModel(entry orcaRouterModel) catwalk.Model {
 	model := openRouterCatwalkModel(entry.openRouterModel)
 	model.ContextWindow = cmp.Or(model.ContextWindow, int64(200_000))
 	if slices.Contains(entry.SupportedParameters, "reasoning") || slices.Contains(entry.SupportedParameters, "reasoning_effort") {
-		model.CanReason = true
-		model.ReasoningLevels = slices.Clone(orcaRouterEfforts)
-		model.DefaultReasoningEffort = "medium"
+		model.Reasoning = catwalk.Reasoning{
+			Thinking:           catwalk.ThinkingToggleable,
+			EffortLevels:       catwalk.NewEffortLevels(orcaRouterEfforts...),
+			DefaultEffortLevel: "medium",
+		}
 	}
 	return model
 }

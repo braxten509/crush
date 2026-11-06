@@ -92,7 +92,7 @@ func TestResolveDataDirMatchesLoad(t *testing.T) {
 			got, err := ResolveDataDir(wd, flag)
 			require.NoError(t, err)
 
-			store, err := Load(wd, flag, false)
+			store, err := Load(t.Context(), wd, flag, false)
 			require.NoError(t, err)
 			require.Equal(t, store.Config().Options.DataDirectory, got, "the resolver must match Load")
 			if tc.want != nil {

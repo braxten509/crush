@@ -44,6 +44,7 @@ type quickStyleOpts struct {
 
 	// Statuses.
 	destructive       color.Color
+	destructiveSubtle color.Color
 	error             color.Color
 	warning           color.Color
 	warningSubtle     color.Color
@@ -163,6 +164,63 @@ func neutralGray(c color.Color) color.Color {
 	return color.RGBA{R: v, G: v, B: v, A: 0xff}
 }
 
+// minBadgeInkContrast is the WCAG contrast below which [badgeInk] looks for
+// a more legible ink: the 3:1 floor for bold and large text.
+const minBadgeInkContrast = 3.0
+
+// badgeInk returns the text color for a badge filled with fill. Status
+// badges, toasts and attachment chips write a background role on a bright
+// status fill: dark on bright on a dark theme, but light on bright on a
+// light one. ink is kept unless it falls below [minBadgeInkContrast] on fill
+// and alt reads better; every built-in theme keeps its ink.
+func badgeInk(fill, ink, alt color.Color) color.Color {
+	if fill == nil || ink == nil || alt == nil {
+		return ink
+	}
+	c := wcagContrast(ink, fill)
+	if c >= minBadgeInkContrast || wcagContrast(alt, fill) <= c {
+		return ink
+	}
+	return alt
+}
+
+// legibleBadges picks the text of the badges filled with primary (the
+// question prompt icon and the file picker selection) and of the plan
+// banner with [badgeInk], with onPrimary as the alternative. Unlike the
+// badges quickStyle settles itself, these would change built-in themes
+// (charmtone-panther's plan banner), so it only runs for palettes that are
+// not an untouched built-in: the ones that skip the built-in overrides.
+//
+// The mode badges and markdown headings have no fill here (they are
+// colored text on the terminal background), so their colors stay as
+// quickStyle set them.
+func legibleBadges(s Styles, o quickStyleOpts) Styles {
+	ink := badgeInk(o.primary, o.fgBase, o.onPrimary)
+	s.Status.ModeBannerPlan = s.Status.ModeBannerPlan.Foreground(badgeInk(o.planMoreSubtle, o.fgBase, o.onPrimary))
+	s.Editor.PromptQuestionIconFocused = s.Editor.PromptQuestionIconFocused.Foreground(ink)
+	s.FilePicker.Selected = s.FilePicker.Selected.Foreground(ink)
+	return s
+}
+
+// wcagContrast returns the WCAG 2 contrast ratio between two colors.
+func wcagContrast(a, b color.Color) float64 {
+	la, lb := wcagLuminance(a), wcagLuminance(b)
+	return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
+}
+
+// wcagLuminance returns the WCAG 2 relative luminance of c.
+func wcagLuminance(c color.Color) float64 {
+	r, g, b, _ := c.RGBA()
+	channel := func(v uint32) float64 {
+		s := float64(v) / 0xffff
+		if s <= 0.04045 {
+			return s / 12.92
+		}
+		return math.Pow((s+0.055)/1.055, 2.4)
+	}
+	return 0.2126*channel(r) + 0.7152*channel(g) + 0.0722*channel(b)
+}
+
 // quickStyle builds the default Styles (that is, the default theme, Charmtone
 // Pantera) from a palette of semi-semanticly-named colors.
 //
@@ -202,8 +260,10 @@ func quickStyleInputs(s *Styles, o quickStyleOpts, base lipgloss.Style) {
 	// Populate color fields
 	s.WorkingGradFromColor = o.primary
 	s.WorkingGradToColor = o.secondary
-	s.WorkingLabelColor = o.fgMostSubtle
+	s.WorkingLabelColor = o.fgBase
 	s.WorkingTimerColor = o.fgMostSubtle
+	s.ThinkingLabelColor = o.fgMoreSubtle
+	s.CanceledLabelColor = o.fgMoreSubtle
 
 	s.TextInput = textinput.Styles{
 		Focused: textinput.StyleState{
@@ -349,7 +409,7 @@ func quickStyleHeader(s *Styles, o quickStyleOpts, base, muted, subtle lipgloss.
 	s.Header.Keystroke = muted
 	s.Header.KeystrokeTip = subtle
 	s.Header.WorkingDir = muted
-	s.Header.GitBranch = base.Foreground(o.secondary)
+	s.Header.GitBranch = muted
 	s.Header.Separator = subtle
 	s.Header.Wrapper = lipgloss.NewStyle().Foreground(o.fgBase)
 	s.Header.LogoGradCanvas = lipgloss.NewStyle()
@@ -376,6 +436,7 @@ func quickStyleTools(s *Styles, o quickStyleOpts, base, muted, subtle lipgloss.S
 
 	s.Tool.ParamMain = subtle
 	s.Tool.ParamKey = subtle
+	s.Tool.Description = base
 
 	// Content rendering - prepared styles that accept width parameter
 	s.Tool.ContentLine = muted.Background(o.bgLeastVisible)
@@ -416,9 +477,12 @@ func quickStyleTools(s *Styles, o quickStyleOpts, base, muted, subtle lipgloss.S
 	// Agent task styles
 	s.Tool.AgentTaskTag = base.Bold(true).Padding(0, 1).MarginLeft(2).Background(o.infoMoreSubtle).Foreground(o.onPrimary)
 	s.Tool.AgentPrompt = muted
+	s.Tool.AgentName = base.Foreground(o.infoMostSubtle)
+	s.Tool.AgentLabel = base.Foreground(o.fgMostSubtle)
+	s.Tool.AgentMessage = muted
 
 	// Agentic fetch styles
-	s.Tool.AgenticFetchPromptTag = base.Bold(true).Padding(0, 1).MarginLeft(2).Background(o.success).Foreground(o.separator)
+	s.Tool.AgenticFetchPromptTag = base.Bold(true).Padding(0, 1).MarginLeft(2).Background(o.success).Foreground(badgeInk(o.success, o.separator, o.fgBase))
 
 	// Todo styles
 	s.Tool.TodoRatio = base.Foreground(o.infoMostSubtle)
@@ -469,7 +533,7 @@ func quickStyleEditor(s *Styles, o quickStyleOpts) {
 	s.Button.Focused = lipgloss.NewStyle().Foreground(o.onPrimary).Background(o.button)
 	s.Button.Blurred = lipgloss.NewStyle().Foreground(o.fgBase).Background(o.buttonSubtle)
 	s.Button.Inactive = lipgloss.NewStyle().Foreground(o.fgBase).Background(o.buttonInactive)
-	s.Button.Hovered = lipgloss.NewStyle().Foreground(o.onPrimary).Background(o.buttonHovered)
+	s.Button.Hovered = lipgloss.NewStyle().Foreground(badgeInk(o.buttonHovered, o.onPrimary, o.fgBase)).Background(o.buttonHovered)
 	s.Button.Negative = lipgloss.NewStyle().Foreground(o.onPrimary).Background(o.error)
 
 	// Editor
@@ -514,6 +578,12 @@ func quickStyleEditor(s *Styles, o quickStyleOpts) {
 	s.Editor.QuestionRadioOff = lipgloss.NewStyle().Foreground(o.fgSubtle).SetString(RadioOff)
 	s.Editor.QuestionCheckOn = lipgloss.NewStyle().Foreground(o.secondary).SetString(RadioOn)
 	s.Editor.QuestionCheckOff = lipgloss.NewStyle().Foreground(o.fgSubtle).SetString(RadioOff)
+	// Sysadmin marks the prompt with a root shell's "#" in the destructive
+	// color; like YOLO, the status line names the mode.
+	s.Editor.PromptSysadminIconFocused = promptMark(o.destructive, "#")
+	s.Editor.PromptSysadminIconBlurred = promptMark(o.fgBase, "#")
+	s.Editor.PromptSysadminDotsFocused = promptRest
+	s.Editor.PromptSysadminDotsBlurred = promptRest
 
 	s.Radio.On = lipgloss.NewStyle().Foreground(o.fgSubtle).SetString(RadioOn)
 	s.Radio.Off = lipgloss.NewStyle().Foreground(o.fgSubtle).SetString(RadioOff)
@@ -585,6 +655,9 @@ func quickStyleSidebar(s *Styles, o quickStyleOpts, base, muted, subtle lipgloss
 	s.Resource.ErrorIcon = s.Resource.OfflineIcon.Foreground(o.destructive)
 	s.Resource.OnlineIcon = s.Resource.OfflineIcon.Foreground(o.successMostSubtle)
 	s.Resource.OnlineText = lipgloss.NewStyle().Foreground(o.successMostSubtle)
+	// Same green as OnlineIcon but with no preset glyph, for callers that
+	// supply their own (e.g. an animated spinner).
+	s.Resource.WorkingIcon = lipgloss.NewStyle().Foreground(o.successMostSubtle)
 	s.Resource.NeedsAuthIcon = s.Resource.OfflineIcon.Foreground(o.attention)
 	s.Resource.DisabledIcon = lipgloss.NewStyle().Foreground(o.fgMoreSubtle).SetString("●")
 	s.Resource.AdditionalText = lipgloss.NewStyle().Foreground(o.fgMostSubtle)
@@ -704,7 +777,7 @@ func quickStyleChat(s *Styles, o quickStyleOpts, base, muted, subtle lipgloss.St
 	s.Messages.AssistantInfoProvider = subtle
 	s.Messages.AssistantInfoDuration = subtle
 	s.Messages.SubduedHypercreditIcon = subtle
-	s.Messages.AssistantCanceled = lipgloss.NewStyle().Foreground(o.fgSubtle).Italic(true)
+	s.Messages.AssistantCanceled = lipgloss.NewStyle().Foreground(s.CanceledLabelColor).Italic(true)
 
 	// Plan section styles. The plan card is a bordered box with no background
 	// fill: the terminal background shows through, and only intentional chips
@@ -718,7 +791,7 @@ func quickStyleChat(s *Styles, o quickStyleOpts, base, muted, subtle lipgloss.St
 	// Thinking section styles
 	s.Messages.ThinkingBox = subtle.Background(o.bgLeastVisible)
 	s.Messages.ThinkingTruncationHint = muted
-	s.Messages.ThinkingFooterTitle = muted
+	s.Messages.ThinkingFooterTitle = subtle
 	s.Messages.ThinkingFooterDuration = subtle
 
 	// Text selection.

@@ -3,7 +3,7 @@ package providers
 import (
 	"testing"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"charm.land/fantasy/providers/openrouter"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/stretchr/testify/require"

@@ -1,13 +1,14 @@
 package config
 
 import (
+	"cmp"
 	"fmt"
 	"log/slog"
 	"maps"
 	"slices"
 	"strings"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 )
 
 func (c *Config) defaultModelSelection(knownProviders []catwalk.Provider) (largeModel SelectedModel, smallModel SelectedModel, err error) {
@@ -40,7 +41,7 @@ func (c *Config) defaultModelSelection(knownProviders []catwalk.Provider) (large
 			Provider:        string(p.ID),
 			Model:           defaultLargeModel.ID,
 			MaxTokens:       defaultLargeModel.DefaultMaxTokens,
-			ReasoningEffort: defaultLargeModel.DefaultReasoningEffort,
+			ReasoningEffort: defaultLargeModel.Reasoning.DefaultEffortLevel,
 		}
 
 		defaultSmallModel := c.GetModel(string(p.ID), p.DefaultSmallModelID)
@@ -55,7 +56,7 @@ func (c *Config) defaultModelSelection(knownProviders []catwalk.Provider) (large
 			Provider:        string(p.ID),
 			Model:           defaultSmallModel.ID,
 			MaxTokens:       defaultSmallModel.DefaultMaxTokens,
-			ReasoningEffort: defaultSmallModel.DefaultReasoningEffort,
+			ReasoningEffort: defaultSmallModel.Reasoning.DefaultEffortLevel,
 		}
 		return largeModel, smallModel, err
 	}
@@ -152,7 +153,8 @@ func (c *Config) StartModel() (SelectedModel, bool) {
 // one. When the selected model does not exist it returns the default and
 // reports the fallback. Otherwise unset limits and reasoning effort come
 // from the model's defaults, and the sampling settings come from the
-// selection.
+// selection. Reasoning options only apply to a model that reasons: a
+// selection layered over another model's can hold ones this model rejects.
 func (c *Config) resolveSelectedModel(def, selected SelectedModel) (SelectedModel, bool) {
 	resolved := def
 	if selected.Model != "" {
@@ -172,12 +174,18 @@ func (c *Config) resolveSelectedModel(def, selected SelectedModel) (SelectedMode
 	} else {
 		resolved.MaxTokens = model.DefaultMaxTokens
 	}
-	if selected.ReasoningEffort != "" {
-		resolved.ReasoningEffort = selected.ReasoningEffort
-	} else {
-		resolved.ReasoningEffort = model.DefaultReasoningEffort
+	resolved.ReasoningEffort, resolved.Think = "", false
+	if model.CanReason() {
+		resolved.ReasoningEffort = cmp.Or(selected.ReasoningEffort, model.Reasoning.DefaultEffortLevel)
+		resolved.Think = selected.Think
+	} else if selected.Think || selected.ReasoningEffort != "" {
+		slog.Warn(
+			"Ignoring reasoning options for a model that does not declare reasoning support",
+			"provider", resolved.Provider,
+			"model", resolved.Model,
+			"hint", `set "reasoning": {"thinking": "toggleable"} on the model if it reasons`,
+		)
 	}
-	resolved.Think = selected.Think
 	if selected.Temperature != nil {
 		resolved.Temperature = selected.Temperature
 	}

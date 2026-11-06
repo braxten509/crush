@@ -42,7 +42,7 @@ func (m *UI) handleMemoryCheck(msg memoryCheckMsg) tea.Cmd {
 			cmds = append(cmds, m.memoryPopup(s))
 		}
 	case showing:
-		m.status.ClearInfoMsg()
+		m.status.ClearCurrent()
 		m.memoryWarning = ""
 	}
 	return tea.Batch(cmds...)

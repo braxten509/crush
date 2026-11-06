@@ -73,6 +73,18 @@ func NewGrepToolMessageItem(
 // GrepToolRenderContext renders grep tool messages.
 type GrepToolRenderContext struct{}
 
+// partialGrepParams recovers the grep parameters that already finished
+// streaming from a partial tool call input.
+func partialGrepParams(input string) tools.GrepParams {
+	fields := partialJSONFields(input)
+	var params tools.GrepParams
+	params.Pattern, _ = fields["pattern"].(string)
+	params.Path, _ = fields["path"].(string)
+	params.Include, _ = fields["include"].(string)
+	params.LiteralText, _ = fields["literal_text"].(bool)
+	return params
+}
+
 // RenderTool implements the [ToolRenderer] interface.
 func (g *GrepToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
 	return grepTool.render(sty, width, opts)
@@ -95,6 +107,11 @@ var grepTool = standardTool[tools.GrepParams]{
 		return toolParams
 	},
 	body: plainResultBody[tools.GrepParams],
+	// Show the search as soon as its pattern has streamed in.
+	partial: func(input string) (tools.GrepParams, bool) {
+		params := partialGrepParams(input)
+		return params, params.Pattern != ""
+	},
 }
 
 // -----------------------------------------------------------------------------

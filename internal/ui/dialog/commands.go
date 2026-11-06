@@ -59,7 +59,10 @@ type Commands struct {
 	hasSession bool
 	hasTodos   bool
 	hasQueue   bool
-	selected   CommandType
+	// transparent is whether the background color is off on screen,
+	// which a host theme can make differ from the config.
+	transparent bool
+	selected    CommandType
 
 	spinner spinner.Model
 	loading bool
@@ -79,8 +82,9 @@ type Commands struct {
 
 var _ Dialog = (*Commands)(nil)
 
-// NewCommands creates a new commands dialog.
-func NewCommands(com *common.Common, sessionID string, hasSession, hasTodos, hasQueue bool, customCommands []commands.CustomCommand, mcpPrompts []commands.MCPPrompt) (*Commands, error) {
+// NewCommands creates a new commands dialog. transparent is whether the
+// background color is currently off on screen.
+func NewCommands(com *common.Common, sessionID string, hasSession, hasTodos, hasQueue, transparent bool, customCommands []commands.CustomCommand, mcpPrompts []commands.MCPPrompt) (*Commands, error) {
 	c := &Commands{
 		com:            com,
 		selected:       SystemCommands,
@@ -88,6 +92,7 @@ func NewCommands(com *common.Common, sessionID string, hasSession, hasTodos, has
 		hasSession:     hasSession,
 		hasTodos:       hasTodos,
 		hasQueue:       hasQueue,
+		transparent:    transparent,
 		customCommands: customCommands,
 		mcpPrompts:     mcpPrompts,
 	}
@@ -521,7 +526,8 @@ func (c *Commands) modelCommands(cfg *config.Config) []*CommandItem {
 			}
 			commands = append(commands, NewCommandItem(c.com.Styles, "toggle_ultracode", status+" Ultracode", "", ActionToggleUltracode{}).WithAliases("ultracode", "ultra", "workflows"))
 		}
-		if providerCfg != nil && model != nil && model.CanReason {
+		if providerCfg != nil && model != nil && model.CanReason() {
+			effortLevels := model.ReasoningEffortLevels()
 			// Anthropic models: thinking toggle
 			if config.SupportsThinkingToggle(*providerCfg, *model) {
 				status := "Enable"
@@ -532,7 +538,7 @@ func (c *Commands) modelCommands(cfg *config.Config) []*CommandItem {
 			}
 
 			// OpenAI models: reasoning effort dialog
-			if len(model.ReasoningLevels) > 0 {
+			if len(effortLevels) > 0 {
 				commands = append(commands, NewCommandItem(c.com.Styles, "select_reasoning_effort", "Select Reasoning Effort", "", ActionOpenDialog{
 					DialogID: ReasoningID,
 				}).WithAliases("effort"))
@@ -551,7 +557,7 @@ func (c *Commands) layoutCommands() []*CommandItem {
 		commands = append(commands, NewCommandItem(c.com.Styles, "toggle_sidebar", "Toggle Sidebar", "", ActionToggleCompactMode{}))
 	}
 	if c.hasSession {
-		if _, _, model, _ := c.com.ChatModel(); model != nil && model.SupportsImages {
+		if _, _, model, _ := c.com.ChatModel(); model != nil && model.Capabilities.Vision {
 			commands = append(commands, NewCommandItem(c.com.Styles, "file_picker", "Open File Picker", "ctrl+f", ActionOpenDialog{
 				DialogID: FilePickerID,
 			}))
@@ -615,6 +621,7 @@ func (c *Commands) appCommands() []*CommandItem {
 	commands = append(
 		commands,
 		NewCommandItem(c.com.Styles, "toggle_yolo", "Toggle Yolo Mode", "ctrl+y", ActionToggleYoloMode{}),
+		NewCommandItem(c.com.Styles, "toggle_sysadmin", "Toggle Sysadmin Mode", "", ActionToggleSysadminMode{}),
 		NewCommandItem(c.com.Styles, "toggle_help", "Toggle Help", "ctrl+g", ActionToggleHelp{}),
 		NewCommandItem(c.com.Styles, "init", "Initialize Project", "", ActionInitializeProject{}),
 		NewCommandItem(c.com.Styles, "save_project", "Save Project", "", ActionSaveProject{}),
@@ -634,10 +641,12 @@ func (c *Commands) appCommands() []*CommandItem {
 // toggles, labelled for their current state.
 func (c *Commands) preferenceCommands(cfg *config.Config) []*CommandItem {
 	var commands []*CommandItem
-	// Add transparent background toggle.
-	// Crush's theme background, or the terminal's own (transparent).
+	// Add transparent background toggle: Crush's theme background, or the
+	// terminal's own (transparent). The label follows what is on screen,
+	// which a host theme can make differ from the config, and which the
+	// toggle flips.
 	transparentLabel := "Use Terminal Background"
-	if cfg != nil && cfg.Options != nil && cfg.Options.TUI.IsTransparent() {
+	if c.transparent {
 		transparentLabel = "Use Crush Background"
 	}
 	commands = append(commands, NewCommandItem(c.com.Styles, "toggle_transparent", transparentLabel, "", ActionToggleTransparentBackground{}).WithAliases("background", "color", "transparent", "theme"))

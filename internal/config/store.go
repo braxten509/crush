@@ -6,10 +6,12 @@ import (
 	"slices"
 	"sync"
 	"sync/atomic"
+	"time"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/env"
 	"github.com/charmbracelet/crush/internal/oauth"
+	"github.com/charmbracelet/crush/internal/permission"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -17,7 +19,7 @@ import (
 // disk. They are applied on top of the loaded Config and survive only for
 // the lifetime of the process (or workspace).
 type RuntimeOverrides struct {
-	SkipPermissionRequests bool
+	PermissionMode permission.PermissionMode
 	// EnabledChannels lists the MCP servers opted in as channels for this
 	// session (via the --channels flag). A server present in MCP config only
 	// pushes channel events when it also appears here. Entries may be written
@@ -59,6 +61,7 @@ type ConfigStore struct {
 	overrides          RuntimeOverrides
 	trackedConfigPaths []string                // unique, normalized config file paths
 	snapshots          map[string]fileSnapshot // path -> snapshot at last capture
+	cachedDiscovery    []discoveryJob          // providers whose models came from the discovery cache; guarded by writeMu
 
 	// configMu guards the config pointer field against concurrent
 	// readers (Config) and the writeMu-serialised swap (setConfig). It
@@ -75,6 +78,14 @@ type ConfigStore struct {
 	// cross-process refresh lock, it ensures only one token exchange runs
 	// at a time. See RefreshOAuthToken.
 	refreshSF singleflight.Group
+
+	// rejectedRefreshTokens remembers refresh tokens a provider has refused
+	// for rejectedRefreshTokenTTL, so a dead credential costs one exchange
+	// per window rather than one per caller.
+	rejectedMu            sync.Mutex
+	rejectedRefreshTokens map[string]rejectedRefresh
+	// now is the clock for rejectedRefreshTokens; nil means time.Now.
+	now func() time.Time
 
 	// exchangeToken performs the provider-specific OAuth token exchange.
 	// It is a field so tests can substitute a fake exchange without making

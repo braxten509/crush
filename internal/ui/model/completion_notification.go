@@ -27,9 +27,6 @@ func (m *UI) checkAgentFinished(n notify.Notification) tea.Cmd {
 
 func (m *UI) handleAgentFinished(msg agentFinishedMsg) tea.Cmd {
 	n := msg.notification
-	if m.hasSession() && m.session.ID == n.SessionID {
-		m.turnOutcome = tea.ProgramStateDone
-	}
 	return tea.Batch(
 		m.guardCompletionAlert(n.SessionID, m.ringUnlessDesktop(notification.SoundComplete)),
 		m.guardCompletionAlert(n.SessionID, m.sendNotification(finishedNotification(n.SessionTitle))),

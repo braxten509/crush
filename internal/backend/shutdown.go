@@ -1,11 +1,15 @@
 package backend
 
 import (
+	"context"
 	"log/slog"
+	"maps"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/charmbracelet/crush/internal/agent"
+	"github.com/charmbracelet/crush/internal/csync"
 )
 
 // teardown removes the workspace from the index, shuts down its
@@ -31,10 +35,12 @@ func (b *Backend) teardown(ws *Workspace) {
 		return
 	}
 	ws.clientsMu.Unlock()
-	if existing, ok := b.pathIndex[ws.resolvedPath]; ok && existing == ws.ID {
-		delete(b.pathIndex, ws.resolvedPath)
+	if !b.unregisterLocked(ws) {
+		// Someone else (ShutdownWorkspaces, StopEngine or another
+		// teardown) already removed the workspace and owns its shutdown.
+		b.mu.Unlock()
+		return
 	}
-	b.workspaces.Del(ws.ID)
 	// Arm (or, with lingering disabled, request) the idle shutdown. It
 	// only proceeds once there is genuinely nothing left: no live
 	// workspaces AND no create in flight. Deferring via the linger lets a
@@ -56,6 +62,18 @@ func (b *Backend) teardown(ws *Workspace) {
 	}
 }
 
+// unregisterLocked removes ws from the backend and reports whether this
+// caller now owns its shutdown. It must be called with b.mu held.
+func (b *Backend) unregisterLocked(ws *Workspace) bool {
+	if !b.workspaces.CompareAndDelete(ws.ID, ws) {
+		return false
+	}
+	if id, ok := b.pathIndex[ws.resolvedPath]; ok && id == ws.ID {
+		delete(b.pathIndex, ws.resolvedPath)
+	}
+	return true
+}
+
 // scheduleShutdownIfIdleLocked decides what to do about server shutdown
 // after a workspace count or pending-create change. It must be called
 // with b.mu held.
@@ -71,7 +89,7 @@ func (b *Backend) teardown(ws *Workspace) {
 // Returning true also latches [Backend.closing], since the caller has to
 // release b.mu before it can run shutdownFn.
 func (b *Backend) scheduleShutdownIfIdleLocked() (shutdownNow bool) {
-	if b.shutdownFn == nil {
+	if b.shutdownFn == nil || b.closing {
 		return false
 	}
 	if b.workspaces.Len() != 0 || b.pending != 0 {
@@ -167,11 +185,12 @@ func (b *Backend) StopEngine() {
 	}
 	for _, ws := range list {
 		b.mu.Lock()
-		if existing, ok := b.pathIndex[ws.resolvedPath]; ok && existing == ws.ID {
-			delete(b.pathIndex, ws.resolvedPath)
-		}
-		b.workspaces.Del(ws.ID)
+		owned := b.unregisterLocked(ws)
 		b.mu.Unlock()
+		if !owned {
+			// A concurrent teardown or ShutdownWorkspaces already owns it.
+			continue
+		}
 		b.runHooks(func(h clientHooks) {
 			if h.teardown != nil {
 				h.teardown(ws)
@@ -181,5 +200,53 @@ func (b *Backend) StopEngine() {
 	}
 	if fn != nil {
 		fn()
+	}
+}
+
+// ShutdownWorkspaces refuses new creates and tears down every hosted
+// workspace in parallel, so interrupted work is recorded before exit. It
+// returns ctx's error, naming the stragglers in the log, if ctx ends first.
+// Unlike [Backend.StopEngine] it does not stop work for good first: each
+// workspace's own shutdown cancels its runs the ordinary way.
+func (b *Backend) ShutdownWorkspaces(ctx context.Context) error {
+	b.mu.Lock()
+	b.closing = true
+	b.cancelShutdownLocked()
+	var owned []*Workspace
+	for _, ws := range slices.Collect(b.workspaces.Seq()) {
+		if b.unregisterLocked(ws) {
+			owned = append(owned, ws)
+		}
+	}
+	b.mu.Unlock()
+
+	remaining := csync.NewMap[string, struct{}]()
+	var wg sync.WaitGroup
+	for _, ws := range owned {
+		slog.Info("Shutting down workspace", "workspace", ws.ID)
+		remaining.Set(ws.ID, struct{}{})
+		wg.Go(func() {
+			b.runHooks(func(h clientHooks) {
+				if h.teardown != nil {
+					h.teardown(ws)
+				}
+			})
+			ws.invokeShutdown()
+			remaining.Del(ws.ID)
+		})
+	}
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		slog.Warn("Gave up waiting for workspaces to shut down; their final state may not be recorded",
+			"workspaces", slices.Sorted(maps.Keys(remaining.Copy())))
+		return ctx.Err()
 	}
 }

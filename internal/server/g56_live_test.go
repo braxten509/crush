@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/agent/notify"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/csync"
@@ -24,14 +24,14 @@ func TestCapabilitiesReportModelSupport(t *testing.T) {
 	h := newE2EHarness(t)
 	path := "/v1/workspaces/" + h.workspace.ID + "/agent/capabilities?session_id="
 	models := []catwalk.Model{
-		{ID: "opus", CanReason: true, ReasoningLevels: []string{"low", "high"}},
+		{ID: "opus", Reasoning: catwalk.Reasoning{Thinking: catwalk.ThinkingToggleable, EffortLevels: catwalk.NewEffortLevels("low", "high")}},
 		{ID: "haiku"},
-		{ID: "thinker", CanReason: true},
+		{ID: "thinker", Reasoning: catwalk.Reasoning{Thinking: catwalk.ThinkingToggleable}},
 		{ID: "plain"},
 	}
 	providers := map[string]config.ProviderConfig{
 		"claude-code": {ID: "claude-code", Type: config.TypeClaudeCode, Models: models[:2]},
-		"openai":      {ID: "openai", Type: catwalk.TypeOpenAI, Models: models[2:]},
+		"openai":      {ID: "openai", Type: catwalk.TypeResponses, Models: models[2:]},
 	}
 	h.workspace.Cfg = config.NewTestStore(&config.Config{Providers: csync.NewMapFrom(providers)})
 	chats := map[string]config.SelectedModel{

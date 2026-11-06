@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -25,11 +26,14 @@ import (
 	"github.com/charmbracelet/crush/internal/filetracker"
 	"github.com/charmbracelet/crush/internal/herdr"
 	"github.com/charmbracelet/crush/internal/history"
+	"github.com/charmbracelet/crush/internal/hooks"
 	"github.com/charmbracelet/crush/internal/lockedchats"
+	"github.com/charmbracelet/crush/internal/log"
 	"github.com/charmbracelet/crush/internal/lsp"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/openchats"
 	"github.com/charmbracelet/crush/internal/permission"
+	"github.com/charmbracelet/crush/internal/pinentry"
 	"github.com/charmbracelet/crush/internal/projects"
 	"github.com/charmbracelet/crush/internal/prompthistory"
 	"github.com/charmbracelet/crush/internal/pubsub"
@@ -37,6 +41,7 @@ import (
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/shell"
 	"github.com/charmbracelet/crush/internal/skills"
+	"github.com/charmbracelet/crush/internal/sshaskpass"
 	"github.com/charmbracelet/crush/internal/update"
 	"github.com/charmbracelet/crush/internal/version"
 )
@@ -55,6 +60,7 @@ type App struct {
 	Permissions permission.Service
 	Questions   question.Service
 	FileTracker filetracker.Service
+	Pinentry    *pinentry.Service
 
 	AgentCoordinator agent.Coordinator
 
@@ -89,6 +95,14 @@ type App struct {
 	// herdrClient reports agent state to herdr when running inside
 	// a herdr-managed pane. Nil when not in a herdr environment.
 	herdrClient *herdr.Client
+
+	// hookRunner runs user hooks for every event; it reads the config
+	// store on each event so reloads need no extra wiring.
+	hookRunner *hooks.Runner
+
+	// currentSessionID is the session the user is working in, reported
+	// by the TUI and the non-interactive runner, for SessionEnd.
+	currentSessionID atomic.Value
 }
 
 // New initializes a new application instance. skillsMgr carries the
@@ -104,27 +118,37 @@ func New(ctx context.Context, conn *sql.DB, store *config.ConfigStore, skillsMgr
 	messages := message.NewService(q, message.WithFileHistory(versions))
 	files := history.NewService(q, conn)
 	cfg := store.Config()
-	skipPermissionsRequests := store.Overrides().SkipPermissionRequests
 	var allowedTools []string
 	if cfg.Permissions != nil && cfg.Permissions.AllowedTools != nil {
 		allowedTools = cfg.Permissions.AllowedTools
+	}
+
+	hookRunner := hooks.NewRunner(func() map[string][]config.HookConfig {
+		return store.Config().Hooks
+	}, store.WorkingDir(), store.WorkingDir())
+
+	permSvc := permission.NewPermissionService(store.WorkingDir(), allowedTools, permissionHooks{hookRunner})
+	if store.Overrides().PermissionMode != permission.PermissionModeNormal {
+		permSvc.SetPermissionMode(store.Overrides().PermissionMode)
 	}
 
 	app := &App{
 		Sessions:    sessions,
 		Messages:    messages,
 		History:     files,
-		Permissions: permission.NewPermissionService(store.WorkingDir(), skipPermissionsRequests, allowedTools),
+		Permissions: permSvc,
 		Questions:   question.NewService(),
 		FileTracker: filetracker.NewService(q),
+		Pinentry:    pinentry.DefaultService(),
 		LSPManager:  lsp.NewManager(store),
 		Skills:      skillsMgr,
 
-		globalCtx: ctx,
+		globalCtx:  ctx,
+		hookRunner: hookRunner,
 
 		config: store,
 
-		events:             pubsub.NewBroker[tea.Msg](),
+		events:             pubsub.NewCoalescingBroker(eventCoalesceKey),
 		serviceEventsWG:    &sync.WaitGroup{},
 		tuiWG:              &sync.WaitGroup{},
 		agentNotifications: pubsub.NewBroker[notify.Notification](),
@@ -137,6 +161,45 @@ func New(ctx context.Context, conn *sql.DB, store *config.ConfigStore, skillsMgr
 	app.LockedChats = app.newLockedChats(conn, store)
 	if err := app.LockedChats.Start(ctx); err != nil {
 		return nil, fmt.Errorf("cannot secure unlocked chats before startup: %w", err)
+	}
+
+	// Start the pinentry watcher so terminal-based GPG passphrase prompts
+	// (pinentry-curses/pinentry-tty) get exclusive terminal access while a
+	// shell command runs. It only polls while commands are executing, and
+	// stops with the events pipeline.
+	app.Pinentry.Start(app.eventsCtx)
+
+	// Enable the integrated pinentry: GPG passphrase/PIN prompts are
+	// rendered as native dialogs (loopback pinentry) for Crush-spawned
+	// processes without touching GPG or git configuration. The
+	// terminal-handover watcher above remains the fallback.
+	if cfg.Options.GetPinentryIntegrated() {
+		if executable, err := os.Executable(); err != nil {
+			slog.Warn("Integrated pinentry unavailable", "error", err)
+		} else if cleanup, err := pinentry.StartIntegration(ctx, executable, cfg.Options.GetPinentryCacheTimeout()); err != nil {
+			slog.Warn("Integrated pinentry unavailable", "error", err)
+		} else {
+			app.cleanupFuncs = append(app.cleanupFuncs, func(context.Context) error {
+				cleanup()
+				return nil
+			})
+		}
+	}
+
+	// Enable the integrated ssh askpass: OpenSSH credential and
+	// confirmation prompts (passwords, key passphrases, security key
+	// touches) for Crush-spawned commands are rendered as native
+	// dialogs. The redirect is environment-scoped; no ssh configuration
+	// or files are modified.
+	if executable, err := os.Executable(); err != nil {
+		slog.Warn("Integrated ssh prompts unavailable", "error", err)
+	} else if cleanup, err := sshaskpass.StartIntegration(ctx, executable); err != nil {
+		slog.Warn("Integrated ssh prompts unavailable", "error", err)
+	} else {
+		app.cleanupFuncs = append(app.cleanupFuncs, func(context.Context) error {
+			cleanup()
+			return nil
+		})
 	}
 
 	// Initialize clipboard support. This is best-effort; if it fails
@@ -176,6 +239,7 @@ func New(ctx context.Context, conn *sql.DB, store *config.ConfigStore, skillsMgr
 	if err := app.InitCoderAgent(ctx); err != nil {
 		return nil, fmt.Errorf("failed to initialize coder agent: %w", err)
 	}
+	go app.refreshDiscoveredModels(ctx, app.AgentCoordinator)
 
 	app.watchLSP(ctx)
 
@@ -243,6 +307,23 @@ func (app *App) watchLSP(ctx context.Context) {
 	go app.LSPManager.TrackConfigured(ctx)
 }
 
+// refreshDiscoveredModels updates custom provider models that startup took
+// from the discovery cache. The coordinator is passed in rather than read
+// from app so this goroutine never races a later InitCoderAgent.
+func (app *App) refreshDiscoveredModels(ctx context.Context, coordinator agent.Coordinator) {
+	defer log.RecoverPanic("app.refreshDiscoveredModels", nil)
+	reloaded, err := app.config.RefreshDiscoveredModels(ctx)
+	if err != nil {
+		slog.Warn("Failed to apply refreshed provider models", "error", err)
+	}
+	if !reloaded {
+		return
+	}
+	if err := coordinator.UpdateModels(ctx); err != nil {
+		slog.Warn("Failed to update agent models after discovery", "error", err)
+	}
+}
+
 // Config returns the pure-data configuration.
 func (app *App) Config() *config.Config {
 	return app.config.Config()
@@ -283,6 +364,7 @@ func (app *App) RunCompletions() *pubsub.Broker[notify.RunComplete] {
 // is nil-safe. Call this whenever the active session changes (load,
 // new, or select).
 func (app *App) ReportCurrentSession(sessionID string) {
+	app.currentSessionID.Store(sessionID)
 	app.herdrClient.SetSessionID(sessionID)
 }
 
@@ -322,6 +404,7 @@ func (app *App) initCoderAgent(ctx context.Context, interactive bool) error {
 		RunComplete: app.runCompletions,
 		Tasks:       app.tasks,
 		Skills:      app.Skills,
+		HookRunner:  app.hookRunner,
 		Interactive: interactive,
 	})
 	if err != nil {
@@ -341,6 +424,7 @@ func (app *App) Shutdown() {
 	if app.AgentCoordinator != nil {
 		app.AgentCoordinator.CancelAll()
 	}
+	app.fireSessionEnd()
 
 	// Lock again every chat this Crush unlocked (owner, 2026-11-03:
 	// quitting Crush relocks), before the database closes.

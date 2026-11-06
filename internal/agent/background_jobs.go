@@ -14,7 +14,6 @@ import (
 	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/agent/tools/shelltool"
 	"github.com/charmbracelet/crush/internal/filechange"
-	"github.com/charmbracelet/crush/internal/hooks"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/shell"
 	"github.com/google/uuid"
@@ -82,13 +81,11 @@ func (h *taskHub) background(req TaskRequest) TaskReply {
 			input = tools.JobOutputParams{ShellID: id}
 		}
 	} else {
-		tool = shelltool.NewBashTool(h.c.permissions, h.c.cfg.WorkingDir(), options.DataDirectory, options.Attribution, reportStartedJob)
+		tool = shelltool.NewBashTool(h.c.permissions, h.c.cfg.WorkingDir(), options.DataDirectory, options.Attribution, options.GetMaxBackgroundJobs(), h.c.cfg.Config().Permissions, reportStartedJob)
 		input = tools.BashParams{Command: params.Command, WorkingDir: params.WorkingDir, Description: params.Name, RunInBackground: true}
 	}
-	tool = guardedTool{tool}
-	if configured := h.c.cfg.Config().Hooks[hooks.EventPreToolUse]; len(configured) > 0 {
-		tool = newHookedTool(tool, hooks.NewRunner(configured, h.c.cfg.WorkingDir(), h.c.cfg.WorkingDir()))
-	}
+	// The secrets guard, then the tool hooks, as on an agent's own tools.
+	tool = newHookedTool(guardedTool{tool}, h.c.toolHookRunner())
 	ctx = context.WithValue(ctx, tools.SessionIDContextKey, req.Session)
 	ctx = tools.WithWatchedJob(ctx)
 	callID := uuid.NewString()

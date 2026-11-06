@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 )
 
 // TinfoilProviderID is Tinfoil's private inference API, billed per use
@@ -130,18 +130,24 @@ func LoadTinfoilModels(body []byte) ([]catwalk.Model, error) {
 		}
 		m := catwalk.Model{
 			ID: e.ID, Name: e.Name,
-			CostPer1MIn: e.Pricing.In, CostPer1MOut: e.Pricing.Out, CostPer1MOutCached: e.Pricing.Cached,
 			ContextWindow: e.ContextWindow, DefaultMaxTokens: min(32768, e.ContextWindow/4),
-			CanReason: e.Reasoning, SupportsImages: e.Multimodal,
 		}
+		m.Pricing = catwalk.Pricing{Input: e.Pricing.In, Output: e.Pricing.Out, CacheHit: e.Pricing.Cached}
+		m.Reasoning.Thinking = catwalk.ThinkingNever
+		m.Capabilities.Vision = e.Multimodal
 		if e.Reasoning {
+			m.Reasoning.Thinking = catwalk.ThinkingToggleable
+			var levels []string
 			for _, level := range tinfoilLevels {
 				if _, ok := e.Intelligence[level]; ok {
-					m.ReasoningLevels = append(m.ReasoningLevels, level)
+					levels = append(levels, level)
 				}
 			}
-			if slices.Contains(m.ReasoningLevels, "medium") {
-				m.DefaultReasoningEffort = "medium"
+			if len(levels) > 0 {
+				m.Reasoning.EffortLevels = catwalk.NewEffortLevels(levels...)
+			}
+			if slices.Contains(levels, "medium") {
+				m.Reasoning.DefaultEffortLevel = "medium"
 			}
 		}
 		if p := e.ReasoningParams; e.Reasoning && p != nil {
@@ -226,7 +232,7 @@ func (c *Config) addTinfoilProviders(ctx context.Context) {
 	models := tinfoilModels(ctx)
 	off := false
 	for _, pc := range accounts {
-		pc.Type = catwalk.TypeOpenAICompat
+		pc.Type = catwalk.TypeCompletions
 		pc.BaseURL = cmp.Or(pc.BaseURL, tinfoilBaseURL)
 		pc.AutoDiscoverModels = &off
 		if len(models) > 0 {

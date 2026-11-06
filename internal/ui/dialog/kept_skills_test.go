@@ -123,7 +123,7 @@ func TestKeptSkills_EscCloses(t *testing.T) {
 func TestKeptSkillsCommandIsFoundWithoutTakingOverSkills(t *testing.T) {
 	sty := styles.CharmtonePantera()
 	com := &common.Common{Styles: &sty, Workspace: fastModeWorkspace{cfg: &config.Config{}}}
-	c, err := NewCommands(com, "", false, false, false, nil, nil)
+	c, err := NewCommands(com, "", false, false, false, false, nil, nil)
 	require.NoError(t, err)
 	for _, r := range "keep skills" {
 		c.HandleMsg(kittest.KeyMsg(r))

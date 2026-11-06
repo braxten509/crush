@@ -3,7 +3,7 @@ package app
 import (
 	"testing"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/csync"
 	"github.com/stretchr/testify/require"
@@ -14,7 +14,7 @@ import (
 func TestOldChatsAdoptTheirLastReplyModel(t *testing.T) {
 	cfg := &config.Config{
 		Providers: csync.NewMapFrom(map[string]config.ProviderConfig{
-			"codex-cli":   {ID: "codex-cli", Type: config.TypeCodexCLI, Models: []catwalk.Model{{ID: "gpt-6-sol", DefaultMaxTokens: 1000, ReasoningLevels: []string{"high", "max"}}}},
+			"codex-cli":   {ID: "codex-cli", Type: config.TypeCodexCLI, Models: []catwalk.Model{{ID: "gpt-6-sol", DefaultMaxTokens: 1000, Reasoning: catwalk.Reasoning{Thinking: catwalk.ThinkingToggleable, EffortLevels: catwalk.NewEffortLevels("high", "max")}}}},
 			"claude-code": {ID: "claude-code", Type: config.TypeClaudeCode, Models: []catwalk.Model{{ID: "opus"}}},
 		}),
 		ModelEfforts: map[string]string{"codex-cli:gpt-6-sol": "max"},

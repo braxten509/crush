@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	_ "embed"
+	"errors"
 	"fmt"
 
 	"charm.land/fantasy"
@@ -43,6 +44,13 @@ func NewTodosTool(sessions session.Service) fantasy.AgentTool {
 				return fantasy.ToolResponse{}, fmt.Errorf("session ID is required for managing todos")
 			}
 
+			// A bogus status is a model mistake the model can fix, so it
+			// comes back as a failed tool result. A Go error would end the
+			// whole agent turn.
+			if msg, bad := invalidTodoStatus(params.Todos); bad {
+				return fantasy.NewTextErrorResponse(msg), nil
+			}
+
 			var todos []session.Todo
 			var metadata TodosResponseMetadata
 			var invalid error
@@ -58,7 +66,7 @@ func NewTodosTool(sessions session.Service) fantasy.AgentTool {
 				return fantasy.ToolResponse{}, fmt.Errorf("failed to save todos: %w", err)
 			}
 			if invalid != nil {
-				return fantasy.ToolResponse{}, invalid
+				return fantasy.NewTextErrorResponse(invalid.Error()), nil
 			}
 
 			response := "Todo list updated successfully.\n\n"
@@ -88,12 +96,8 @@ func NewTodosTool(sessions session.Service) fantasy.AgentTool {
 // UpdateTodos checks a new to-do list against the old one and returns it with
 // what changed, for the todos tool and for agent CLIs' own to-do lists.
 func UpdateTodos(old []session.Todo, items []TodoItem) ([]session.Todo, TodosResponseMetadata, error) {
-	for _, item := range items {
-		switch item.Status {
-		case "pending", "in_progress", "completed":
-		default:
-			return nil, TodosResponseMetadata{}, fmt.Errorf("invalid status %q for todo %q", item.Status, item.Content)
-		}
+	if msg, bad := invalidTodoStatus(items); bad {
+		return nil, TodosResponseMetadata{}, errors.New(msg)
 	}
 	oldStatusByContent := make(map[string]session.TodoStatus)
 	for _, todo := range old {
@@ -125,4 +129,17 @@ func UpdateTodos(old []session.Todo, items []TodoItem) ([]session.Todo, TodosRes
 	}
 	meta.Todos = todos
 	return todos, meta, nil
+}
+
+// invalidTodoStatus finds the first item whose status is not pending,
+// in_progress or completed, and says so in words the model can act on.
+func invalidTodoStatus(items []TodoItem) (string, bool) {
+	for _, item := range items {
+		switch item.Status {
+		case "pending", "in_progress", "completed":
+		default:
+			return fmt.Sprintf("Invalid status %q for todo %q (must be pending, in_progress, or completed)", item.Status, item.Content), true
+		}
+	}
+	return "", false
 }

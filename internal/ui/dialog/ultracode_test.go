@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/csync"
 	"github.com/charmbracelet/crush/internal/ui/common"
@@ -16,7 +16,7 @@ import (
 func ultracodeCommon(sty *styles.Styles, kind catwalk.Type, levels []string, on bool) *common.Common {
 	cfg := &config.Config{
 		Providers: csync.NewMapFrom(map[string]config.ProviderConfig{
-			"cli": {Type: kind, Models: []catwalk.Model{{ID: "m", CanReason: true, ReasoningLevels: levels}}},
+			"cli": {Type: kind, Models: []catwalk.Model{{ID: "m", Reasoning: catwalk.Reasoning{Thinking: catwalk.ThinkingToggleable, EffortLevels: catwalk.NewEffortLevels(levels...)}}}},
 		}),
 	}
 	return chatCommon(cfg, sty, config.SelectedModel{Provider: "cli", Model: "m", ReasoningEffort: "high", Ultracode: on})

@@ -3,6 +3,7 @@
 // and read again on the events that change it and on every resync; a failed
 // read keeps what the store had.
 import { api } from "../engine/api.js";
+import { flatModel } from "../models/providers.js";
 import { loadAvailability } from "./availability.svelte.js";
 import { onEvent, onResync, withHeld } from "../engine/events.js";
 
@@ -42,12 +43,16 @@ export function pickConfig(config) {
 }
 
 // A provider as the screens may keep it: the catwalk Provider without its
-// api_key, api_endpoint and default_headers (catwalk@v0.52.49
-// pkg/catwalk/provider.go), so only names, types and models stay.
+// api_key, api_endpoint and default_headers (catwalk/v3@v3.0.1
+// pkg/catwalk/provider.go:68-79, as catwalk@v0.52.49), so only names, types
+// and models stay; each model with the flat names the screens read
+// (flatModel: catwalk v3 nests them).
 export function pickProvider(provider) {
   if (!provider || typeof provider !== "object") return null;
   const { api_key: _key, api_endpoint: _endpoint, default_headers: _headers, ...rest } = provider;
-  return structuredClone(rest);
+  const out = structuredClone(rest);
+  if (Array.isArray(out.models)) out.models = out.models.map(flatModel);
+  return out;
 }
 
 // Reads of one field can overlap (an event's read and a resync's, two

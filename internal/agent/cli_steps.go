@@ -466,7 +466,7 @@ func (s *cliSteps) handleUserMessage(e cliagent.Event) error {
 		return err
 	}
 	for _, q := range calls {
-		if _, err := s.a.createUserMessage(s.ctx, q); err != nil {
+		if _, err := s.a.createUserMessage(s.ctx, q, ""); err != nil {
 			return err
 		}
 	}

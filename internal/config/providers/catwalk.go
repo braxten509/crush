@@ -7,8 +7,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"charm.land/catwalk/pkg/catwalk"
-	"charm.land/catwalk/pkg/embedded"
+	"charm.land/catwalk/v3/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/embedded"
 )
 
 // CatwalkClient fetches the provider catalog from Catwalk.
@@ -105,7 +105,7 @@ func (s *CatwalkSync) Get(ctx context.Context) ([]catwalk.Provider, error) {
 // displayNames are the catalog providers the apps show under another
 // name (owner, 2026-10-24: Kimi's plan is sold as Moonshot AI).
 var displayNames = map[catwalk.InferenceProvider]string{
-	catwalk.InferenceKimiCoding: "Moonshot AI",
+	catwalk.InferenceProvider("kimi-coding"): "Moonshot AI",
 }
 
 // patchCatalog renames the catalog entries the apps call differently. It

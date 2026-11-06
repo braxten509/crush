@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
@@ -43,7 +44,10 @@ type bashDescriptionData struct {
 	GhAvailable     bool
 }
 
-var bannedCommands = []string{
+// defaultBlockedCommands is the built-in dangerous-command list. It is a
+// default, not a hardcoded policy: the `permissions` config block can add
+// to it and take away from it (see resolveBlockedCommands).
+var defaultBlockedCommands = []string{
 	// Network/Download tools
 	"alias",
 	"aria2c",
@@ -69,6 +73,13 @@ var bannedCommands = []string{
 	"doas",
 	"su",
 	"sudo",
+
+	// Indirect execution: these run a command name the static check can't
+	// see, so whatever they wrap would never be flagged on its own.
+	"env",
+	"eval",
+	"nohup",
+	"xargs",
 
 	// Package managers
 	"apk",
@@ -116,11 +127,58 @@ var bannedCommands = []string{
 	"ufw",
 }
 
-func bashDescription(attribution *config.Attribution) string {
-	bannedCommandsStr := strings.Join(bannedCommands, ", ")
+// resolveBlockedCommands returns the effective dangerous-command list:
+// the built-in defaults plus perms.BlockedCommands, minus
+// perms.AllowedCommands.
+//
+// The built-in order is preserved and user additions are appended. The list is
+// embedded verbatim in the tool description, so it has to be deterministic, but
+// sorting it would scramble the category grouping the defaults are written in
+// and churn the prompt for every existing user.
+func resolveBlockedCommands(perms *config.Permissions) []string {
+	if perms == nil {
+		return slices.Clone(defaultBlockedCommands)
+	}
+	// Both sides are normalized the way the block list itself matches, so a
+	// config entry spelled "/usr/bin/CURL" or " curl " lines up with the
+	// "curl" already on the list. Without this, allowing a command by a
+	// slightly different spelling did nothing at all, which is the worst way
+	// for a permission setting to be wrong: it looks applied.
+	allowed := make(map[string]struct{}, len(perms.AllowedCommands))
+	for _, cmd := range perms.AllowedCommands {
+		allowed[shell.NormalizeCommandName(cmd)] = struct{}{}
+	}
+
+	blocked := make([]string, 0, len(defaultBlockedCommands)+len(perms.BlockedCommands))
+	blocked = append(blocked, defaultBlockedCommands...)
+	for _, cmd := range perms.BlockedCommands {
+		if name := shell.NormalizeCommandName(cmd); name != "" {
+			blocked = append(blocked, name)
+		}
+	}
+	blocked = slices.DeleteFunc(blocked, func(c string) bool {
+		_, ok := allowed[shell.NormalizeCommandName(c)]
+		return ok
+	})
+
+	seen := make(map[string]struct{}, len(blocked))
+	deduped := blocked[:0]
+	for _, cmd := range blocked {
+		if _, dup := seen[cmd]; dup {
+			continue
+		}
+		seen[cmd] = struct{}{}
+		deduped = append(deduped, cmd)
+	}
+	return deduped
+}
+
+// bashDescription renders the tool description. It names no model: the
+// commit record says "Assisted-by: Crush" only.
+func bashDescription(attribution *config.Attribution, blocked []string) string {
 	var out bytes.Buffer
 	if err := bashDescriptionTpl.Execute(&out, bashDescriptionData{
-		BannedCommands:  bannedCommandsStr,
+		BannedCommands:  strings.Join(blocked, ", "),
 		MaxOutputLength: tools.MaxOutputLength,
 		Attribution:     *attribution,
 		RgAvailable:     tools.GetRg() != "",
@@ -132,9 +190,13 @@ func bashDescription(attribution *config.Attribution) string {
 	return out.String()
 }
 
-func blockFuncs() []shell.BlockFunc {
+// blockFuncs builds the block list from the resolved dangerous commands.
+// The flat command list is configurable; the argument blockers below are
+// structural rules about specific flags rather than a list of binaries, so
+// they stay built in.
+func blockFuncs(blocked []string) []shell.BlockFunc {
 	return []shell.BlockFunc{
-		shell.CommandsBlocker(bannedCommands),
+		shell.CommandsBlocker(blocked),
 
 		// System package managers
 		shell.ArgumentsBlocker("apk", []string{"add"}, nil),
@@ -164,37 +226,44 @@ func blockFuncs() []shell.BlockFunc {
 	}
 }
 
-// NewBashTool returns the bash tool. jobStarted, when set, is told about
-// the jobs its calls leave running in the background.
-func NewBashTool(permissions permission.Service, workingDir, spillDir string, attribution *config.Attribution, jobStarted tools.JobStarted) fantasy.AgentTool {
-	t := &bashTool{
-		permissions: permissions,
-		workingDir:  workingDir,
-		spillDir:    spillDir,
-		jobStarted:  jobStarted,
-	}
+// NewBashTool returns the bash tool. maxBackgroundJobs caps how many jobs
+// may run at once (see config.Options.GetMaxBackgroundJobs). perms adjusts
+// the dangerous-command list (blocked_commands, allowed_commands) and adds
+// configured safe commands (safe_commands); nil keeps the built-in lists.
+// jobStarted, when set, is told about the jobs its calls leave running in
+// the background.
+func NewBashTool(permissions permission.Service, workingDir, spillDir string, attribution *config.Attribution, maxBackgroundJobs int, perms *config.Permissions, jobStarted tools.JobStarted) fantasy.AgentTool {
+	t := newBashTool(permissions, workingDir, spillDir, maxBackgroundJobs, perms, jobStarted)
 	return fantasy.NewAgentTool(
 		tools.BashToolName,
-		string(bashDescription(attribution)),
+		bashDescription(attribution, t.blocked),
 		t.run,
 	)
 }
 
 // NewReadOnlyBashTool returns a bash tool whose commands run inside the
 // read-only sandbox: they can read anything but can't change the project.
-func NewReadOnlyBashTool(permissions permission.Service, workingDir, spillDir string, attribution *config.Attribution, jobStarted tools.JobStarted) fantasy.AgentTool {
-	t := &bashTool{
-		permissions: permissions,
-		workingDir:  workingDir,
-		spillDir:    spillDir,
-		jobStarted:  jobStarted,
-		readOnly:    true,
-	}
+// Its other arguments are those of [NewBashTool].
+func NewReadOnlyBashTool(permissions permission.Service, workingDir, spillDir string, attribution *config.Attribution, maxBackgroundJobs int, perms *config.Permissions, jobStarted tools.JobStarted) fantasy.AgentTool {
+	t := newBashTool(permissions, workingDir, spillDir, maxBackgroundJobs, perms, jobStarted)
+	t.readOnly = true
 	return fantasy.NewAgentTool(
 		tools.BashToolName,
-		string(bashDescription(attribution)),
+		bashDescription(attribution, t.blocked),
 		t.run,
 	)
+}
+
+func newBashTool(permissions permission.Service, workingDir, spillDir string, maxBackgroundJobs int, perms *config.Permissions, jobStarted tools.JobStarted) *bashTool {
+	return &bashTool{
+		permissions:       permissions,
+		workingDir:        workingDir,
+		spillDir:          spillDir,
+		jobStarted:        jobStarted,
+		maxBackgroundJobs: maxBackgroundJobs,
+		blocked:           resolveBlockedCommands(perms),
+		userSafe:          userSafeCommands(perms),
+	}
 }
 
 // bashTool holds what the bash tool needs to run a command.
@@ -204,6 +273,12 @@ type bashTool struct {
 	spillDir    string
 	jobStarted  tools.JobStarted
 	readOnly    bool
+	// maxBackgroundJobs caps how many jobs may run at once.
+	maxBackgroundJobs int
+	// blocked is the resolved dangerous-command list.
+	blocked []string
+	// userSafe are the configured commands that skip the prompt.
+	userSafe []safeCommand
 }
 
 // bashRun is one command the bash tool is running.
@@ -218,6 +293,9 @@ type bashRun struct {
 	// working folder and command, or the sandbox wrapping them.
 	shellDir     string
 	shellCommand string
+	// blockFuncs is the run-time block list for this command; nil once the
+	// user approved a command the check recognised, or in sysadmin mode.
+	blockFuncs []shell.BlockFunc
 }
 
 func (t *bashTool) run(ctx context.Context, params tools.BashParams, call fantasy.ToolCall) (toolResponse fantasy.ToolResponse, resultErr error) {
@@ -227,7 +305,7 @@ func (t *bashTool) run(ctx context.Context, params tools.BashParams, call fantas
 
 	// Determine working directory
 	execWorkingDir := cmp.Or(params.WorkingDir, t.workingDir)
-	isSafeReadOnly := isSafeReadOnlyCommand(params.Command)
+	safeReadOnly := isSafeReadOnly(params.Command, t.userSafe)
 
 	sessionID := tools.GetSessionFromContext(ctx)
 	shellEnv := tools.GetContextValue(ctx, tools.ShellEnvContextKey, []string(nil))
@@ -236,7 +314,12 @@ func (t *bashTool) run(ctx context.Context, params tools.BashParams, call fantas
 	if sessionID == "" {
 		return fantasy.ToolResponse{}, fmt.Errorf("session ID is required for executing shell command")
 	}
-	if !isSafeReadOnly {
+	// Check whether the command is dangerous so we can surface a
+	// warning in the permission dialog.
+	var check shell.CommandCheck
+	if !safeReadOnly {
+		check = shell.CheckCommand(params.Command, blockFuncs(t.blocked))
+
 		p, err := t.permissions.Request(
 			ctx,
 			permission.CreatePermissionRequest{
@@ -247,6 +330,13 @@ func (t *bashTool) run(ctx context.Context, params tools.BashParams, call fantas
 				Action:      "execute",
 				Description: fmt.Sprintf("Execute command: %s", params.Command),
 				Params:      tools.BashPermissionsParams(params),
+				Danger:      check.Reason,
+				// Path is only the working directory here, so a
+				// session grant keyed on it alone would turn one
+				// approval of `ls` into standing approval for every
+				// later command run in that directory. Key it to the
+				// command the user was actually shown.
+				GrantKey: params.Command,
 			},
 		)
 		if err != nil {
@@ -255,6 +345,28 @@ func (t *bashTool) run(ctx context.Context, params tools.BashParams, call fantas
 		if !p {
 			return tools.NewPermissionDeniedResponse(), nil
 		}
+	}
+
+	// Re-blocking a command that was already approved would override
+	// the answer that was given, whether the user gave it at a prompt
+	// or yolo mode gave it on their behalf. That only applies when the
+	// check actually recognised a command by name, though: a warning
+	// that merely says "this could not be analysed" names nothing the
+	// user could have judged, so approving it is not approval of
+	// anything in particular and the block list stays on. Otherwise a
+	// stray $(date) anywhere on the line would waive the run-time
+	// checks for every command beside it.
+	//
+	// What the block list can see is narrow: commands this interpreter
+	// dispatches itself, including names that only resolve after a
+	// glob or variable expands. A command that runs inside a child
+	// process is invisible to it.
+	//
+	// Sysadmin mode is the deliberate exception: it asks for nothing
+	// and blocks nothing.
+	var blocksToUse []shell.BlockFunc
+	if !check.Matched && t.permissions.PermissionMode() != permission.PermissionModeSysadmin {
+		blocksToUse = blockFuncs(t.blocked)
 	}
 
 	ctx, report := filechange.WithCommandReview(ctx, execWorkingDir, config.GlobalCacheDir(), filepath.Dir(config.GlobalConfigData()))
@@ -279,6 +391,7 @@ func (t *bashTool) run(ctx context.Context, params tools.BashParams, call fantas
 
 		shellDir:     execWorkingDir,
 		shellCommand: params.Command,
+		blockFuncs:   blocksToUse,
 	}
 	if t.readOnly {
 		dir, command, err := lockedCommand(params.Command, execWorkingDir)
@@ -314,23 +427,6 @@ func lockedCommand(command, dir string) (string, string, error) {
 	return shellDir, strings.Join(quoted, " "), nil
 }
 
-// isSafeReadOnlyCommand reports whether a command is a single read-only
-// command that runs without asking for permission.
-func isSafeReadOnlyCommand(command string) bool {
-	if containsCommandChaining(command) {
-		return false
-	}
-	cmdLower := strings.ToLower(command)
-	for _, safe := range safeCommands {
-		if strings.HasPrefix(cmdLower, safe) {
-			if len(cmdLower) == len(safe) || cmdLower[len(safe)] == ' ' || cmdLower[len(safe)] == '-' {
-				return true
-			}
-		}
-	}
-	return false
-}
-
 // FastFailureWait is how long a new background command is watched for a
 // quick failure before it is left running as a job; a variable so tests can
 // shorten it.
@@ -341,11 +437,13 @@ var FastFailureWait = time.Second
 func (t *bashTool) runInBackground(ctx context.Context, r *bashRun, movedSleep bool) (fantasy.ToolResponse, bool, error) {
 	r.startTime = time.Now()
 	bgManager := shell.GetBackgroundShellManager()
-	bgManager.Cleanup()
-	// Use background context so it continues after tool returns
-	bgShell, err := bgManager.Start(context.WithoutCancel(ctx), r.shellDir, blockFuncs(), r.shellCommand, r.params.Description, r.shellEnv...)
+	// Use background context so it continues after tool returns. Start drops
+	// stale finished jobs itself and only counts running ones.
+	bgShell, err := bgManager.Start(context.WithoutCancel(ctx), r.shellDir, r.blockFuncs, r.shellCommand, r.params.Description, t.maxBackgroundJobs, r.shellEnv...)
 	if err != nil {
-		return fantasy.ToolResponse{}, false, fmt.Errorf("error starting background shell: %w", err)
+		// A refused start is something the agent can act on (stop or wait
+		// for a job), so it is a tool error, not one that ends the turn.
+		return fantasy.NewTextErrorResponse("Failed to start background shell: " + err.Error()), false, nil
 	}
 
 	// Wait a short time to detect fast failures (blocked commands, syntax errors, etc.)
@@ -380,48 +478,32 @@ func (t *bashTool) runInForeground(ctx context.Context, r *bashRun) (fantasy.Too
 
 	// Start with detached context so it can survive if moved to background
 	bgManager := shell.GetBackgroundShellManager()
-	bgManager.Cleanup()
-	bgShell, err := bgManager.Start(context.WithoutCancel(ctx), r.shellDir, blockFuncs(), r.shellCommand, r.params.Description, r.shellEnv...)
+	bgShell, err := bgManager.Start(context.WithoutCancel(ctx), r.shellDir, r.blockFuncs, r.shellCommand, r.params.Description, t.maxBackgroundJobs, r.shellEnv...)
 	if err != nil {
-		return fantasy.ToolResponse{}, false, fmt.Errorf("error starting shell: %w", err)
+		return fantasy.NewTextErrorResponse("Failed to start shell: " + err.Error()), false, nil
 	}
 
-	// Wait for either completion, auto-background threshold, or context cancellation
+	// Wait for either completion, auto-background threshold, the user moving
+	// it to the background, or context cancellation
 	backgroundSignal := make(chan struct{}, 1)
 	unregisterBackground := tools.RegisterShellBackground(r.sessionID, r.marker, backgroundSignal)
 	defer unregisterBackground()
 	manuallyBackgrounded := false
-	ticker := time.NewTicker(100 * time.Millisecond)
-	defer ticker.Stop()
+	timer := time.NewTimer(autoBackgroundWait(r.params.AutoBackgroundAfter))
+	defer timer.Stop()
 
-	timeout := time.After(autoBackgroundWait(r.params.AutoBackgroundAfter))
-
-	var stdout, stderr string
-	var done bool
-	var execErr error
-
-waitLoop:
-	for {
-		select {
-		case <-ticker.C:
-			stdout, stderr, done, execErr = bgShell.GetOutput()
-			if done {
-				break waitLoop
-			}
-		case <-timeout:
-			stdout, stderr, done, execErr = bgShell.GetOutput()
-			break waitLoop
-		case <-backgroundSignal:
-			manuallyBackgrounded = true
-			stdout, stderr, done, execErr = bgShell.GetOutput()
-			break waitLoop
-		case <-ctx.Done():
-			// Incoming context was cancelled before we moved to background
-			// Kill the shell and return error
-			bgManager.Kill(bgShell.ID)
-			return fantasy.ToolResponse{}, false, ctx.Err()
-		}
+	select {
+	case <-bgShell.Done():
+	case <-timer.C:
+	case <-backgroundSignal:
+		manuallyBackgrounded = true
+	case <-ctx.Done():
+		// Incoming context was cancelled before we moved to background
+		// Kill the shell and return error
+		bgManager.Kill(bgShell.ID)
+		return fantasy.ToolResponse{}, false, ctx.Err()
 	}
+	stdout, stderr, done, execErr := bgShell.GetOutput()
 
 	if done {
 		// Command completed within threshold - return synchronously
@@ -450,7 +532,10 @@ func (t *bashTool) completed(r *bashRun, bgShell *shell.BackgroundShell, stdout,
 	interrupted := shell.IsInterrupt(execErr)
 	exitCode := shell.ExitCode(execErr)
 	if exitCode == 0 && !interrupted && execErr != nil {
-		return fantasy.ToolResponse{}, fmt.Errorf("[Job %s] error executing command: %w", bgShell.ID, execErr)
+		// A command the shell could not run (blocked, unparsable) is the
+		// agent's to fix, so it comes back as a tool error rather than
+		// ending the turn.
+		return fantasy.NewTextErrorResponse(fmt.Sprintf("[Job %s] Error executing command: %s", bgShell.ID, execErr)), nil
 	}
 
 	stdout = formatOutput(stdout, stderr, execErr, t.spillDir)

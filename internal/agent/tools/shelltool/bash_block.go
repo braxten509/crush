@@ -11,11 +11,13 @@ import (
 	"mvdan.cc/sh/v3/syntax"
 )
 
-// CommandBlocked reports whether Crush's bash tool would refuse to run
-// command, even in YOLO mode. It checks commands other shells will run (an
-// agent CLI's own tools), so it looks at every command the line contains,
-// including ones behind wrappers like `env` or `bash -c`. Anything it can't
-// parse is blocked.
+// CommandBlocked reports whether command runs anything on the bash tool's
+// built-in dangerous-command list (or its package-manager and flag rules).
+// It is the hard guard for commands other shells will run (an agent CLI's
+// own tools), where there is no Crush prompt to show a warning in, so a
+// match is refused outright in every permission mode. It looks at every
+// command the line contains, including ones behind wrappers like `env` or
+// `bash -c`. Anything it can't parse is blocked.
 func CommandBlocked(command string) bool {
 	file, err := syntax.NewParser().Parse(strings.NewReader(command), "")
 	if err != nil {
@@ -29,7 +31,7 @@ func CommandBlocked(command string) bool {
 		}
 		args := make([]string, 0, len(call.Args))
 		for _, w := range call.Args {
-			if !literalWord(w) {
+			if !plainLiteralWord(w) {
 				blocked = true
 				return false
 			}
@@ -61,7 +63,7 @@ func argsBlocked(args []string) bool {
 		return false
 	}
 	args = append([]string{filepath.Base(args[0])}, args[1:]...)
-	for _, block := range blockFuncs() {
+	for _, block := range blockFuncs(defaultBlockedCommands) {
 		if block(args) {
 			return true
 		}
@@ -197,7 +199,10 @@ func shellBlocked(name string, args []string) bool {
 	return true
 }
 
-func literalWord(w *syntax.Word) bool {
+// plainLiteralWord reports whether w is plain text: no expansions, and no
+// unquoted glob or tilde characters. (safe.go's literalWord is a different,
+// text-returning check for the prompt-free command list.)
+func plainLiteralWord(w *syntax.Word) bool {
 	return literalParts(w.Parts, false)
 }
 

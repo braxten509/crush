@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 )
 
 // httpClient is shared across all discovery and enrichment calls. It
@@ -77,8 +77,9 @@ func doRequest(ctx context.Context, method, baseURL, path, apiKey string, extraH
 // Config holds the provider configuration needed for model discovery.
 type Config struct {
 	ID string
-	// Type is the provider's API type. Google providers list their models
-	// through the Gemini API instead of an OpenAI-style /models.
+	// Type is the provider's configured API type. Google providers (the
+	// gemini provider, or one still typed catwalk v2's "google") list their
+	// models through the Gemini API instead of an OpenAI-style /models.
 	Type         catwalk.Type
 	BaseURL      string
 	APIKey       string
@@ -109,7 +110,7 @@ func DiscoverModels(ctx context.Context, cfg Config, resolver Resolver) ([]catwa
 	if catwalk.InferenceProvider(cfg.ID) == catwalk.InferenceKimiCoding {
 		return discoverKimiModels(ctx, cfg, resolver)
 	}
-	if cfg.Type == catwalk.TypeGoogle {
+	if isGeminiProvider(cfg) {
 		return discoverGeminiModels(ctx, cfg, resolver)
 	}
 	resp, err := doRequest(ctx, http.MethodGet, cfg.BaseURL, "/models", cfg.APIKey, cfg.ExtraHeaders, resolver, nil)

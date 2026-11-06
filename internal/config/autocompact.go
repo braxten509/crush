@@ -3,7 +3,7 @@ package config
 import (
 	"fmt"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 )
 
 // NativeCompaction identifies agents that own their conversation's context.

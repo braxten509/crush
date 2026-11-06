@@ -89,7 +89,7 @@ func (m *UI) handleSelfUpdate(msg selfUpdateMsg) tea.Cmd {
 		return nil
 	}
 	if msg.manual {
-		m.status.ClearInfoMsg()
+		m.status.ClearCurrent()
 	}
 	release := msg.release
 	if version := selfupdate.Staged(context.Background(), release.Dir, release.Tag); version != "" {
@@ -152,10 +152,10 @@ func (m *UI) startSelfUpdate(release *selfupdate.Release) tea.Cmd {
 func (m *UI) handleSelfUpdateBuilt(msg selfUpdateBuiltMsg) tea.Cmd {
 	m.selfUpdateRunning = false
 	if msg.err != nil {
-		m.status.ClearInfoMsg()
+		m.status.ClearCurrent()
 		return m.showCLIUpdateStatus(util.InfoTypeError, fmt.Sprintf("Crush %s update stopped: %s. Details: %s", msg.release.Tag, firstLine(msg.err.Error()), selfupdate.LogPath()))
 	}
-	m.status.ClearInfoMsg()
+	m.status.ClearCurrent()
 	return m.offerSelfUpdateInstall(msg.release, msg.fixed)
 }
 

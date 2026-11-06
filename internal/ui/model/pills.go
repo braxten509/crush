@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/crush/internal/agent"
+	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/ui/chat"
 	"github.com/charmbracelet/crush/internal/ui/common"
@@ -91,7 +92,12 @@ func queueRows(queueItems []string, t *styles.Styles, width int) []string {
 	var rows []string
 	for i, item := range queueItems {
 		text := item
-		if name, status, ok := agent.ParseTaskNotification(item); ok {
+		report, isReport := message.ParseSubAgentReportPrompt(item)
+		if isReport {
+			// A subagent report reads like its transcript header, not the
+			// raw markup the model gets.
+			text = ""
+		} else if name, status, ok := agent.ParseTaskNotification(item); ok {
 			text = "Result of task " + name
 			if status == string(agent.TaskRunning) {
 				text = "Progress of " + name
@@ -111,6 +117,10 @@ func queueRows(queueItems []string, t *styles.Styles, width int) []string {
 			text = ansi.Truncate(text, room-1, "…")
 		}
 		row := prefix + t.Pills.QueueItemText.Render(text)
+		if isReport {
+			room := max(width-ansi.StringWidth(prefix)-ansi.StringWidth(hint)-2, 1)
+			row = prefix + ansi.Truncate(chat.SubagentReportTitle(t, report.Label), room, "…")
+		}
 		if hint != "" {
 			row += strings.Repeat(" ", max(width-ansi.StringWidth(row)-ansi.StringWidth(hint), 1)) + hint
 		}

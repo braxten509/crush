@@ -11,7 +11,7 @@ import (
 func TestFinishedJobsDoNotBlockNewOnes(t *testing.T) {
 	m := newBackgroundShellManager()
 	for range MaxBackgroundJobs + 5 {
-		job, err := m.Start(t.Context(), t.TempDir(), nil, "true", "quick")
+		job, err := m.Start(t.Context(), t.TempDir(), nil, "true", "quick", MaxBackgroundJobs)
 		require.NoError(t, err, "finished jobs must not count toward the running limit")
 		require.Eventually(t, job.IsDone, 10*time.Second, 10*time.Millisecond)
 	}
@@ -25,11 +25,11 @@ func TestOldestFinishedJobsAreDroppedPastTheCap(t *testing.T) {
 		job := &BackgroundShell{ID: fmt.Sprint(i), done: make(chan struct{})}
 		close(job.done)
 		job.completedAt.Store(start + int64(i))
-		m.shells.Set(job.ID, job)
+		m.shells[job.ID] = job
 	}
 	require.Equal(t, 3, m.Cleanup())
 	require.Len(t, m.List(), MaxRetainedCompletedJobs)
-	for job := range m.shells.Seq() {
+	for _, job := range m.shells {
 		require.GreaterOrEqual(t, job.completedAt.Load(), start+3, "the oldest finished jobs go first")
 	}
 }

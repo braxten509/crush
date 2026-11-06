@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/stretchr/testify/require"
 )
 
@@ -57,23 +57,23 @@ func TestOpenRouterCatalogFollowsAccountPreferences(t *testing.T) {
 	require.EqualValues(t, 262144, kimi.ContextWindow)
 	require.EqualValues(t, 32000, kimi.DefaultMaxTokens)
 	// It reasons, but lists no effort choice: no levels.
-	require.True(t, kimi.CanReason)
-	require.Empty(t, kimi.ReasoningLevels)
-	require.Empty(t, kimi.DefaultReasoningEffort)
-	require.True(t, kimi.SupportsImages)
-	require.InDelta(t, 0.6, kimi.CostPer1MIn, 1e-9)
-	require.InDelta(t, 2.5, kimi.CostPer1MOut, 1e-9)
-	require.InDelta(t, 0.15, kimi.CostPer1MInCached, 1e-9)
+	require.True(t, kimi.CanReason())
+	require.Empty(t, kimi.ReasoningEffortLevels())
+	require.Empty(t, kimi.Reasoning.DefaultEffortLevel)
+	require.True(t, kimi.Capabilities.Vision)
+	require.InDelta(t, 0.6, kimi.Pricing.Input, 1e-9)
+	require.InDelta(t, 2.5, kimi.Pricing.Output, 1e-9)
+	require.InDelta(t, 0.15, kimi.Pricing.CacheCreate, 1e-9)
 
 	free := models[1]
-	require.False(t, free.CanReason)
-	require.Empty(t, free.ReasoningLevels)
-	require.False(t, free.SupportsImages)
+	require.False(t, free.CanReason())
+	require.Empty(t, free.ReasoningEffortLevels())
+	require.False(t, free.Capabilities.Vision)
 	require.EqualValues(t, 32000, free.DefaultMaxTokens)
-	require.Zero(t, free.CostPer1MIn)
+	require.Zero(t, free.Pricing.Input)
 
 	// A router's "-1" means the price varies, shown as no price.
-	require.Equal(t, catwalk.Model{}.CostPer1MIn, models[2].CostPer1MIn)
+	require.Equal(t, catwalk.Model{}.Pricing.Input, models[2].Pricing.Input)
 }
 
 // Each model gets the effort levels and default OpenRouter lists for it
@@ -94,7 +94,9 @@ func TestOpenRouterModelsTakeTheirOwnEffortLevels(t *testing.T) {
 	models, err := OpenRouterCatalog(context.Background(), server.URL, "test-key", nil, plainResolver{})
 	require.NoError(t, err)
 	require.Len(t, models, 3)
-	got := func(m catwalk.Model) []any { return []any{m.CanReason, m.ReasoningLevels, m.DefaultReasoningEffort} }
+	got := func(m catwalk.Model) []any {
+		return []any{m.CanReason(), m.ReasoningEffortLevels(), m.Reasoning.DefaultEffortLevel}
+	}
 	require.Equal(t, []any{true, []string{"low", "high", "max"}, "high"}, got(models[0]))
 	// No list means every level OpenRouter has.
 	require.Equal(t, []any{true, []string{"minimal", "low", "medium", "high", "xhigh", "max"}, "medium"}, got(models[1]))

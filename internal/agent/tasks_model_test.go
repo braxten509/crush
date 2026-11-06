@@ -9,7 +9,7 @@ import (
 	"slices"
 	"testing"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/agent/hyper"
 	"github.com/charmbracelet/crush/internal/agent/tools"
@@ -55,7 +55,7 @@ func TestTaskSubAgentBuildsModelLikeCoordinator(t *testing.T) {
 	env := testEnv(t)
 	providerCfg := config.ProviderConfig{
 		ID:                 hyper.Name,
-		Type:               catwalk.TypeOpenAICompat,
+		Type:               catwalk.TypeCompletions,
 		APIKey:             "test-key",
 		SystemPromptPrefix: "prefix for every prompt",
 	}
@@ -86,7 +86,7 @@ func TestTaskSubAgentBuildsModelLikeCoordinator(t *testing.T) {
 // change anything.
 func TestAPISubAgentToolsFollowReadOnly(t *testing.T) {
 	env := testEnv(t)
-	providerCfg := config.ProviderConfig{ID: hyper.Name, Type: catwalk.TypeOpenAICompat, APIKey: "test-key"}
+	providerCfg := config.ProviderConfig{ID: hyper.Name, Type: catwalk.TypeCompletions, APIKey: "test-key"}
 	coord := newTestCoordinator(t, env, hyper.Name, providerCfg)
 	coord.permissions = env.permissions
 	coord.cfg.Config().SetupAgents()

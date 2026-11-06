@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/clipboard"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/ui/styles"
@@ -126,6 +126,18 @@ var AllowedImageTypes = []string{".jpg", ".jpeg", ".png"}
 func IsImagePath(path string) bool {
 	lowerPath := strings.ToLower(path)
 	return slices.ContainsFunc(AllowedImageTypes, func(ext string) bool {
+		return strings.HasSuffix(lowerPath, ext)
+	})
+}
+
+// AllowedAudioTypes defines the permitted audio file types.
+var AllowedAudioTypes = []string{".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac"}
+
+// IsAudioPath reports whether the given path has one of the allowed audio
+// file extensions.
+func IsAudioPath(path string) bool {
+	lowerPath := strings.ToLower(path)
+	return slices.ContainsFunc(AllowedAudioTypes, func(ext string) bool {
 		return strings.HasSuffix(lowerPath, ext)
 	})
 }

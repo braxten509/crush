@@ -17,6 +17,7 @@ import (
 	"github.com/charmbracelet/crush/internal/db"
 	"github.com/charmbracelet/crush/internal/event"
 	crushlog "github.com/charmbracelet/crush/internal/log"
+	"github.com/charmbracelet/crush/internal/permission"
 	"github.com/charmbracelet/crush/internal/projects"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/server"
@@ -135,14 +136,16 @@ func setupLocalApp(cmd *cobra.Command) (*app.App, func(), error) {
 		return nil, nil, err
 	}
 
-	store, err := config.Init(cwd, dataDir, debug)
+	store, err := config.Init(ctx, cwd, dataDir, debug)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	cfg := store.Config()
 	cpuaffinity.ApplyOptions(cfg.Options)
-	store.Overrides().SkipPermissionRequests = yolo
+	if yolo {
+		store.Overrides().PermissionMode = permission.PermissionModeYolo
+	}
 	store.Overrides().EnabledChannels = channels
 
 	if err := os.MkdirAll(cfg.Options.DataDirectory, 0o700); err != nil {
@@ -403,10 +406,17 @@ func createClientWorkspace(cmd *cobra.Command, c *client.Client, cwd string, rep
 	channels, _ := cmd.Flags().GetStringSlice("channels")
 	dataDir, _ := cmd.Flags().GetString("data-dir")
 
+	permMode := proto.WorkspacePermissionModeNormal
+	if yolo {
+		permMode = proto.WorkspacePermissionModeYolo
+	}
 	wsReq := proto.Workspace{
-		Path:     cwd,
-		DataDir:  dataDir,
-		Debug:    debug,
+		Path:           cwd,
+		DataDir:        dataDir,
+		Debug:          debug,
+		PermissionMode: permMode,
+		// The older on/off form, for an engine started before permission
+		// modes existed.
 		YOLO:     yolo,
 		Channels: channels,
 		Version:  version.Version,

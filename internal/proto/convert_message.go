@@ -77,6 +77,13 @@ func partFromDomain(p message.ContentPart) ContentPart {
 			Output:   v.Output,
 			ExitCode: v.ExitCode,
 		}
+	case message.SubAgentReport:
+		return SubAgentReport{
+			Label:  v.Label,
+			Output: v.Output,
+			Failed: v.Failed,
+			Model:  v.Model,
+		}
 	}
 	return nil
 }
@@ -155,6 +162,13 @@ func partToDomain(p ContentPart) message.ContentPart {
 			Command:  v.Command,
 			Output:   v.Output,
 			ExitCode: v.ExitCode,
+		}
+	case SubAgentReport:
+		return message.SubAgentReport{
+			Label:  v.Label,
+			Output: v.Output,
+			Failed: v.Failed,
+			Model:  v.Model,
 		}
 	}
 	return nil

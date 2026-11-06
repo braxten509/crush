@@ -3,6 +3,7 @@ package model
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/crush/internal/fsext"
@@ -73,6 +74,7 @@ func (h *header) drawHeader(
 	hyperCredits *int,
 	frame logoFrame,
 	gitBranch string,
+	runningSubAgents int,
 ) {
 	t := h.com.Styles
 	if width != h.width || compact != h.compact || frame != h.frame || h.logo == "" {
@@ -104,6 +106,7 @@ func (h *header) drawHeader(
 		availDetailWidth,
 		hyperCredits,
 		gitBranch,
+		runningSubAgents,
 	)
 
 	// Details follow the name after a quiet gap, with no fill between.
@@ -125,10 +128,19 @@ func renderHeaderDetails(
 	availWidth int,
 	hyperCredits *int,
 	gitBranch string,
+	runningSubAgents int,
 ) string {
 	t := com.Styles
 
 	var parts []string
+
+	// Subagents work out of sight in compact mode, so the header carries
+	// a live count of how many are still going.
+	if runningSubAgents > 0 {
+		parts = append(parts, t.Header.Percentage.Render(fmt.Sprintf(
+			"%s %d", subAgentSpinner(time.Now()), runningSubAgents,
+		)))
+	}
 
 	if lspErrorCount > 0 {
 		parts = append(parts, t.LSP.ErrorDiagnostic.Render(fmt.Sprintf("%s%d", styles.LSPErrorIcon, lspErrorCount)))
@@ -166,9 +178,9 @@ func renderHeaderDetails(
 	cwd := t.Header.WorkingDir.Render(fsext.DirTrim(fsext.PrettyPath(workingDir), dirTrimLimit))
 
 	if gitBranch != "" {
-		// Reserve space for the dot separator between branch and path and
+		// Reserve space for the separator between branch and path and
 		// at least some of the path.
-		branchSep := t.Header.Separator.Render(" • ")
+		branchSep := " "
 		metadataWidth := lipgloss.Width(metadata)
 		maxBranchWidth := max(0, availWidth-metadataWidth-lipgloss.Width(cwd)-lipgloss.Width(branchSep))
 		if maxBranchWidth > 0 {

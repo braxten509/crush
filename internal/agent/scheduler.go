@@ -87,6 +87,9 @@ type schedulerHost interface {
 	// queuedChannelReply returns how replies to a channel are routed, or
 	// nil when that is unknown.
 	queuedChannelReply(channel string) *config.MCPChannelReply
+	// recordDroppedReport stores a subagent report whose call was dropped
+	// before any turn took it, so the report is never lost.
+	recordDroppedReport(ctx context.Context, call SessionAgentCall)
 }
 
 func newSessionScheduler(host schedulerHost) sessionScheduler {
@@ -317,7 +320,7 @@ func (s *sessionScheduler) drainQueueForStepLocked(sessionID string) (fold, canc
 	blocked := false
 	for _, call := range queued {
 		if s.canceledBySeq(sessionID, call.acceptSeq) || (call.sessionRun != nil && call.sessionRun.ctx.Err() != nil) {
-			if len(call.batch) > 0 || call.RunID != "" || call.SubmissionID != "" || call.OnComplete != nil || call.queuedSessionRunRelease != nil || call.report != nil {
+			if len(call.batch) > 0 || call.RunID != "" || call.SubmissionID != "" || call.OnComplete != nil || call.queuedSessionRunRelease != nil || call.report != nil || call.Report != nil {
 				canceled = append(canceled, call)
 			}
 			continue
@@ -431,7 +434,7 @@ func (s *sessionScheduler) finishDispatch(ctx context.Context, sessionID string,
 func (s *sessionScheduler) publishCanceledQueueDrops(drops []SessionAgentCall) {
 	var needsCompletion bool
 	for _, d := range drops {
-		if len(d.batch) > 0 || d.RunID != "" || d.SubmissionID != "" || d.OnComplete != nil || d.queuedSessionRunRelease != nil || d.report != nil {
+		if len(d.batch) > 0 || d.RunID != "" || d.SubmissionID != "" || d.OnComplete != nil || d.queuedSessionRunRelease != nil || d.report != nil || d.Report != nil {
 			needsCompletion = true
 			break
 		}
@@ -451,6 +454,7 @@ func (s *sessionScheduler) publishCanceledQueueDrops(drops []SessionAgentCall) {
 		}
 		releaseQueuedCall(d, context.Canceled)
 		fillReports(d, nil, context.Canceled)
+		s.host.recordDroppedReport(ctx, d)
 	}
 }
 
@@ -598,7 +602,8 @@ func (s *sessionScheduler) RecallQueuedPrompt(sessionID string) *message.QueuedP
 		calls, _ := queue.Get(sessionID)
 		for i := len(calls) - 1; i >= 0; i-- {
 			call := calls[i]
-			if call.NotRecallable || call.HiddenUserMessage || call.CLIContinue || call.Channel != "" {
+			// A subagent's report is not the user's to take back.
+			if call.NotRecallable || call.HiddenUserMessage || call.CLIContinue || call.Channel != "" || call.Report != nil {
 				continue
 			}
 			// Queue readers retain the old slice; publish a new one rather
@@ -627,21 +632,24 @@ func (s *sessionScheduler) RecallQueuedPrompt(sessionID string) *message.QueuedP
 }
 
 func (s *sessionScheduler) CancelAll() {
+	s.cancelAllUntil(time.Now().Add(5 * time.Second))
+}
+
+// cancelAllUntil cancels every run and waits for them to unwind, giving up
+// at deadline.
+func (s *sessionScheduler) cancelAllUntil(deadline time.Time) {
 	if !s.IsBusy() {
 		return
 	}
 	for key := range s.activeRequests.Seq2() {
 		s.Cancel(key) // key is sessionID
 	}
-
-	timeout := time.After(5 * time.Second)
 	for s.IsBusy() {
-		select {
-		case <-timeout:
+		if time.Now().After(deadline) {
+			slog.Warn("Gave up waiting for agent runs to cancel; their final state may not be recorded")
 			return
-		default:
-			time.Sleep(200 * time.Millisecond)
 		}
+		time.Sleep(200 * time.Millisecond)
 	}
 }
 

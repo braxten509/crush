@@ -198,6 +198,13 @@ var eventDecoders = withPieceDecoders(map[pubsub.PayloadType]func(json.RawMessag
 	pubsub.PayloadTypeSkillsEvent:            decodeEventAs[proto.SkillsEvent],
 	pubsub.PayloadTypeRunComplete:            decodeEventAs[proto.RunComplete],
 	pubsub.PayloadTypeUpdateAvailable:        decodeEventAs[proto.UpdateAvailable],
+	pubsub.PayloadTypePinentryPromptRequest:  decodeEventAs[proto.PinentryPromptRequest],
+	pubsub.PayloadTypePinentryNotification:   decodeEventAs[proto.PinentryNotification],
+	pubsub.PayloadTypeSSHPromptRequest:       decodeEventAs[proto.SSHPromptRequest],
+	pubsub.PayloadTypeSSHNotification:        decodeEventAs[proto.SSHNotification],
+	pubsub.PayloadTypeHostTheme:              decodeEventAs[proto.HostThemeState],
+	pubsub.PayloadTypeClientSession:          decodeEventAs[proto.ClientSession],
+	pubsub.PayloadTypePermissionModeChanged:  decodeEventAs[proto.PermissionModeEvent],
 })
 
 // decodeEvent decodes an SSE envelope into its typed pubsub event. It

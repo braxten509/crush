@@ -397,16 +397,45 @@ func (w *ClientWorkspace) PermissionDeny(perm permission.PermissionRequest) bool
 	return resolved
 }
 
-func (w *ClientWorkspace) PermissionSkipRequests() bool {
-	skip, err := w.client.GetPermissionsSkipRequests(context.Background(), w.workspaceID())
-	if err != nil {
-		return false
-	}
-	return skip
+func (w *ClientWorkspace) PermissionMode() permission.PermissionMode {
+	return proto.ProtoModeToPermission(w.cached().PermissionMode)
 }
 
+func (w *ClientWorkspace) PermissionSetMode(mode permission.PermissionMode) {
+	pm := proto.PermissionModeToProto(mode)
+	if err := w.client.SetPermissionMode(context.Background(), w.workspaceID(), pm); err != nil {
+		slog.Warn("Failed to set permission mode", "error", err)
+		return
+	}
+	// The mode event updates the cache too; doing it now means a read
+	// right after the switch already sees it.
+	w.setCachedPermissionMode(pm)
+}
+
+// PermissionSkipRequests reports whether the permission mode answers
+// prompts itself (yolo or sysadmin).
+func (w *ClientWorkspace) PermissionSkipRequests() bool {
+	return w.PermissionMode().SkipsPrompts()
+}
+
+// PermissionSetSkipRequests switches yolo on (skip) or back to normal.
 func (w *ClientWorkspace) PermissionSetSkipRequests(skip bool) {
-	_ = w.client.SetPermissionsSkipRequests(context.Background(), w.workspaceID(), skip)
+	w.PermissionSetMode(skipMode(skip))
+}
+
+// setCachedPermissionMode records the workspace's permission mode in the
+// cached snapshot, keeping the yolo flag desktop reads in step.
+func (w *ClientWorkspace) setCachedPermissionMode(mode proto.WorkspacePermissionMode) {
+	w.mu.Lock()
+	w.ws.PermissionMode = mode
+	w.ws.YOLO = proto.ProtoModeToPermission(mode).SkipsPrompts()
+	w.mu.Unlock()
+}
+
+// -- Host context --
+
+func (w *ClientWorkspace) HostContext(ctx context.Context) (proto.HostContext, error) {
+	return w.client.GetHostContext(ctx, w.workspaceID())
 }
 
 // -- Questions --
@@ -426,6 +455,64 @@ func (w *ClientWorkspace) QuestionCancel() bool {
 	cancelled, err := w.client.CancelQuestionBatch(context.Background(), w.workspaceID())
 	if err != nil {
 		slog.Error("Failed to cancel question", "error", err)
+		return false
+	}
+	return cancelled
+}
+
+// -- Pinentry --
+
+// PinentryRespond submits the secret for a pending integrated pinentry
+// prompt via the client SDK.
+func (w *ClientWorkspace) PinentryRespond(id, secret string) bool {
+	resolved, err := w.client.AnswerPinentry(context.Background(), w.workspaceID(), proto.PinentryAnswer{
+		RequestID: id,
+		Secret:    secret,
+	})
+	if err != nil {
+		slog.Error("Failed to answer pinentry prompt", "error", err)
+		return false
+	}
+	return resolved
+}
+
+// PinentryCancel dismisses a pending integrated pinentry prompt via the
+// client SDK.
+func (w *ClientWorkspace) PinentryCancel(id string) bool {
+	cancelled, err := w.client.CancelPinentry(context.Background(), w.workspaceID(), proto.PinentryCancel{
+		RequestID: id,
+	})
+	if err != nil {
+		slog.Error("Failed to cancel pinentry prompt", "error", err)
+		return false
+	}
+	return cancelled
+}
+
+// -- SSH prompts --
+
+// SSHRespond submits the secret for a pending integrated SSH prompt via
+// the client SDK. Confirmations answer "yes".
+func (w *ClientWorkspace) SSHRespond(id, secret string) bool {
+	resolved, err := w.client.AnswerSSH(context.Background(), w.workspaceID(), proto.SSHAnswer{
+		RequestID: id,
+		Secret:    secret,
+	})
+	if err != nil {
+		slog.Error("Failed to answer ssh prompt", "error", err)
+		return false
+	}
+	return resolved
+}
+
+// SSHCancel dismisses a pending integrated SSH prompt via the client
+// SDK.
+func (w *ClientWorkspace) SSHCancel(id string) bool {
+	cancelled, err := w.client.CancelSSH(context.Background(), w.workspaceID(), proto.SSHCancel{
+		RequestID: id,
+	})
+	if err != nil {
+		slog.Error("Failed to cancel ssh prompt", "error", err)
 		return false
 	}
 	return cancelled

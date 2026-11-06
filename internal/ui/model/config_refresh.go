@@ -136,5 +136,5 @@ func (m *UI) followMainAgent(agent string) {
 		return
 	}
 	m.mode = want
-	m.setEditorPrompt(m.yoloModeCached())
+	m.setEditorPrompt(m.permModeCached())
 }

@@ -14,12 +14,20 @@ import (
 
 func newTestPermissions(t *testing.T) *Permissions {
 	t.Helper()
+	return newTestPermissionsWithDanger(t, "")
+}
+
+// newTestPermissionsWithDanger builds a dialog for a request flagged with
+// the given danger reason. An empty reason means an ordinary request.
+func newTestPermissionsWithDanger(t *testing.T, danger string) *Permissions {
+	t.Helper()
 	s := styles.CharmtonePantera()
 	com := &common.Common{Styles: &s}
 	perm := permission.PermissionRequest{
 		ID:         "perm-test",
 		ToolCallID: "tool-call-test",
 		ToolName:   "bash",
+		Danger:     danger,
 	}
 	return NewPermissions(com, perm)
 }
@@ -86,6 +94,68 @@ func TestPermissions_EnterConfirmsSelection(t *testing.T) {
 	resp, ok := action.(dialog.ActionPermissionResponse)
 	require.True(t, ok)
 	require.Equal(t, dialog.PermissionAllowForSession, resp.Action)
+}
+
+// TestPermissions_DefaultSelectionAvoidsApprovingDangerousRequests verifies
+// that an ordinary request starts on Allow while a dangerous one starts on
+// Deny, so a reflexive enter refuses instead of approving.
+func TestPermissions_DefaultSelectionAvoidsApprovingDangerousRequests(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		danger string
+		action dialog.PermissionAction
+	}{
+		{"ordinary request", "", dialog.PermissionAllow},
+		{"dangerous request", "sudo", dialog.PermissionDeny},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			p := newTestPermissionsWithDanger(t, tc.danger)
+			require.Equal(t, optionIndex(tc.action), p.selectedOption)
+
+			// The selection is only meaningful if confirming it lands on
+			// the matching action.
+			action := p.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter})
+			resp, ok := action.(dialog.ActionPermissionResponse)
+			require.True(t, ok)
+			require.Equal(t, tc.action, resp.Action)
+		})
+	}
+}
+
+// TestPermissions_CtrlYDoesNotRespond verifies that ctrl+y, the global
+// yolo-mode toggle, does not resolve the dialog. Dialogs see keys before
+// the global handler, so accepting it here would silently approve whatever
+// is on screen.
+func TestPermissions_CtrlYDoesNotRespond(t *testing.T) {
+	t.Parallel()
+
+	for _, danger := range []string{"", "sudo"} {
+		p := newTestPermissionsWithDanger(t, danger)
+		action := p.HandleMsg(tea.KeyPressMsg{Code: 'y', Mod: tea.ModCtrl})
+		require.Nil(t, action, "ctrl+y should not resolve the permission dialog")
+	}
+}
+
+// TestPermissions_DangerousButtonsLookDifferent verifies that the approving
+// buttons are styled distinctly on a dangerous request, so the prompt does
+// not look identical to a routine one.
+func TestPermissions_DangerousButtonsLookDifferent(t *testing.T) {
+	t.Parallel()
+
+	ordinary := newTestPermissionsWithDanger(t, "")
+	dangerous := newTestPermissionsWithDanger(t, "sudo")
+
+	// Compare the same selection so only the danger styling differs.
+	ordinary.selectedOption = optionIndex(dialog.PermissionAllow)
+	dangerous.selectedOption = optionIndex(dialog.PermissionAllow)
+
+	require.NotEqual(t, ordinary.renderButtonGroup("  "), dangerous.renderButtonGroup("  "))
 }
 
 // TestPermissions_EscapeDenies verifies that escape denies the request.

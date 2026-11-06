@@ -19,6 +19,19 @@ import (
 func (m *UI) handleAgentMsg(msg tea.Msg) (tea.Cmd, bool) {
 	var cmds []tea.Cmd
 	switch msg := msg.(type) {
+	case pastedTextAttachmentMsg:
+		if m.attachmentsLimitReached() {
+			prevHeight := m.textarea.Height()
+			if m.textarea.Focused() {
+				cmds = append(cmds, m.updateTextareaWithPrevHeight(tea.PasteMsg{Content: msg.text}, prevHeight))
+			} else {
+				m.textarea.InsertString(msg.text)
+				cmds = append(cmds, m.handleTextareaHeightChange(prevHeight))
+			}
+			m.checkBangModeAfterPaste()
+		} else if m.attachments.Update(msg.attachment) {
+			m.frame.invalidate()
+		}
 	case agentFinishedMsg:
 		cmds = append(cmds, m.handleAgentFinished(msg))
 	case busyStateMsg:
@@ -128,6 +141,9 @@ func (m *UI) handleRunSubmitted(msg agentRunSubmittedMsg) []tea.Cmd {
 		id = msg.submissionID
 	}
 	if submission, ok := m.queue.submitting[id]; ok {
+		if msg.err != nil && !submission.queued {
+			m.stopTurnClock(submission.sessionID, msg.submissionID)
+		}
 		submission.cancel()
 		delete(m.queue.submitting, id)
 	}
@@ -139,7 +155,6 @@ func (m *UI) handleRunSubmitted(msg agentRunSubmittedMsg) []tea.Cmd {
 			cmds = append(cmds, m.resolvePendingPrompt(msg.submissionID, errors.As(msg.err, &definitive)), util.ReportError(msg.err))
 		}
 	}
-	m.turnOutcome = ""
 	// A prompt was just accepted (run started or enqueued): fetch the
 	// authoritative busy/queue state to confirm the optimistic values
 	// sendMessage wrote.

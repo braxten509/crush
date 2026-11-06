@@ -6,21 +6,27 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	"github.com/charmbracelet/crush/internal/agent/notify"
 	"github.com/charmbracelet/crush/internal/agent/prompt"
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/csync"
 	"github.com/charmbracelet/crush/internal/filetracker"
 	"github.com/charmbracelet/crush/internal/history"
+	"github.com/charmbracelet/crush/internal/hooks"
 	"github.com/charmbracelet/crush/internal/lsp"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/permission"
+	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/crush/internal/question"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/skills"
+	"golang.org/x/sync/singleflight"
 )
 
 // Coordinator errors.
@@ -55,13 +61,23 @@ type Coordinator interface {
 	CancelAll()
 	IsSessionBusy(sessionID string) bool
 	IsBusy() bool
+	// ListSettledMessages reads a session's transcript, first settling any
+	// tool calls a dead process left without a reply.
+	ListSettledMessages(ctx context.Context, sessionID string) ([]message.Message, error)
 	QueuedPrompts(sessionID string) int
 	QueuedPromptsList(sessionID string) []string
 	ClearQueue(sessionID string)
 	RecallQueuedPrompt(sessionID string) *message.QueuedPrompt
+	// AddNote keeps text for the session's next prompt; nothing runs and
+	// nothing is shown in the chat.
+	AddNote(sessionID, text string)
 	Summarize(context.Context, string) error
 	UpdateModels(ctx context.Context) error
 	GenerateTitle(ctx context.Context, sessionID, prompt string)
+	// SetHostContext records what the host application has in view;
+	// each run from then on tells the model about it.
+	SetHostContext(hc proto.HostContext)
+	HostContext() proto.HostContext
 }
 
 type coordinator struct {
@@ -89,6 +105,33 @@ type coordinator struct {
 	mainAgent     SessionAgent
 	mainAgentName string
 	agents        map[string]SessionAgent
+	// hookRunner runs the configured hooks for turns, compaction and tool
+	// calls. Nil runs only the hooks in the live config (toolHookRunner).
+	hookRunner *hooks.Runner
+
+	// awsRefresh shares one AWS SSO login among requests that need it.
+	awsRefresh singleflight.Group
+	// modelsGen counts credential and provider changes; every agent built
+	// here builds its chats' models again when it moves.
+	modelsGen atomic.Uint64
+
+	// dispatched tracks detached subagents by parent session and label.
+	dispatched *csync.Map[string, *dispatchedAgent]
+	// dispatchMu makes checking a label and registering it one step.
+	dispatchMu sync.Mutex
+	// names hands each new subagent its first name.
+	names subagentNamer
+	// backgroundAfter is how long a blocking subagent runs before it is
+	// moved to the background. It mirrors the bash tool's threshold and is
+	// a field only so tests can shorten it.
+	backgroundAfter time.Duration
+	// reconciled records parent sessions already checked for subagents a
+	// previous process left unreported. Keys are session IDs.
+	reconciled sync.Map
+	// subSessions counts the runs in flight on each subagent session, so
+	// the busy check sees subagents the main agent is not running itself.
+	subSessionsMu sync.Mutex
+	subSessions   map[string]int
 
 	// Skills discovery results (session-start snapshot).
 	allSkills    []*skills.Skill // Pre-filter: all discovered after dedup.
@@ -96,6 +139,12 @@ type coordinator struct {
 	skillTracker *skills.Tracker
 
 	readyWg readyGroup
+
+	hostContext csync.Value[proto.HostContext]
+
+	// titles is shared by every agent built here, sub-agents included, so
+	// CancelAll on the current agent drains all title generation.
+	titles titleTracker
 }
 
 // CoordinatorOptions holds the dependencies for NewCoordinator. Using a
@@ -113,8 +162,11 @@ type CoordinatorOptions struct {
 	Notify      pubsub.Publisher[notify.Notification]
 	RunComplete pubsub.Publisher[notify.RunComplete]
 	// Tasks receives background sub-agent updates. Nil turns them off.
-	Tasks       pubsub.Publisher[Task]
-	Skills      *skills.Manager
+	Tasks  pubsub.Publisher[Task]
+	Skills *skills.Manager
+	// HookRunner runs the configured hooks. Nil makes one from the live
+	// config.
+	HookRunner  *hooks.Runner
 	Interactive bool
 }
 
@@ -148,6 +200,10 @@ func NewCoordinator(ctx context.Context, opts CoordinatorOptions) (Coordinator, 
 		activeSkills: activeSkills,
 		skillTracker: skillTracker,
 		interactive:  opts.Interactive,
+		hookRunner:   opts.HookRunner,
+		dispatched:   csync.NewMap[string, *dispatchedAgent](),
+
+		backgroundAfter: subAgentBackgroundAfter,
 	}
 	if opts.Tasks != nil {
 		c.tasks = newTaskHub(c, opts.Tasks)
@@ -163,7 +219,7 @@ func NewCoordinator(ctx context.Context, opts CoordinatorOptions) (Coordinator, 
 		return nil, err
 	}
 
-	agent, err := c.buildAgent(ctx, coderPrompt, agentCfg, false)
+	agent, err := c.buildAgent(ctx, &c.readyWg, coderPrompt, agentCfg, false)
 	if err != nil {
 		return nil, err
 	}
@@ -174,12 +230,15 @@ func NewCoordinator(ctx context.Context, opts CoordinatorOptions) (Coordinator, 
 		return nil, errPlanAgentNotConfigured
 	}
 
-	planSystemPrompt, err := planPrompt(prompt.WithWorkingDir(c.cfg.WorkingDir()))
+	planSystemPrompt, err := planPrompt(
+		prompt.WithWorkingDir(c.cfg.WorkingDir()),
+		prompt.WithToolNames(c.effectiveToolNames(planCfg, false)),
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	planAgent, err := c.buildAgent(ctx, planSystemPrompt, planCfg, false)
+	planAgent, err := c.buildAgent(ctx, &c.readyWg, planSystemPrompt, planCfg, false)
 	if err != nil {
 		return nil, err
 	}
@@ -235,8 +294,11 @@ func (c *coordinator) activeAgent() (SessionAgent, string) {
 	return c.mainAgent, c.mainAgentName
 }
 
-// forgetChatModels drops every agent's built chat models.
+// forgetChatModels drops every agent's built chat models: the main agents'
+// here, and through modelsGen those of every sub-agent built for a task or
+// dispatch, so a retry after a refreshed sign-in reaches them too.
 func (c *coordinator) forgetChatModels() {
+	c.modelsGen.Add(1)
 	c.agentMu.RLock()
 	agents := make([]SessionAgent, 0, len(c.agents)+1)
 	for _, a := range c.agents {
@@ -285,6 +347,15 @@ func (c *coordinator) BeginAccepted(sessionID string) *AcceptedRun {
 }
 
 func (c *coordinator) Cancel(sessionID string) {
+	// Detached subagents outlive the turn that started them, so cancelling
+	// the parent's turn leaves them running; they report back when they
+	// finish, like a background job. Cancelling a subagent's own session
+	// stops that subagent.
+	for _, entry := range c.dispatched.Seq2() {
+		if entry.SessionID == sessionID {
+			entry.stop("cancelled by the user")
+		}
+	}
 	if c.tasks != nil {
 		c.tasks.cancelSessionRun(sessionID)
 		// Stop in a sub-agent's own chat stops the sub-agent.
@@ -306,6 +377,10 @@ func (c *coordinator) CancelAll() {
 	// Planned waits stay saved for the next engine instead of firing here.
 	c.limitRetries.stopAll()
 	c.currentAgent().CancelAll()
+	// The shutdown path, so detached subagents are stopped without
+	// reporting: nobody is left to read a report, and the next run on each
+	// parent session reports them as interrupted instead.
+	c.stopAllDispatched(stopForShutdown, 5*time.Second)
 }
 
 func (c *coordinator) ClearQueue(sessionID string) {
@@ -320,13 +395,29 @@ func (c *coordinator) IsBusy() bool {
 	return c.currentAgent().IsBusy()
 }
 
+// IsSessionBusy reports whether anything is working on sessionID, subagents
+// included. Readers use it to decide whether a half-written session is dead
+// and safe to settle, so it must not miss a subagent running on an agent
+// instance other than the main one.
 func (c *coordinator) IsSessionBusy(sessionID string) bool {
 	// A sub-agent's chat is busy while the sub-agent runs.
 	if c.tasks != nil && c.tasks.childRunning(sessionID) {
 		return true
 	}
-	return c.currentAgent().IsSessionBusy(sessionID)
+	return c.currentAgent().IsSessionBusy(sessionID) || c.subSessionBusy(sessionID)
 }
+
+func (c *coordinator) ListSettledMessages(ctx context.Context, sessionID string) ([]message.Message, error) {
+	return c.currentAgent().ListSettledMessages(ctx, sessionID)
+}
+
+func (c *coordinator) AddNote(sessionID, text string) {
+	c.currentAgent().AddNote(sessionID, text)
+}
+
+func (c *coordinator) SetHostContext(hc proto.HostContext) { c.hostContext.Set(hc) }
+
+func (c *coordinator) HostContext() proto.HostContext { return c.hostContext.Get() }
 
 func (c *coordinator) QueuedPrompts(sessionID string) int {
 	return c.currentAgent().QueuedPrompts(sessionID)
@@ -354,7 +445,9 @@ func (c *coordinator) Summarize(ctx context.Context, sessionID string) error {
 
 	// Auth failures during summarize flow through fantasy's OnAuthRefresh,
 	// the same path used by regular turns.
-	return agent.Summarize(ctx, sessionID, getProviderOptions(model, providerCfg), c.makeAuthRefreshCallback(providerCfg))
+	opts := getProviderOptions(model, providerCfg)
+	injectOpenrouterSessionID(opts, sessionID)
+	return agent.Summarize(ctx, sessionID, opts, c.makeAuthRefreshCallback(providerCfg))
 }
 
 // GenerateTitle generates a session title using the current agent.

@@ -10,16 +10,17 @@ import (
 	"strings"
 	"testing"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/stretchr/testify/require"
 )
 
 func renamedAbacusModel(id string) catwalk.Model {
 	return catwalk.Model{
-		ID: id, Name: "Example 2.5", CanReason: true,
-		ReasoningLevels: []string{"low", "high"}, DefaultMaxTokens: 8192,
-		Options: catwalk.ModelOptions{ProviderOptions: map[string]any{config.AbacusAPIFormatOption: "anthropic"}},
+		ID: id, Name: "Example 2.5",
+		Reasoning:        catwalk.Reasoning{Thinking: catwalk.ThinkingToggleable, EffortLevels: catwalk.NewEffortLevels("low", "high")},
+		DefaultMaxTokens: 8192,
+		Options:          catwalk.ModelOptions{ProviderOptions: map[string]any{config.AbacusAPIFormatOption: "anthropic"}},
 	}
 }
 
@@ -85,7 +86,9 @@ func TestAbacusReplacementRequiresUnambiguousCompatibleIdentity(t *testing.T) {
 		{"different protocol", func(_ *abacusTransport, models *[]catwalk.Model) {
 			(*models)[0].Options.ProviderOptions[config.AbacusAPIFormatOption] = "openai"
 		}},
-		{"unsupported effort", func(_ *abacusTransport, models *[]catwalk.Model) { (*models)[0].ReasoningLevels = []string{"low"} }},
+		{"unsupported effort", func(_ *abacusTransport, models *[]catwalk.Model) {
+			(*models)[0].Reasoning.EffortLevels = catwalk.NewEffortLevels("low")
+		}},
 		{"lower token limit", func(_ *abacusTransport, models *[]catwalk.Model) { (*models)[0].DefaultMaxTokens = 1024 }},
 		{"no known name", func(transport *abacusTransport, _ *[]catwalk.Model) { transport.model.Name = "" }},
 	} {

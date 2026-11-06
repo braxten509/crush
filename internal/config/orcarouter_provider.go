@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 )
 
 // OrcaRouterProviderID is OrcaRouter, an OpenAI-compatible router billed
@@ -42,11 +42,35 @@ func IsOrcaRouterProvider(pc ProviderConfig) bool {
 	return host == "orcarouter.ai" || strings.HasSuffix(host, ".orcarouter.ai")
 }
 
+// IsOpenRouterProvider reports whether pc is an OpenRouter account. Catwalk
+// v3 no longer has an OpenRouter provider type (a v2 "openrouter" type is
+// read as plain chat completions), so it is told by the provider ID: the
+// OpenRouter entry, another account copied from it ("openrouter-2"), or any
+// entry that talks to openrouter.ai. A config that still carries the old
+// type value counts too.
+func IsOpenRouterProvider(pc ProviderConfig) bool {
+	const id = string(catwalk.InferenceProviderOpenRouter)
+	if pc.ID == id || pc.Type == catwalk.Type(id) {
+		return true
+	}
+	if n, ok := strings.CutPrefix(pc.ID, id+"-"); ok {
+		if _, err := strconv.Atoi(n); err == nil {
+			return true
+		}
+	}
+	u, err := url.Parse(pc.BaseURL)
+	if err != nil {
+		return false
+	}
+	host := u.Hostname()
+	return host == "openrouter.ai" || strings.HasSuffix(host, ".openrouter.ai")
+}
+
 // keepsWithoutModels reports whether a provider stays with no saved models:
 // OpenRouter and OrcaRouter take theirs from a catalog in the app, which
 // shows its "+" there.
 func keepsWithoutModels(pc ProviderConfig) bool {
-	return pc.Type == catwalk.TypeOpenRouter || IsOrcaRouterProvider(pc)
+	return IsOpenRouterProvider(pc) || IsOrcaRouterProvider(pc)
 }
 
 // addOrcaRouterProviders lists the OrcaRouter provider, keeping the saved
@@ -63,7 +87,7 @@ func (c *Config) addOrcaRouterProviders() {
 		if pc.Disable || !IsOrcaRouterProvider(pc) {
 			continue
 		}
-		pc.Type = catwalk.TypeOpenAICompat
+		pc.Type = catwalk.TypeCompletions
 		pc.BaseURL = cmp.Or(pc.BaseURL, orcaRouterBaseURL)
 		pc.AutoDiscoverModels = &off
 		c.Providers.Set(id, pc)

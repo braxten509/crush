@@ -3,7 +3,7 @@ package config
 import (
 	"slices"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 )
 
 const IFMProviderID = "ifm"
@@ -16,14 +16,17 @@ func withIFMProvider(list []catwalk.Provider) []catwalk.Provider {
 	}
 	const modelID = "IFM/K2-Horizon-375B-A23B"
 	return append(list, catwalk.Provider{
-		ID: IFMProviderID, Name: "IFM", Type: catwalk.TypeOpenAICompat,
+		ID: IFMProviderID, Name: "IFM", Type: catwalk.TypeCompletions,
 		APIEndpoint: "https://api.ifm.ai/v1", APIKey: "$IFM_API_KEY",
 		DefaultLargeModelID: modelID, DefaultSmallModelID: modelID,
 		Models: []catwalk.Model{{
 			ID: modelID, Name: "K2 Horizon 375B A23B",
 			ContextWindow: 524288, DefaultMaxTokens: 32768,
-			CanReason: true, ReasoningLevels: []string{"low", "medium", "high"},
-			DefaultReasoningEffort: "high",
+			Reasoning: catwalk.Reasoning{
+				Thinking:           catwalk.ThinkingToggleable,
+				EffortLevels:       catwalk.NewEffortLevels("low", "medium", "high"),
+				DefaultEffortLevel: "high",
+			},
 		}},
 	})
 }

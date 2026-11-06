@@ -21,7 +21,7 @@ func TestManagedSkillTogglePersistsAndUpdatesVisibleCatalog(t *testing.T) {
 	t.Setenv("CRUSH_SKILLS_DIR", filepath.Join(root, "skills"))
 	wd := filepath.Join(root, "project")
 	writeSkill(t, wd, "managed-example", "Managed skill")
-	store, err := config.Init(wd, "", false)
+	store, err := config.Init(t.Context(), wd, "", false)
 	require.NoError(t, err)
 	b := backend.New(t.Context(), store, nil)
 	clientID := uuid.NewString()

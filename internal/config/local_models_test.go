@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/csync"
 	"github.com/charmbracelet/crush/internal/localmodel"
 	"github.com/stretchr/testify/require"
@@ -18,7 +18,7 @@ func TestLocalModelsOptInWithDefaultProvidersDisabled(t *testing.T) {
 	c := &Config{Options: &Options{DisableDefaultProviders: true}, Providers: csync.NewMap[string, ProviderConfig]()}
 	c.addLocalModels()
 	require.Zero(t, c.Providers.Len(), "isolated explicit-provider configurations must not acquire local access")
-	c.Providers.Set(localmodel.ProviderID, ProviderConfig{ID: localmodel.ProviderID, Type: catwalk.TypeOpenAICompat})
+	c.Providers.Set(localmodel.ProviderID, ProviderConfig{ID: localmodel.ProviderID, Type: catwalk.TypeCompletions})
 	c.addLocalModels()
 	p, ok := c.Providers.Get(localmodel.ProviderID)
 	require.True(t, ok)

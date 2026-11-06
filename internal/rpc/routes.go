@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/proto"
@@ -116,23 +116,23 @@ var (
 	QueuedList   = Op[Empty, []string]{Method: get, Path: "/v1/workspaces/{id}/agent/sessions/{sid}/prompts/list"}
 	// QueuedSummaries shares QueuedList's route; the details=true query
 	// parameter selects this richer response.
-	QueuedSummaries   = Op[Empty, []message.QueuedPromptSummary]{Method: get, Path: "/v1/workspaces/{id}/agent/sessions/{sid}/prompts/list"}
-	ClearQueue        = Op[Empty, Empty]{Method: post, Path: "/v1/workspaces/{id}/agent/sessions/{sid}/prompts/clear"}
-	RecallQueued      = Op[Empty, *proto.AgentMessage]{Method: post, Path: "/v1/workspaces/{id}/agent/sessions/{sid}/prompts/recall"}
-	InterruptAgent    = Op[Empty, Empty]{Method: post, Path: "/v1/workspaces/{id}/agent/sessions/{sid}/interrupt"}
-	SummarizeSession  = Op[Empty, Empty]{Method: post, Path: "/v1/workspaces/{id}/agent/sessions/{sid}/summarize"}
-	RunShellCommand   = Op[proto.ShellCommandRequest, proto.ShellCommandResponse]{Method: post, Path: "/v1/workspaces/{id}/agent/sessions/{sid}/shell"}
+	QueuedSummaries  = Op[Empty, []message.QueuedPromptSummary]{Method: get, Path: "/v1/workspaces/{id}/agent/sessions/{sid}/prompts/list"}
+	ClearQueue       = Op[Empty, Empty]{Method: post, Path: "/v1/workspaces/{id}/agent/sessions/{sid}/prompts/clear"}
+	RecallQueued     = Op[Empty, *proto.AgentMessage]{Method: post, Path: "/v1/workspaces/{id}/agent/sessions/{sid}/prompts/recall"}
+	InterruptAgent   = Op[Empty, Empty]{Method: post, Path: "/v1/workspaces/{id}/agent/sessions/{sid}/interrupt"}
+	SummarizeSession = Op[Empty, Empty]{Method: post, Path: "/v1/workspaces/{id}/agent/sessions/{sid}/summarize"}
+	RunShellCommand  = Op[proto.ShellCommandRequest, proto.ShellCommandResponse]{Method: post, Path: "/v1/workspaces/{id}/agent/sessions/{sid}/shell"}
 )
 
 // Config endpoints.
 var (
-	SetConfigField       = Op[proto.ConfigSetRequest, Empty]{Method: post, Path: "/v1/workspaces/{id}/config/set"}
-	RemoveConfigField    = Op[proto.ConfigRemoveRequest, Empty]{Method: post, Path: "/v1/workspaces/{id}/config/remove"}
-	SetHelperModel = Op[proto.ConfigModelRequest, Empty]{Method: post, Path: "/v1/workspaces/{id}/config/model"}
-	SetCompactMode       = Op[proto.ConfigCompactRequest, Empty]{Method: post, Path: "/v1/workspaces/{id}/config/compact"}
-	SetProviderAPIKey    = Op[proto.ConfigProviderKeyRequest, Empty]{Method: post, Path: "/v1/workspaces/{id}/config/provider-key"}
-	ImportCopilot        = Op[Empty, proto.ImportCopilotResponse]{Method: post, Path: "/v1/workspaces/{id}/config/import-copilot"}
-	RefreshOAuthToken    = Op[proto.ConfigRefreshOAuthRequest, Empty]{Method: post, Path: "/v1/workspaces/{id}/config/refresh-oauth"}
+	SetConfigField    = Op[proto.ConfigSetRequest, Empty]{Method: post, Path: "/v1/workspaces/{id}/config/set"}
+	RemoveConfigField = Op[proto.ConfigRemoveRequest, Empty]{Method: post, Path: "/v1/workspaces/{id}/config/remove"}
+	SetHelperModel    = Op[proto.ConfigModelRequest, Empty]{Method: post, Path: "/v1/workspaces/{id}/config/model"}
+	SetCompactMode    = Op[proto.ConfigCompactRequest, Empty]{Method: post, Path: "/v1/workspaces/{id}/config/compact"}
+	SetProviderAPIKey = Op[proto.ConfigProviderKeyRequest, Empty]{Method: post, Path: "/v1/workspaces/{id}/config/provider-key"}
+	ImportCopilot     = Op[Empty, proto.ImportCopilotResponse]{Method: post, Path: "/v1/workspaces/{id}/config/import-copilot"}
+	RefreshOAuthToken = Op[proto.ConfigRefreshOAuthRequest, Empty]{Method: post, Path: "/v1/workspaces/{id}/config/refresh-oauth"}
 )
 
 // Skill endpoints.

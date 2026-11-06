@@ -18,10 +18,10 @@ func (c *Config) ModelEffort(provider, model string) string {
 	if m == nil {
 		return ""
 	}
-	if effort := c.ModelEfforts[modelEffortKey(provider, model)]; effort != "" && slices.Contains(m.ReasoningLevels, effort) {
+	if effort := c.ModelEfforts[modelEffortKey(provider, model)]; effort != "" && slices.Contains(m.ReasoningEffortLevels(), effort) {
 		return effort
 	}
-	return m.DefaultReasoningEffort
+	return m.Reasoning.DefaultEffortLevel
 }
 
 // Remembered is the selection that chooses the model again: its default

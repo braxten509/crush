@@ -1,9 +1,11 @@
 package model
 
 import (
+	"encoding/json"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/crush/internal/ui/chat"
@@ -41,7 +43,10 @@ func (m *UI) handleAnimTick(msg animTickMsg) tea.Cmd {
 		return nil
 	}
 	changed, cmd := m.chat.Tick(msg)
-	if !changed {
+	if !changed && m.subAgentsRunning == 0 {
+		// Nothing moved on screen, so the frame can be reused. It cannot be
+		// when the header is spinning: that spinner is outside the list and
+		// reusing the frame would freeze it.
 		m.frame.markScrollOnly()
 		return cmd
 	}
@@ -99,7 +104,17 @@ func (m *UI) appendSessionMessage(msg message.Message) tea.Cmd {
 		if hasShellCmd {
 			return nil
 		}
-		m.lastUserMessageTime = msg.CreatedAt
+		// A subagent report arrives on a user-role message but is not
+		// the user speaking, so it does not move the last-user mark. It
+		// does end the dispatch item's spinner, since the report landing
+		// is the only signal that the subagent finished.
+		if reports := msg.SubAgentReports(); len(reports) > 0 {
+			for _, report := range reports {
+				m.markDispatchReported(report.Label)
+			}
+		} else {
+			m.lastUserMessageTime = msg.CreatedAt
+		}
 		items := chat.ExtractMessageItems(m.com.Styles, &msg, nil, m.com.Workspace.WorkingDir())
 		if pending := m.confirmPendingPrompt(msg.Content().SubmissionID); pending != nil && m.chat.ReplaceMessage(pending.ID, items...) {
 			return nil
@@ -137,6 +152,14 @@ func (m *UI) appendSessionMessage(msg message.Message) tea.Cmd {
 			}
 			if toolMsgItem, ok := toolItem.(chat.ToolMessageItem); ok {
 				toolMsgItem.SetResult(&tr)
+				// Reopening a finished subagent puts it back to work, so
+				// its dispatch item has to start spinning again.
+				if tr.Name == agent.AgentSendToolName && tr.Metadata != "" {
+					var meta agent.AgentSendResponseMetadata
+					if json.Unmarshal([]byte(tr.Metadata), &meta) == nil && meta.Reopened {
+						m.markDispatchRunning(meta.Label)
+					}
+				}
 				if m.chat.Follow() {
 					m.chat.ScrollToBottom()
 				}

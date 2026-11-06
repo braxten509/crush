@@ -14,8 +14,8 @@ import (
 	"sync"
 	"time"
 
-	"charm.land/catwalk/pkg/catwalk"
-	"charm.land/catwalk/pkg/embedded"
+	"charm.land/catwalk/v3/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/embedded"
 	"github.com/charmbracelet/crush/internal/agent/hyper"
 	"github.com/charmbracelet/crush/internal/config/providers"
 	"github.com/charmbracelet/crush/internal/csync"
@@ -174,8 +174,15 @@ func CatwalkUpdated() bool {
 // using the returned list. A refresh that simply could not reach the network
 // is not an error at all: the cached or embedded catalog is a sound answer, so
 // those are logged and the fallback is returned.
-func Providers(cfg *Config, opts ...HyperTokenRefresher) ([]catwalk.Provider, error) {
-	providers, err := modelCatalog(cfg, opts...)
+func Providers(cfg *Config) ([]catwalk.Provider, error) {
+	return LoadProviders(context.Background(), cfg, nil)
+}
+
+// LoadProviders is Providers with a context bounding the catalog fetch and a
+// Hyper token refresher for retrying on 401. Only the first call in a process
+// fetches; later calls return the memoized result and ignore both arguments.
+func LoadProviders(ctx context.Context, cfg *Config, refreshHyper HyperTokenRefresher) ([]catwalk.Provider, error) {
+	providers, err := modelCatalog(ctx, cfg, refreshHyper)
 	if cfg.Options.DisableDefaultProviders {
 		// Abacus can use native capability metadata without making the
 		// disabled providers appear in the model picker or onboarding.
@@ -190,7 +197,7 @@ func ModelCatalog() []catwalk.Provider {
 	return catalogSnapshot()
 }
 
-func modelCatalog(cfg *Config, opts ...HyperTokenRefresher) ([]catwalk.Provider, error) {
+func modelCatalog(ctx context.Context, cfg *Config, refreshHyper HyperTokenRefresher) ([]catwalk.Provider, error) {
 	providerOnce.Do(func() {
 		var wg sync.WaitGroup
 		collected := csync.NewSlice[catwalk.Provider]()
@@ -203,7 +210,7 @@ func modelCatalog(cfg *Config, opts ...HyperTokenRefresher) ([]catwalk.Provider,
 				(abacus.AutoDiscoverModels == nil && len(abacus.Models) == 0 || abacus.AutoDiscoverModels != nil && *abacus.AutoDiscoverModels)
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+		ctx, cancel := context.WithTimeout(ctx, 45*time.Second)
 		defer cancel()
 
 		// Each goroutine owns its own error so the two can report
@@ -226,7 +233,7 @@ func modelCatalog(cfg *Config, opts ...HyperTokenRefresher) ([]catwalk.Provider,
 			// providers at all over a transient disk or network problem.
 			items, err := catwalkSyncer.Get(ctx)
 			if err != nil {
-				catwalkURL := fmt.Sprintf("%s/v2/providers", cmp.Or(os.Getenv("CATWALK_URL"), defaultCatwalkURL))
+				catwalkURL := fmt.Sprintf("%s/v3/providers", cmp.Or(os.Getenv("CATWALK_URL"), defaultCatwalkURL))
 				catwalkErr = fmt.Errorf("Crush was unable to fetch an updated list of providers from %s. Consider setting CRUSH_DISABLE_PROVIDER_AUTO_UPDATE=1 to use the embedded providers bundled at the time of this Crush release. You can also update providers manually. For more info see crush update-providers --help.\n\nCause: %w", catwalkURL, err) //nolint:staticcheck
 			}
 			collected.Append(items...)
@@ -238,14 +245,10 @@ func modelCatalog(cfg *Config, opts ...HyperTokenRefresher) ([]catwalk.Provider,
 			}
 			path := cachePathFor("hyper")
 			cfgSnapshot := cfg
-			var refresher func(context.Context) error
-			if len(opts) > 0 {
-				refresher = opts[0]
-			}
 			hyperSyncer.Init(providers.HyperAPIClient{
 				BaseURL:      hyper.BaseURL(),
 				ResolveKey:   func() string { return ResolveHyperAPIKey(cfgSnapshot) },
-				RefreshToken: refresher,
+				RefreshToken: refreshHyper,
 			}, path, autoupdate)
 
 			// As above: keep whatever provider we were handed. The syncer

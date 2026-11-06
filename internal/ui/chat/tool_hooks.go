@@ -165,13 +165,13 @@ func hookDetail(sty *styles.Styles, hi hooks.HookInfo) string {
 		return sty.Tool.HookDenied.Render(denialMessage)
 	case "allow":
 		result := sty.Tool.HookOK.Render(okMessage)
-		if hi.InputRewrite {
+		if hi.InputRewrite || hi.OutputRewrite {
 			result += " " + sty.Tool.HookRewrote.Render(rewroteMessage)
 		}
 		return result
 	default:
 		result := sty.Tool.HookOK.Render(okMessage)
-		if hi.InputRewrite {
+		if hi.InputRewrite || hi.OutputRewrite {
 			result += " " + sty.Tool.HookRewrote.Render(rewroteMessage)
 		}
 		return result

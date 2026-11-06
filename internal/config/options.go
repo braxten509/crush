@@ -10,7 +10,7 @@ import (
 type TUIOptions struct {
 	CompactMode bool        `json:"compact_mode,omitempty" jsonschema:"description=Enable compact mode for the TUI interface,default=false"`
 	DiffMode    string      `json:"diff_mode,omitempty" jsonschema:"description=Diff mode for the TUI interface,enum=unified,enum=split"`
-	ActiveTheme string      `json:"active_theme,omitempty" jsonschema:"description=Name of the currently active theme,default=charmtone-panther,example=charmtone-panther,example=gruvbox-dark"`
+	ActiveTheme string      `json:"active_theme,omitempty" jsonschema:"description=Name of the currently active theme,default=charmtone-panther,example=charmtone-panther,example=gruvbox-dark,example=keanu"`
 	Completions Completions `json:"completions,omitzero" jsonschema:"description=Completions UI options"`
 	Transparent *bool       `json:"transparent,omitempty" jsonschema:"description=Enable transparent background for the TUI interface,default=false"`
 	Scrollbar   string      `json:"scrollbar,omitempty" jsonschema:"description=Chat scrollbar visibility,enum=default,enum=always,enum=never,default=default"`
@@ -118,6 +118,24 @@ const (
 
 type Permissions struct {
 	AllowedTools []string `json:"allowed_tools,omitempty" jsonschema:"description=List of tools that don't require permission prompts,example=bash,example=view"`
+	// BlockedCommands adds to the built-in list of commands treated as
+	// dangerous. Dangerous commands are prompted for in normal mode, and
+	// blocked at exec time when they turn up indirectly.
+	BlockedCommands []string `json:"blocked_commands,omitempty" jsonschema:"description=Extra shell commands to treat as dangerous (prompted for in normal mode),example=kubectl,example=terraform"`
+	// AllowedCommands removes entries from the effective dangerous list,
+	// including the built-in defaults.
+	AllowedCommands []string `json:"allowed_commands,omitempty" jsonschema:"description=Shell commands to drop from the dangerous list so they stop prompting,example=curl,example=ssh"`
+	// SafeCommands are exact command lines that skip the permission prompt
+	// entirely, e.g. "go build" or "cargo check". An entry matches only when
+	// the command is written exactly as given, with no extra arguments and
+	// no flags, so "go build" never covers "go build -o /usr/local/bin/x".
+	//
+	// This is the narrow form on purpose. The built-in list carries a flag
+	// policy per command, which is what lets `git log` through while holding
+	// back `git push` and `git diff --output=FILE`. Expressing that in
+	// configuration would be a small security language, and the thing people
+	// actually want to say is "the exact command I run fifty times a day".
+	SafeCommands []string `json:"safe_commands,omitempty" jsonschema:"description=Exact command lines that skip the permission prompt. Matched literally with no extra arguments,example=go build,example=cargo check"`
 }
 
 type TrailerStyle string
@@ -183,7 +201,14 @@ type Options struct {
 	CheckInMinutes            *int         `json:"check_in_minutes,omitempty" jsonschema:"description=Minutes between automatic progress check-ins Crush sends the agent while its background jobs and sub-agents run (services excluded). 0 turns them off.,default=2,minimum=0"`
 	InterruptAfterToolCalls   *int         `json:"interrupt_after_tool_calls,omitempty" jsonschema:"description=Consecutive tool calls without a user-visible update before Crush interrupts the agent and asks for a progress update. 0 turns this off.,default=21,minimum=0"`
 	StallRetrySeconds         *int         `json:"stall_retry_seconds,omitempty" jsonschema:"description=Seconds an agent CLI's reply may stop arriving before Crush asks the model again on a fresh request (Codex: after a finished step\\, while nothing runs; Claude Code: its own no-data limit\\, at least 10). 0 leaves each CLI's own limit (Codex: 5 minutes\\, Claude Code: 3 minutes).,default=20,minimum=0"`
-	RequestTimeout            *int         `json:"request_timeout,omitempty" jsonschema:"description=Timeout in seconds for each LLM API request. Streaming responses are aborted only after this much inactivity\\, so slow but active streams are never killed. 0 disables it\\, negative values are invalid.,default=60,example=120,example=300,example=0"`
+	RequestTimeout            *int         `json:"request_timeout,omitempty" jsonschema:"description=Timeout in seconds for each LLM API request. Streaming responses are aborted only after this much inactivity between tokens\\, so slow but active streams are never killed; the wait for the first token gets at least five minutes for prompt prefill. 0 disables it\\, negative values are invalid.,default=60,example=120,example=300,example=0"`
+	MaxBackgroundJobs         *int         `json:"max_background_jobs,omitempty" jsonschema:"description=How many background shell jobs may run at once. Jobs that have finished never count against it. 0 or negative restores the default.,default=50,example=10,example=200"`
+	// PinentryIntegrated renders GPG passphrase/PIN prompts as a native
+	// Crush dialog (loopback pinentry) instead of handing the terminal
+	// over to an external pinentry program. No GPG or git configuration
+	// is modified: the redirect only applies to processes Crush spawns.
+	PinentryIntegrated   *bool `json:"pinentry_integrated,omitempty" jsonschema:"description=Render GPG passphrase prompts as a native Crush dialog instead of an external pinentry program. Works with file-based keys and security keys and never modifies GPG or git configuration.,default=true"`
+	PinentryCacheTimeout *int  `json:"pinentry_cache_timeout,omitempty" jsonschema:"description=Seconds Crush keeps an entered GPG passphrase in memory so repeated signing operations do not re-prompt. 0 (the default) disables it; gpg-agent's own cache applies regardless.,default=0,example=300"`
 	// AgentCPUsEnabled keeps Crush and everything it starts on AgentCPUs so
 	// the other CPUs stay free for the desktop. See the cpuaffinity package.
 	AgentCPUsEnabled bool   `json:"agent_cpus_enabled,omitempty" jsonschema:"description=Run Crush and everything it starts (agents\\, sub-agents\\, background jobs\\, dev servers) on only some CPUs so the rest stay free for the desktop. Linux only,default=false"`
@@ -252,18 +277,30 @@ func (o *Options) GetCheckInInterval() time.Duration {
 	return time.Duration(*o.CheckInMinutes) * time.Minute
 }
 
+// DefaultMaxBackgroundJobs is how many background shell jobs may run at once
+// when the user has not set max_background_jobs.
+const DefaultMaxBackgroundJobs = 50
+
+// GetMaxBackgroundJobs returns the running-job ceiling, always positive.
+func (o *Options) GetMaxBackgroundJobs() int {
+	if o == nil || o.MaxBackgroundJobs == nil || *o.MaxBackgroundJobs <= 0 {
+		return DefaultMaxBackgroundJobs
+	}
+	return *o.MaxBackgroundJobs
+}
+
 // DefaultRequestTimeout bounds each LLM API request when the user has not
 // configured a timeout. Slow or unreachable providers fail after it instead
 // of blocking a session forever; streamed responses are only aborted after
-// this much inactivity, and users running slow local models can raise or
-// disable it via options.request_timeout.
+// this much inactivity between tokens, and users running slow local models
+// can raise or disable it via options.request_timeout.
 const DefaultRequestTimeout = 2 * time.Minute
 
 // GetRequestTimeout returns the per-request timeout for LLM API calls (a
 // hard deadline for non-streaming requests and an idle timeout for
-// streams), or zero when disabled. The nil receiver and the unset field
-// both mean DefaultRequestTimeout, so callers can ask without unwrapping
-// either.
+// streams, with a more generous budget for the first streamed token), or
+// zero when disabled. The nil receiver and the unset field both mean
+// DefaultRequestTimeout, so callers can ask without unwrapping either.
 func (o *Options) GetRequestTimeout() time.Duration {
 	if o == nil || o.RequestTimeout == nil {
 		return DefaultRequestTimeout
@@ -272,6 +309,28 @@ func (o *Options) GetRequestTimeout() time.Duration {
 		return 0
 	}
 	return time.Duration(*o.RequestTimeout) * time.Second
+}
+
+// GetPinentryIntegrated reports whether the integrated pinentry is
+// enabled. Enabled by default; callers use it to decide whether to
+// prompt in-app or let the external pinentry handle credentials.
+func (o *Options) GetPinentryIntegrated() bool {
+	if o == nil || o.PinentryIntegrated == nil {
+		return true
+	}
+	return *o.PinentryIntegrated
+}
+
+// GetPinentryCacheTimeout returns how long an entered GPG passphrase may
+// stay in Crush's memory, or 0 when caching is disabled.
+func (o *Options) GetPinentryCacheTimeout() time.Duration {
+	if o == nil || o.PinentryCacheTimeout == nil {
+		return 0
+	}
+	if *o.PinentryCacheTimeout <= 0 {
+		return 0
+	}
+	return time.Duration(*o.PinentryCacheTimeout) * time.Second
 }
 
 type Tools struct {

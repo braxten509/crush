@@ -1,7 +1,7 @@
 package providers
 
 import (
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"charm.land/fantasy"
 	"charm.land/fantasy/providers/openai"
 	"github.com/charmbracelet/crush/internal/config"

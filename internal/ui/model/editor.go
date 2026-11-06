@@ -14,6 +14,7 @@ import (
 
 	"charm.land/bubbles/v2/textarea"
 	"github.com/charmbracelet/crush/internal/message"
+	"github.com/charmbracelet/crush/internal/permission"
 	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/completions"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
@@ -192,9 +193,9 @@ func editorFileMsg(path string) tea.Msg {
 	}
 }
 
-// setEditorPrompt configures the textarea prompt function based on whether
-// plan, yolo, or bang mode is enabled.
-func (m *UI) setEditorPrompt(yolo bool) {
+// setEditorPrompt configures the textarea prompt function based on the current
+// permission mode, or whether plan or bang mode is enabled.
+func (m *UI) setEditorPrompt(mode permission.PermissionMode) {
 	if m.bangMode {
 		m.textarea.SetPromptFunc(promptWidth, m.bangPromptFunc)
 		return
@@ -203,11 +204,14 @@ func (m *UI) setEditorPrompt(yolo bool) {
 		m.textarea.SetPromptFunc(promptWidth, m.planPromptFunc)
 		return
 	}
-	if yolo {
+	switch mode {
+	case permission.PermissionModeSysadmin:
+		m.textarea.SetPromptFunc(promptWidth, m.sysadminPromptFunc)
+	case permission.PermissionModeYolo:
 		m.textarea.SetPromptFunc(promptWidth, m.yoloPromptFunc)
-		return
+	default:
+		m.textarea.SetPromptFunc(promptWidth, m.normalPromptFunc)
 	}
-	m.textarea.SetPromptFunc(promptWidth, m.normalPromptFunc)
 }
 
 // normalPromptFunc returns the normal editor prompt style ("›" on the
@@ -258,6 +262,22 @@ func (m *UI) yoloPromptFunc(info textarea.PromptInfo) string {
 	return t.Editor.PromptYoloDotsBlurred.Render()
 }
 
+// sysadminPromptFunc returns the sysadmin mode editor prompt style with a
+// warning mark and dots in the destructive color.
+func (m *UI) sysadminPromptFunc(info textarea.PromptInfo) string {
+	t := m.com.Styles
+	if info.LineNumber == 0 {
+		if info.Focused {
+			return t.Editor.PromptSysadminIconFocused.Render()
+		}
+		return t.Editor.PromptSysadminIconBlurred.Render()
+	}
+	if info.Focused {
+		return t.Editor.PromptSysadminDotsFocused.Render()
+	}
+	return t.Editor.PromptSysadminDotsBlurred.Render()
+}
+
 // bangPromptFunc returns the bang mode editor prompt style with Turtle-colored
 // icon and dots.
 func (m *UI) bangPromptFunc(info textarea.PromptInfo) string {
@@ -303,12 +323,16 @@ func (m *UI) insertFileCompletion(path string) tea.Cmd {
 	// The command runs off the Update goroutine, so it captures what it
 	// needs now; the read is recorded by applyFileCompletion.
 	supportsImages := m.currentModelSupportsImages()
+	supportsAudio := m.currentModelSupportsAudio()
 	ws := m.com.Workspace
 	sessionID := m.currentSessionID()
 	hasSession := m.hasSession()
 	fileCmd := func() tea.Msg {
 		if !supportsImages && common.IsImagePath(path) {
 			return util.NewWarnMsg("The current model does not support image attachments")
+		}
+		if !supportsAudio && common.IsAudioPath(path) {
+			return util.NewWarnMsg("The current model does not support audio attachments")
 		}
 
 		absPath, _ := filepath.Abs(path)
@@ -380,6 +404,7 @@ func (m *UI) insertMCPResourceCompletion(item completions.ResourceCompletionValu
 
 	ws := m.com.Workspace
 	supportsImages := m.currentModelSupportsImages()
+	supportsAudio := m.currentModelSupportsAudio()
 	resourceCmd := func() tea.Msg {
 		contents, err := ws.ReadMCPResource(
 			context.Background(),
@@ -415,6 +440,9 @@ func (m *UI) insertMCPResourceCompletion(item completions.ResourceCompletionValu
 
 		if !supportsImages && strings.HasPrefix(mimeType, "image/") {
 			return util.NewWarnMsg("The current model does not support image attachments")
+		}
+		if !supportsAudio && strings.HasPrefix(mimeType, "audio/") {
+			return util.NewWarnMsg("The current model does not support audio attachments")
 		}
 
 		return message.Attachment{

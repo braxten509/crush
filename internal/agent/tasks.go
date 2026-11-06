@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"charm.land/fantasy"
 
 	"github.com/charmbracelet/crush/internal/config"
@@ -662,7 +662,7 @@ func (h *taskHub) instructions() string {
 			ids = append(ids[:8], "…")
 		}
 		fmt.Fprintf(&clis, "- %s: %s", taskProviderName(p), strings.Join(ids, ", "))
-		if levels := p.Models[0].ReasoningLevels; len(levels) > 0 {
+		if levels := p.Models[0].ReasoningEffortLevels(); len(levels) > 0 {
 			fmt.Fprintf(&clis, " (effort: %s)", strings.Join(levels, ", "))
 		}
 		// A flat-rate provider (a paid plan, like Kimi Coding) is not

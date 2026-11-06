@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/message"
@@ -1185,7 +1185,7 @@ func (b *Backend) shareSelectModel(ws *Workspace, sessionID, providerID, modelID
 	selected := config.SelectedModel{
 		Model:           model.ID,
 		Provider:        pc.ID,
-		ReasoningEffort: model.DefaultReasoningEffort,
+		ReasoningEffort: model.Reasoning.DefaultEffortLevel,
 		MaxTokens:       model.DefaultMaxTokens,
 	}
 	return b.shareSaveModel(ws, sessionID, selected)

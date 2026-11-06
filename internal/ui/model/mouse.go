@@ -97,8 +97,8 @@ func (m *UI) clickChat(msg tea.MouseClickMsg) (cmd tea.Cmd, handled bool) {
 	}
 	// Adjust for chat area position
 	x, y := msg.X-m.layout.main.Min.X, msg.Y-m.layout.main.Min.Y
-	if handled, cmd := m.chat.HandleScrollbarPress(x, y); handled {
-		return cmd, true
+	if m.chat.HandleScrollbarPress(x, y) {
+		return nil, true
 	}
 	if handled, cmd := m.chat.HandleMouseDown(x, y); handled {
 		m.lastClickTime = time.Now()
@@ -156,7 +156,9 @@ func (m *UI) moveOverInline(msg tea.MouseMotionMsg) (dragged bool) {
 // at the edges while selecting, and extending the selection.
 func (m *UI) dragChat(msg tea.MouseMotionMsg) (tea.Cmd, updateFlow) {
 	if m.chat.DraggingScrollbar() {
-		return m.chat.HandleScrollbarDrag(msg.Y - m.layout.main.Min.Y), flowReturn
+		m.chat.HandleScrollbarDrag(msg.Y - m.layout.main.Min.Y)
+		// This update skips the tail, so arm the auto-hide here.
+		return m.chat.EnsureScrollbarHide(), flowReturn
 	}
 	// Skip chat edge-scrolling when an inline editor is active to prevent
 	// accidental scrolling while hovering over question forms or other

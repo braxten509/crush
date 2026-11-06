@@ -2,6 +2,7 @@ package config
 
 import (
 	"bufio"
+	"bytes"
 	"cmp"
 	"context"
 	"encoding/json"
@@ -17,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"charm.land/catwalk/pkg/catwalk"
+	"charm.land/catwalk/v3/pkg/catwalk"
 )
 
 // Agent CLIs change their model lists often, so Crush asks each one what it
@@ -74,10 +75,55 @@ func readModelCache() map[string][]catwalk.Model {
 	cache := map[string][]catwalk.Model{}
 	if path := cliModelCachePath(); path != "" {
 		if data, err := os.ReadFile(path); err == nil {
-			_ = json.Unmarshal(data, &cache)
+			_ = json.Unmarshal(migrateCLIModelCache(data), &cache)
 		}
 	}
 	return cache
+}
+
+// migrateCLIModelCache rewrites a cache written before catwalk v3 (flat
+// cost, supports_attachments and can_reason/reasoning_levels fields) onto
+// the v3 model schema, so a cache that outlived the upgrade keeps its
+// effort levels, image support and prices until the next refresh rewrites
+// it. A cache already in the v3 shape comes back unchanged.
+func migrateCLIModelCache(data []byte) []byte {
+	var raw map[string][]map[string]any
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.UseNumber()
+	if err := dec.Decode(&raw); err != nil {
+		return data
+	}
+	changed := false
+	for _, models := range raw {
+		for _, model := range models {
+			if model != nil && migrateCatwalkV2Model(model) {
+				changed = true
+			}
+		}
+	}
+	if !changed {
+		return data
+	}
+	out, err := json.Marshal(raw)
+	if err != nil {
+		return data
+	}
+	return out
+}
+
+// cliReasoning is the reasoning a CLI's structured catalogue declares for a
+// model. The effort list is never nil, even when empty: refreshCLIModels
+// takes a non-nil list as the CLI's actual controls, an empty one included.
+func cliReasoning(levels []string, defaultEffort string) catwalk.Reasoning {
+	r := catwalk.Reasoning{
+		Thinking:           catwalk.ThinkingNever,
+		EffortLevels:       catwalk.NewEffortLevels(levels...),
+		DefaultEffortLevel: defaultEffort,
+	}
+	if len(levels) > 0 {
+		r.Thinking = catwalk.ThinkingToggleable
+	}
+	return r
 }
 
 func cachedModels(providerID string) []catwalk.Model {
@@ -120,16 +166,15 @@ func refreshCLIModels(path string) {
 					// Structured CLI catalogues declare the actual supported
 					// controls, including an explicit empty list. Static fallback
 					// entries must not erase or replace that information.
-					if m.ReasoningLevels != nil {
-						known.CanReason = m.CanReason
-						known.ReasoningLevels = slices.Clone(m.ReasoningLevels)
-						known.DefaultReasoningEffort = m.DefaultReasoningEffort
+					if m.Reasoning.EffortLevels != nil {
+						known.Reasoning = m.Reasoning
+						known.Reasoning.EffortLevels = slices.Clone(m.Reasoning.EffortLevels)
 					}
 					if cliReportsContext(p.cfg.Type) && m.ContextWindow > 0 {
 						known.ContextWindow = m.ContextWindow
 					}
 					if p.cfg.Type == TypeCodexCLI {
-						known.SupportsImages = m.SupportsImages
+						known.Capabilities.Vision = m.Capabilities.Vision
 					}
 					models[i] = known
 				}
@@ -196,19 +241,18 @@ func openCodeModels(provider string, freeOnly bool) func(context.Context, string
 				model.DefaultMaxTokens = 32_000
 			}
 			if len(entry.Variants) > 0 {
-				model.CanReason = true
-				model.ReasoningLevels = make([]string, 0, len(entry.Variants))
+				levels := make([]string, 0, len(entry.Variants))
 				for level := range entry.Variants {
-					model.ReasoningLevels = append(model.ReasoningLevels, level)
+					levels = append(levels, level)
 				}
-				slices.SortFunc(model.ReasoningLevels, func(a, b string) int {
+				slices.SortFunc(levels, func(a, b string) int {
 					return cmp.Compare(reasoningRank(a), reasoningRank(b))
 				})
-				if slices.Contains(model.ReasoningLevels, "low") {
-					model.DefaultReasoningEffort = "low"
-				} else {
-					model.DefaultReasoningEffort = model.ReasoningLevels[0]
+				defaultEffort := levels[0]
+				if slices.Contains(levels, "low") {
+					defaultEffort = "low"
 				}
+				model.Reasoning = cliReasoning(levels, defaultEffort)
 			}
 			models = append(models, model)
 		}
@@ -320,25 +364,26 @@ func grokModelMetadata(data []byte) ([]catwalk.Model, error) {
 		if entry.Meta.ContextWindow > 0 {
 			model.ContextWindow = entry.Meta.ContextWindow
 		}
-		model.ReasoningLevels = []string{}
+		levels := []string{}
+		defaultEffort := ""
 		if entry.Meta.SupportsEffort {
 			for _, effort := range entry.Meta.Efforts {
 				value := cmp.Or(effort.Value, effort.ID)
 				if value == "" {
 					continue
 				}
-				if !slices.Contains(model.ReasoningLevels, value) {
-					model.ReasoningLevels = append(model.ReasoningLevels, value)
+				if !slices.Contains(levels, value) {
+					levels = append(levels, value)
 				}
 				if effort.Default {
-					model.DefaultReasoningEffort = value
+					defaultEffort = value
 				}
 			}
-			if model.DefaultReasoningEffort == "" && slices.Contains(model.ReasoningLevels, entry.Meta.CurrentEffort) {
-				model.DefaultReasoningEffort = entry.Meta.CurrentEffort
+			if defaultEffort == "" && slices.Contains(levels, entry.Meta.CurrentEffort) {
+				defaultEffort = entry.Meta.CurrentEffort
 			}
 		}
-		model.CanReason = len(model.ReasoningLevels) > 0
+		model.Reasoning = cliReasoning(levels, defaultEffort)
 		models = append(models, model)
 	}
 	if len(models) == 0 {
@@ -460,16 +505,19 @@ func discoverCodex(ctx context.Context, bin string) ([]catwalk.Model, error) {
 		if d.Hidden {
 			continue
 		}
-		m := catwalk.Model{ID: d.ID, Name: d.DisplayName, ContextWindow: 400_000, DefaultMaxTokens: 64_000, DefaultReasoningEffort: d.DefaultReasoningEffort}
+		m := catwalk.Model{ID: d.ID, Name: d.DisplayName, ContextWindow: 400_000, DefaultMaxTokens: 64_000}
+		// A catalog that omits the efforts says nothing about them: the
+		// built-in entry's levels stay, only the default is recorded.
+		m.Reasoning.DefaultEffortLevel = d.DefaultReasoningEffort
 		if d.SupportedReasoningEfforts != nil {
-			m.ReasoningLevels = []string{}
+			levels := make([]string, 0, len(d.SupportedReasoningEfforts))
+			for _, e := range d.SupportedReasoningEfforts {
+				levels = append(levels, e.ReasoningEffort)
+			}
+			m.Reasoning = cliReasoning(levels, d.DefaultReasoningEffort)
 		}
-		for _, e := range d.SupportedReasoningEfforts {
-			m.ReasoningLevels = append(m.ReasoningLevels, e.ReasoningEffort)
-		}
-		m.CanReason = len(m.ReasoningLevels) > 0
 		// Older Codex catalogs omit modalities and support text and images.
-		m.SupportsImages = d.InputModalities == nil || slices.Contains(d.InputModalities, "image")
+		m.Capabilities.Vision = d.InputModalities == nil || slices.Contains(d.InputModalities, "image")
 		models = append(models, m)
 	}
 	return models, nil

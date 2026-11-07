@@ -179,6 +179,10 @@ func repairInterruptedToolCalls(ctx context.Context, messages message.Service, m
 // lock throughout, so a run cannot start between the busy check and the
 // repair.
 func (a *sessionAgent) ListSettledMessages(ctx context.Context, sessionID string) ([]message.Message, error) {
+	return a.listSettledMessages(ctx, sessionID, a.IsSessionBusy)
+}
+
+func (a *sessionAgent) listSettledMessages(ctx context.Context, sessionID string, isBusy func(string) bool) ([]message.Message, error) {
 	mu := a.sessionMu(sessionID)
 	mu.Lock()
 	defer mu.Unlock()
@@ -186,8 +190,12 @@ func (a *sessionAgent) ListSettledMessages(ctx context.Context, sessionID string
 	if err := a.messages.FlushAll(ctx); err != nil {
 		return nil, err
 	}
+	busy := func() bool {
+		return a.IsSessionBusy(sessionID) || (isBusy != nil && isBusy(sessionID))
+	}
+	busyBefore := busy()
 	msgs, err := a.messages.List(ctx, sessionID)
-	if err != nil || a.IsSessionBusy(sessionID) {
+	if err != nil || busyBefore || busy() {
 		return msgs, err
 	}
 	settled, err := repairInterruptedToolCalls(ctx, a.messages, msgs)

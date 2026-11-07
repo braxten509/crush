@@ -62,6 +62,7 @@
     download: { w: 16, h: 16 },
     pen: { w: 16, h: 16 },
     phone: { w: 16, h: 16 },
+    video: { w: 16, h: 16 },
     lock: { w: 16, h: 16 },
     "lock-open": { w: 16, h: 16 },
   };
@@ -193,6 +194,9 @@
   {:else if name === "phone"}
     <rect x="4" y="1.2" width="8" height="13.6" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.5" />
     <path d="M7 12.4h2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+  {:else if name === "video"}
+    <path d="M1.5 2.5h13v11h-13z" fill="none" stroke="currentColor" stroke-width="1.6" />
+    <path d="M6.4 5.4v5.2l4.4-2.6z" fill="currentColor" />
   {:else if name === "lock"}
     <!-- Locked chats (owner, 2026-11-03): a padlock, shackle closed. -->
     <rect x="3" y="7" width="10" height="7.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5" />

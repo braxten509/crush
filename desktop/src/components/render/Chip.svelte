@@ -25,12 +25,12 @@
 
   let { chip, removable = false, number = null, onremove = null, attachment = null } = $props();
 
-  const ICONS = { picture: "image", file: "file", text: "text" };
+  const ICONS = { picture: "image", file: "file", text: "text", video: "video" };
   // A press that moves farther than this before the release is a drag.
   const DRAG_SLOP = 4;
 
   const deleting = $derived(number !== null && number !== undefined);
-  const viewable = $derived(chip.kind === "picture" && chip.viewable && Boolean(chip.src));
+  const viewable = $derived((chip.kind === "picture" || (chip.kind === "video" && Boolean(attachment))) && chip.viewable && Boolean(chip.src));
   let press = null;
 
   function down(event) {
@@ -40,13 +40,18 @@
   function open(event) {
     if (!viewable || deleting || event.button !== 0) return;
     if (event.detail !== 0 && (!press || Math.hypot(event.clientX - press.x, event.clientY - press.y) > DRAG_SLOP)) return;
-    openViewer({ src: chip.src, name: chip.name, mime: chip.mime, ...(attachment ? { attachment } : {}) });
+    view();
+  }
+
+  function view() {
+    if (chip.kind === "video") openViewer({ video: attachment, name: chip.name });
+    else openViewer({ src: chip.src, name: chip.name, mime: chip.mime, ...(attachment ? { attachment } : {}) });
   }
 
   function key(event) {
     if (viewable && !deleting && (event.key === "Enter" || event.key === " ")) {
       event.preventDefault();
-      openViewer({ src: chip.src, name: chip.name, mime: chip.mime, ...(attachment ? { attachment } : {}) });
+      view();
     }
   }
 </script>

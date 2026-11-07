@@ -6,6 +6,7 @@
 // then text for everything else.
 export function attachmentChip(attachment) {
   const mime = attachment?.mime ?? "";
+  if (attachment?.kind === "video") return { kind: "video", name: attachment.name ?? "", mime, viewable: true, src: attachment.url };
   const picture = mime.startsWith("image/");
   return {
     kind: picture ? "picture" : mime === "text/markdown" ? "skill" : "text",

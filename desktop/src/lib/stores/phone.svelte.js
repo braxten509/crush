@@ -1,12 +1,12 @@
 // The composer's phone button (owner, 2026-11-01): shown while an Android
 // phone is connected over adb, checked every few seconds while the window is
 // on screen; otherwise a Find phone button looks for it on Wi-Fi. watchPhone() starts the checks and returns their stop.
-import { phone_connected, phone_find } from "../engine/commands.js";
+import { phone_connected, phone_find, phone_record_start, phone_record_stop, phone_recording } from "../engine/commands.js";
 import { notify } from "./ui.svelte.js";
 
 const EVERY_MS = 3000;
 
-export const phone = $state({ connected: false, busy: false, finding: false });
+export const phone = $state({ connected: false, busy: false, finding: false, recording: false, stopping: false });
 
 const NOT_FOUND = "Couldn't find your phone. Is Wireless debugging on?";
 
@@ -21,6 +21,33 @@ export async function findPhone() {
     notify("error", error?.message ?? String(error));
   } finally {
     phone.finding = false;
+  }
+}
+
+export async function startRecording() {
+  if (phone.recording || phone.busy) return;
+  phone.busy = true;
+  try {
+    await phone_record_start();
+    phone.recording = true;
+  } catch (error) {
+    notify("error", error?.message ?? String(error));
+  } finally {
+    phone.busy = false;
+  }
+}
+
+export async function stopRecording() {
+  if (!phone.recording || phone.stopping) return null;
+  phone.stopping = true;
+  try {
+    return await phone_record_stop();
+  } catch (error) {
+    notify("error", error?.message ?? String(error));
+    return null;
+  } finally {
+    phone.recording = false;
+    phone.stopping = false;
   }
 }
 
@@ -39,6 +66,12 @@ export function watchPhone() {
     }
     if (!stopped) timer = setTimeout(check, EVERY_MS);
   };
+  phone_recording().then(
+    (on) => {
+      if (!stopped && !phone.stopping) phone.recording = Boolean(on);
+    },
+    () => {},
+  );
   check();
   return () => {
     stopped = true;

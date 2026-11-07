@@ -15,9 +15,10 @@
   import PlanHandoff from "./PlanHandoff.svelte";
   import QueueLine from "./QueueLine.svelte";
   import Popup from "./Popup.svelte";
+  import PhoneMenu from "./PhoneMenu.svelte";
   import Slot from "./Slot.svelte";
-  import { attachPhoneScreen, composer, currentMode, draftOf, focusField, hasChips, send, stop, working } from "../../lib/stores/composer.svelte.js";
-  import { findPhone, phone, watchPhone } from "../../lib/stores/phone.svelte.js";
+  import { attachPhoneScreen, attachPhoneVideo, composer, currentMode, draftOf, focusField, hasChips, send, stop, working } from "../../lib/stores/composer.svelte.js";
+  import { findPhone, phone, startRecording, stopRecording, watchPhone } from "../../lib/stores/phone.svelte.js";
   import { helperChats } from "../../lib/stores/helperchats.svelte.js";
   import { hasDialog, openDialog } from "../../lib/dialogs.js";
   import { closeListed } from "../../lib/stores/openchats.svelte.js";
@@ -101,6 +102,24 @@
     focusField();
   }
 
+  let phoneMenu = $state(null);
+
+  async function phoneClick(event) {
+    if (phone.recording) {
+      const sid = sessionId;
+      const video = await stopRecording();
+      if (video) attachPhoneVideo(video, sid);
+      focusField();
+      return;
+    }
+    phoneMenu = phoneMenu ? null : { button: event.currentTarget };
+  }
+
+  function phonePick(what) {
+    if (what === "record") startRecording();
+    else phoneShot();
+  }
+
   // The lock button (owner, 2026-11-03): asks in the lock box first (with
   // the vault password while the vault is closed), then locks the chat into
   // the vault, or locks an unlocked locked chat again. Refused while the
@@ -137,7 +156,7 @@
   {#if ui.slot}
     <Slot entry={ui.slot} />
   {:else}
-    {#if sessionId || hasChips() || phone.connected}
+    {#if sessionId || hasChips() || phone.connected || phone.recording}
       <!-- Complete (owner, 2026-10-21, pick A): closes the shown chat for
            every app, as the list's × does. It sits on the right of the
            attached files' row (owner, 2026-10-21). -->
@@ -158,8 +177,12 @@
         <!-- The phone button (owner, 2026-11-01): the connected phone's
              screen as an attachment; with no phone, Find phone looks for it
              on Wi-Fi and connects. -->
-        {#if phone.connected}
-          <button class="phone" type="button" title="Add the phone's screen" aria-label="Add the phone's screen" disabled={phone.busy} data-phone-shot onclick={phoneShot}>
+        {#if phone.recording}
+          <button class="phone" type="button" title={phone.stopping ? "Saving the recording…" : "Stop recording"} aria-label="Stop recording" disabled={phone.stopping} data-phone-recording onclick={phoneClick}>
+            <span class="rec" class:saving={phone.stopping} aria-hidden="true"></span>
+          </button>
+        {:else if phone.connected}
+          <button class="phone" type="button" title="Phone: take a picture or record" aria-label="Phone" aria-haspopup="menu" aria-expanded={Boolean(phoneMenu)} disabled={phone.busy} data-phone-shot onclick={phoneClick}>
             <Icon name="phone" size={20} />
           </button>
         {:else}
@@ -191,6 +214,7 @@
   {/if}
 </div>
 {#if composer.popup && !ui.slot}<Popup />{/if}
+{#if phoneMenu}<PhoneMenu button={phoneMenu.button} onpick={phonePick} onclose={() => (phoneMenu = null)} />{/if}
 
 <style>
   /* Positioned: a leaving slot form lies over the returning row (Slot). */
@@ -280,6 +304,23 @@
   }
   .lock:disabled {
     opacity: 0.5;
+  }
+  .rec {
+    display: block;
+    width: calc(14 * var(--px));
+    height: calc(14 * var(--px));
+    margin: calc(3 * var(--px));
+    border-radius: 50%;
+    background: var(--vermilion);
+    animation: rec-blink 1s steps(1, end) infinite;
+  }
+  .rec.saving {
+    animation: none;
+  }
+  @keyframes rec-blink {
+    50% {
+      opacity: 0.15;
+    }
   }
   .phone.find {
     gap: calc(6 * var(--px));

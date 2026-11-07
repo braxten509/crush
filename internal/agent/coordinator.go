@@ -408,6 +408,15 @@ func (c *coordinator) IsSessionBusy(sessionID string) bool {
 }
 
 func (c *coordinator) ListSettledMessages(ctx context.Context, sessionID string) ([]message.Message, error) {
+	if sa, ok := c.currentAgent().(*sessionAgent); ok {
+		return sa.listSettledMessages(ctx, sessionID, c.IsSessionBusy)
+	}
+	if c.IsSessionBusy(sessionID) {
+		if err := c.messages.FlushAll(ctx); err != nil {
+			return nil, err
+		}
+		return c.messages.List(ctx, sessionID)
+	}
 	return c.currentAgent().ListSettledMessages(ctx, sessionID)
 }
 

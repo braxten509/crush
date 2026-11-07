@@ -42,9 +42,10 @@
   let natural = $state({ width: 0, height: 0 });
   let opener = null;
 
-  const open = $derived(Boolean(ui.viewer));
-  const markable = $derived(Boolean(ui.viewer?.attachment));
-  const name = $derived(pictureName(ui.viewer));
+  const pic = $derived(ui.viewer?.video ? null : ui.viewer);
+  const open = $derived(Boolean(pic));
+  const markable = $derived(Boolean(pic?.attachment));
+  const name = $derived(pictureName(pic));
   const size = $derived(pictureSize(natural.width, natural.height, bytes));
   const ratio = () => globalThis.devicePixelRatio || 1;
   const scale = () => parseFloat(getComputedStyle(document.documentElement).fontSize) / 16;
@@ -58,7 +59,7 @@
 
   // A new picture: read it, from the project folder or as it is.
   $effect(() => {
-    const source = viewerSource(ui.viewer);
+    const source = viewerSource(pic);
     src = "";
     bytes = null;
     natural = { width: 0, height: 0 };
@@ -66,14 +67,14 @@
     pen = false;
     lines = [];
     // Closing (or another picture) puts the lines into the attachment.
-    const attachment = ui.viewer?.attachment;
+    const attachment = pic?.attachment;
     const keep = () => {
       if (!attachment) return;
       const drawn = untrack(() => $state.snapshot(lines));
       const from = untrack(() => src);
       if (drawn.length && from) bakeMarks(from, drawn).then((baked) => markAttachment(attachment, baked), () => {});
     };
-    if (!ui.viewer) {
+    if (!pic) {
       viewing.state = "idle";
       return;
     }
@@ -242,7 +243,7 @@
     if (!open) return;
     const unbind = Object.entries(KEYS).map(([combo, run]) =>
       bindKey("overlay", combo, () => {
-        if (!ui.viewer) return false;
+        if (!pic) return false;
         run();
         return true;
       }),

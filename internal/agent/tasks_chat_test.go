@@ -147,3 +147,69 @@ func TestAgentMessagesRunningSubAgent(t *testing.T) {
 		})
 	}
 }
+
+// Opening a running sub-agent's chat must not settle its in-flight tool call
+// as interrupted while the sub-agent is still working on another SessionAgent.
+func TestListSettledMessagesLeavesRunningSubAgentAlone(t *testing.T) {
+	parentPrompts := make(chan string, 1)
+	c := sessionRunTestCoordinator(t, func(_ context.Context, call SessionAgentCall) (*fantasy.AgentResult, error) {
+		parentPrompts <- call.Prompt
+		return fakeSessionReply(call, "received"), nil
+	})
+	h := resumeTestHub(t, c)
+	c.tasks = h
+	parent, child := helperChats(t, c)
+
+	toolInFlight := make(chan message.Message, 1)
+	finishSub := make(chan struct{})
+	sub := newMockAgent("claude", 4096, func(ctx context.Context, _ SessionAgentCall) (*fantasy.AgentResult, error) {
+		assistant, err := c.messages.Create(ctx, child.ID, message.CreateMessageParams{
+			Role: message.Assistant,
+			Parts: []message.ContentPart{
+				message.ToolCall{
+					ID:       "call_live",
+					Name:     "bash",
+					Input:    `{"command":"sleep 5"}`,
+					Finished: true,
+				},
+			},
+		})
+		require.NoError(t, err)
+		toolInFlight <- assistant
+		<-finishSub
+		return agentResultWithText("finished cleanly"), nil
+	})
+
+	m := Model{CatwalkCfg: catwalk.Model{DefaultMaxTokens: 4096}}
+	_, err := h.start(t.Context(), func() {}, &Task{
+		SessionID: parent.ID,
+		ChildID:   child.ID,
+		Name:      "worker",
+		CLI:       "claude",
+		Model:     "opus",
+		Status:    TaskRunning,
+		Started:   time.Now(),
+	}, sub, m, config.ProviderConfig{ID: "claude", Type: config.TypeClaudeCode}, "work")
+	require.NoError(t, err)
+
+	var assistant message.Message
+	select {
+	case assistant = <-toolInFlight:
+	case <-time.After(5 * time.Second):
+		t.Fatal("sub-agent never started its tool call")
+	}
+	defer close(finishSub)
+
+	require.True(t, c.IsSessionBusy(child.ID), "sub-agent chat must report busy while running")
+
+	msgs, err := c.ListSettledMessages(t.Context(), child.ID)
+	require.NoError(t, err)
+	for _, msg := range msgs {
+		require.Empty(t, msg.ToolResults(), "in-flight sub-agent tool call must not be marked failed")
+	}
+
+	reloaded, err := c.messages.Get(t.Context(), assistant.ID)
+	require.NoError(t, err)
+	require.False(t, reloaded.IsFinished(), "in-flight sub-agent turn must not be marked Interrupted")
+	require.Nil(t, reloaded.FinishPart())
+}

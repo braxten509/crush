@@ -137,6 +137,18 @@ export async function phone_screenshot() {
   return invoke("phone_screenshot", {});
 }
 
+export async function phone_recording() {
+  return invoke("phone_recording", {});
+}
+
+export async function phone_record_start() {
+  return invoke("phone_record_start", {});
+}
+
+export async function phone_record_stop() {
+  return invoke("phone_record_stop", {});
+}
+
 export async function files_list(cwd, maxDepth, maxItems) {
   return invoke("files_list", { cwd, maxDepth, maxItems });
 }

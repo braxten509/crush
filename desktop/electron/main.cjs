@@ -628,6 +628,7 @@ app.whenReady().then(() => {
 async function serve(request) {
   const url = new URL(request.url);
   let name = decodeURIComponent(url.pathname);
+  if (url.host === "localhost" && name.startsWith("/recordings/")) return serveRecording(request, name.slice("/recordings/".length));
   if (name === "/" || name === "") name = "/index.html";
   const file = path.normalize(path.join(DIST, name));
   if (url.host !== "localhost" || !file.startsWith(DIST + path.sep)) return new Response("not found", { status: 404 });
@@ -638,5 +639,42 @@ async function serve(request) {
     return new Response(body, { headers });
   } catch {
     return new Response("not found", { status: 404 });
+  }
+}
+
+const RECORDINGS = path.join(process.env.XDG_CACHE_HOME && path.isAbsolute(process.env.XDG_CACHE_HOME) ? process.env.XDG_CACHE_HOME : path.join(os.homedir(), ".cache"), "crush", "recordings");
+
+async function serveRecording(request, name) {
+  if (!/^[\w.-]+\.mp4$/u.test(name)) return new Response("not found", { status: 404 });
+  const file = path.join(RECORDINGS, name);
+  let size;
+  try {
+    size = (await fs.promises.stat(file)).size;
+  } catch {
+    return new Response("not found", { status: 404 });
+  }
+  const headers = { "content-type": "video/mp4", "accept-ranges": "bytes" };
+  const range = /^bytes=(\d*)-(\d*)$/u.exec(request.headers.get("range") ?? "");
+  let start = 0;
+  let end = size - 1;
+  if (range && (range[1] || range[2])) {
+    if (range[1]) {
+      start = Number(range[1]);
+      if (range[2]) end = Math.min(Number(range[2]), size - 1);
+    } else {
+      start = Math.max(0, size - Number(range[2]));
+    }
+    if (start > end || start >= size) return new Response(null, { status: 416, headers: { "content-range": `bytes */${size}` } });
+  }
+  const handle = await fs.promises.open(file, "r");
+  try {
+    const body = Buffer.alloc(end - start + 1);
+    await handle.read(body, 0, body.length, start);
+    headers["content-length"] = String(body.length);
+    if (!range) return new Response(body, { status: 200, headers });
+    headers["content-range"] = `bytes ${start}-${end}/${size}`;
+    return new Response(body, { status: 206, headers });
+  } finally {
+    await handle.close();
   }
 }

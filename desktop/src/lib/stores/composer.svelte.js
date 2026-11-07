@@ -33,6 +33,7 @@ import {
   textAttachment,
   unreadable,
 } from "../composer/paste.js";
+import { expandRecordings, videoAttachment } from "../composer/recording.js";
 import { planReadyPresent } from "../render/plan.js";
 import { conn, refusedWhileFailed } from "./connection.svelte.js";
 import { addPending, finishPending, markUncertain, messages, resolvePending, returnDraft, takeReturned } from "./messages.svelte.js";
@@ -212,6 +213,21 @@ export function markAttachment(attachment, { mime, base64 }) {
     return true;
   }
   return false;
+}
+
+export function setVideoMarks(attachment, marks) {
+  for (const draft of Object.values(composer.drafts)) {
+    const index = draft.attachments.indexOf(attachment);
+    if (index < 0) continue;
+    draft.attachments[index].marks = marks;
+    return true;
+  }
+  return false;
+}
+
+export function attachPhoneVideo(video, sid = sessions.currentId) {
+  const list = draftFor(sid).attachments;
+  list.push(videoAttachment(video, list));
 }
 
 export function removeAttachment(index) {
@@ -1020,8 +1036,8 @@ export async function send() {
     requestEnd();
     return true;
   }
-  const attachments = [...draft.attachments];
-  if (text === "" && attachments.length === 0) {
+  const drafted = [...draft.attachments];
+  if (text === "" && drafted.length === 0) {
     draft.text = "";
     // TYPE-052: a dismissed ready plan comes back.
     if (composer.input === "plan" && sid && composer.planHandoff?.sessionId === sid) composer.planHandoff = { sessionId: sid, open: true };
@@ -1038,7 +1054,8 @@ export async function send() {
   composer.picks = pickPlaceholders();
   history.reset();
   syncMode();
-  const sending = sendMessage(text, attachments);
+  const out = expandRecordings(text, drafted);
+  const sending = sendMessage(out.text, out.attachments);
   savePrompt(text, sid);
   return sending;
 }

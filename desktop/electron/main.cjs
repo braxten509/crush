@@ -15,6 +15,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const readline = require("node:readline");
+const { Readable } = require("node:stream");
 
 // -- Where things are: the source tree (electron/ next to dist/ and
 // src-tauri/) or the installed folder (everything next to this file).
@@ -657,7 +658,8 @@ async function serveRecording(request, name) {
   const range = /^bytes=(\d*)-(\d*)$/u.exec(request.headers.get("range") ?? "");
   let start = 0;
   let end = size - 1;
-  if (range && (range[1] || range[2])) {
+  const ranged = Boolean(range && (range[1] || range[2]));
+  if (ranged) {
     if (range[1]) {
       start = Number(range[1]);
       if (range[2]) end = Math.min(Number(range[2]), size - 1);
@@ -666,15 +668,10 @@ async function serveRecording(request, name) {
     }
     if (start > end || start >= size) return new Response(null, { status: 416, headers: { "content-range": `bytes */${size}` } });
   }
-  const handle = await fs.promises.open(file, "r");
-  try {
-    const body = Buffer.alloc(end - start + 1);
-    await handle.read(body, 0, body.length, start);
-    headers["content-length"] = String(body.length);
-    if (!range) return new Response(body, { status: 200, headers });
-    headers["content-range"] = `bytes ${start}-${end}/${size}`;
-    return new Response(body, { status: 206, headers });
-  } finally {
-    await handle.close();
-  }
+  // Streamed from disk, so a long recording is never held in memory whole.
+  const body = Readable.toWeb(fs.createReadStream(file, { start, end }));
+  headers["content-length"] = String(end - start + 1);
+  if (!ranged) return new Response(body, { status: 200, headers });
+  headers["content-range"] = `bytes ${start}-${end}/${size}`;
+  return new Response(body, { status: 206, headers });
 }

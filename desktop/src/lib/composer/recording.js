@@ -58,5 +58,22 @@ export function expandRecordings(text, attachments) {
     }
   }
   const note = lines.join("\n");
-  return { text: text ? `${text}\n\n${note}` : note, attachments: out };
+  const sent = { text: text ? `${text}\n\n${note}` : note, attachments: out };
+  // The draft as typed, so a send given back to the field (failed, queued
+  // and recalled, or held) returns the video chip and its marks.
+  ORIGINALS.delete(sent.text);
+  ORIGINALS.set(sent.text, { text, attachments: [...attachments] });
+  while (ORIGINALS.size > KEEP_ORIGINALS) ORIGINALS.delete(ORIGINALS.keys().next().value);
+  return sent;
+}
+
+const KEEP_ORIGINALS = 20;
+const ORIGINALS = new Map(); // sent text → the draft it was made from
+
+// The draft a returned prompt was made from, or the prompt itself.
+export function originalDraft(draft) {
+  const original = ORIGINALS.get(draft?.text ?? "");
+  if (!original) return draft;
+  ORIGINALS.delete(draft.text);
+  return { text: original.text, attachments: [...original.attachments] };
 }

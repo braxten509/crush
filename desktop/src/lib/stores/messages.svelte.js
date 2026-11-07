@@ -9,6 +9,7 @@ import { prompts } from "./prompts.svelte.js";
 import { queue } from "./queue.svelte.js";
 import { noteChatMessage, sessions, settleBusy } from "./sessions.svelte.js";
 import { notify } from "./ui.svelte.js";
+import { originalDraft } from "../composer/recording.js";
 
 // One per loaded chat; a class instance, so no store proxy wraps it.
 export class ChatMessages {
@@ -541,7 +542,8 @@ export function releaseHeld(sid) {
 // composer takes it when it shows that chat (recallDraft and
 // restoreRecalledDrafts, internal/ui/model/prompt_queue.go:115-120,
 // history.go:155-181).
-export function returnDraft(sid, draft) {
+export function returnDraft(sid, given) {
+  const draft = originalDraft(given);
   messages.returned[sid] = [...(messages.returned[sid] ?? []), { text: draft?.text ?? "", attachments: [...(draft?.attachments ?? [])] }];
 }
 

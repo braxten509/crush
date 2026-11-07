@@ -41,12 +41,15 @@ export async function stopRecording() {
   if (!phone.recording || phone.stopping) return null;
   phone.stopping = true;
   try {
-    return await phone_record_stop();
+    const video = await phone_record_stop();
+    phone.recording = false;
+    return video;
   } catch (error) {
     notify("error", error?.message ?? String(error));
+    // A copy that can be tried again keeps the red dot.
+    phone.recording = Boolean(await phone_recording().catch(() => false));
     return null;
   } finally {
-    phone.recording = false;
     phone.stopping = false;
   }
 }

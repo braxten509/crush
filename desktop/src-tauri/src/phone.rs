@@ -111,15 +111,32 @@ const STOP_LIMIT: Duration = Duration::from_secs(10);
 const PULL_LIMIT: Duration = Duration::from_secs(120);
 const PROBE_LIMIT: Duration = Duration::from_secs(30);
 
+// One recording at a time. Stopping takes the recording out while the stop
+// and the copy run, leaving Stopping so no second start or stop slips in.
+// A copy that fails while the file is still on the phone puts the recording
+// back, stopped, so clicking the red dot again retries it.
 struct Recording {
     child: Child,
     adb: PathBuf,
     serial: String,
     remote: String,
     file: String,
+    // The phone-side process id of this recording's screenrecord.
+    pid: Option<u32>,
+    stopped: bool,
 }
 
-static RECORDING: Mutex<Option<Recording>> = Mutex::new(None);
+enum State {
+    Idle,
+    Recording(Recording),
+    Stopping,
+}
+
+static STATE: Mutex<State> = Mutex::new(State::Idle);
+
+fn state() -> std::sync::MutexGuard<'static, State> {
+    STATE.lock().unwrap_or_else(|e| e.into_inner())
+}
 
 #[derive(Serialize)]
 pub struct PhoneVideo {
@@ -142,78 +159,145 @@ pub fn recordings_dir() -> PathBuf {
         .join("recordings")
 }
 
+/// True while a recording runs, is being saved, or waits for a retried copy
+/// (the button stays the red dot until it is saved).
 pub fn recording() -> bool {
-    let mut held = RECORDING.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some(rec) = held.as_mut() {
-        if matches!(rec.child.try_wait(), Ok(None)) {
-            return true;
-        }
-        let local = recordings_dir().join(&rec.file);
-        return local.exists() || pull(rec, &local).is_ok();
-    }
-    false
+    !matches!(*state(), State::Idle)
 }
 
 pub fn record_start() -> AppResult<()> {
-    let mut held = RECORDING.lock().unwrap_or_else(|e| e.into_inner());
-    if held.is_some() {
-        return Err(AppError::new("phone_recording", "The phone is already recording"));
+    let mut held = state();
+    match *held {
+        State::Idle => {}
+        State::Stopping => return Err(AppError::new("phone_recording", "The last recording is still being saved")),
+        State::Recording(_) => return Err(AppError::new("phone_recording", "The phone is already recording")),
     }
     let adb = adb().ok_or_else(|| AppError::new("no_phone", NO_PHONE))?;
     let serial = first_phone(&adb).ok_or_else(|| AppError::new("no_phone", NO_PHONE))?;
     let stamp = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or_default();
     let file = format!("phone-recording-{stamp}.mp4");
     let remote = format!("/data/local/tmp/crush-{file}");
-    let child = Command::new(&adb)
-        .args(["-s", &serial, "shell", "screenrecord", "--time-limit", RECORD_LIMIT_SECS, "--bit-rate", "8M", &remote])
+    // The phone's shell prints its own id, then becomes screenrecord (exec
+    // keeps the id), so the stop signals this recording and nothing else.
+    let script = format!("echo $$; exec screenrecord --time-limit {RECORD_LIMIT_SECS} --bit-rate 8M {remote}");
+    let mut child = Command::new(&adb)
+        .args(["-s", &serial, "shell", &script])
         .stdin(Stdio::null())
-        .stdout(Stdio::null())
+        .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()
         .map_err(|e| AppError::new("phone_failed", format!("Couldn't start recording: {e}")))?;
-    *held = Some(Recording { child, adb, serial, remote, file });
+    let pid = child.stdout.take().and_then(|out| {
+        let (send, got) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            use std::io::BufRead;
+            let mut reader = std::io::BufReader::new(out);
+            let mut line = String::new();
+            let _ = reader.read_line(&mut line);
+            let _ = send.send(line.trim().parse::<u32>().ok());
+            // Keep reading so the phone's output never blocks the recorder.
+            let _ = std::io::copy(&mut reader, &mut std::io::sink());
+        });
+        got.recv_timeout(STOP_LIMIT).ok().flatten()
+    });
+    let Some(pid) = pid else {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(AppError::new("phone_failed", "Couldn't start recording on the phone"));
+    };
+    *held = State::Recording(Recording { child, adb, serial, remote, file, pid: Some(pid), stopped: false });
     Ok(())
 }
 
 pub fn record_stop() -> AppResult<PhoneVideo> {
-    let mut rec = RECORDING
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .take()
-        .ok_or_else(|| AppError::new("phone_failed", "The phone isn't recording"))?;
-    let _ = run_limited(
-        Command::new(&rec.adb).args(["-s", &rec.serial, "shell", "kill -2 $(pidof screenrecord)"]),
+    let mut rec = {
+        let mut held = state();
+        match std::mem::replace(&mut *held, State::Stopping) {
+            State::Recording(rec) => rec,
+            other => {
+                let busy = matches!(other, State::Stopping);
+                *held = other;
+                return Err(if busy {
+                    AppError::new("phone_recording", "The recording is already being saved")
+                } else {
+                    AppError::new("phone_failed", "The phone isn't recording")
+                });
+            }
+        }
+    };
+    let result = finish(&mut rec);
+    let mut held = state();
+    match &result {
+        Err(Kept::Retry(_)) => *held = State::Recording(rec),
+        _ => *held = State::Idle,
+    }
+    result.map_err(|kept| match kept {
+        Kept::Retry(e) | Kept::Gone(e) => e,
+    })
+}
+
+enum Kept {
+    // The file is still on the phone: the recording stays for another try.
+    Retry(AppError),
+    // Nothing left to retry.
+    Gone(AppError),
+}
+
+fn finish(rec: &mut Recording) -> Result<PhoneVideo, Kept> {
+    if !rec.stopped {
+        if let (Some(pid), Ok(None)) = (rec.pid, rec.child.try_wait()) {
+            let _ = run_limited(
+                Command::new(&rec.adb).args(["-s", &rec.serial, "shell", "kill", "-2", &pid.to_string()]),
+                STOP_LIMIT,
+                false,
+            );
+        }
+        let until = Instant::now() + STOP_LIMIT;
+        while matches!(rec.child.try_wait(), Ok(None)) && Instant::now() < until {
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        if matches!(rec.child.try_wait(), Ok(None)) {
+            let _ = rec.child.kill();
+            let _ = rec.child.wait();
+        }
+        rec.stopped = true;
+    }
+    let dir = recordings_dir();
+    std::fs::create_dir_all(&dir).map_err(|e| Kept::Retry(AppError::new("phone_failed", format!("Couldn't save the recording: {e}"))))?;
+    let local = dir.join(&rec.file);
+    if !local.is_file() {
+        pull(rec, &local)?;
+    }
+    // Only once the copy is safe here is the phone's copy removed.
+    let _ = run_limited(Command::new(&rec.adb).args(["-s", &rec.serial, "shell", "rm", "-f", &rec.remote]), STOP_LIMIT, false);
+    probe(&local, &rec.file).map_err(Kept::Gone)
+}
+
+fn pull(rec: &Recording, local: &Path) -> Result<(), Kept> {
+    // Into a side file first, so a half copy is never taken for the video.
+    let part = local.with_extension("mp4.part");
+    let pulled = run_limited(Command::new(&rec.adb).args(["-s", &rec.serial, "pull", &rec.remote]).arg(&part), PULL_LIMIT, false);
+    if matches!(pulled, Ok(Ran::Exited { code: Some(0), .. })) && part.is_file() && std::fs::rename(&part, local).is_ok() {
+        return Ok(());
+    }
+    let _ = std::fs::remove_file(&part);
+    let check = run_limited(
+        Command::new(&rec.adb).args(["-s", &rec.serial, "shell", &format!("test -s {} && echo yes || echo no", rec.remote)]),
         STOP_LIMIT,
         false,
     );
-    let until = Instant::now() + STOP_LIMIT;
-    while matches!(rec.child.try_wait(), Ok(None)) && Instant::now() < until {
-        std::thread::sleep(Duration::from_millis(100));
-    }
-    if matches!(rec.child.try_wait(), Ok(None)) {
-        let _ = rec.child.kill();
-        let _ = rec.child.wait();
-    }
-    let dir = recordings_dir();
-    std::fs::create_dir_all(&dir).map_err(|e| AppError::new("phone_failed", format!("Couldn't save the recording: {e}")))?;
-    let local = dir.join(&rec.file);
-    if !local.exists() {
-        pull(&mut rec, &local)?;
-    }
-    probe(&local, &rec.file)
-}
-
-fn pull(rec: &mut Recording, local: &Path) -> AppResult<()> {
-    let _ = rec.child.try_wait();
-    let pulled = run_limited(
-        Command::new(&rec.adb).args(["-s", &rec.serial, "pull", &rec.remote]).arg(local),
-        PULL_LIMIT,
-        false,
-    );
-    let _ = run_limited(Command::new(&rec.adb).args(["-s", &rec.serial, "shell", "rm", "-f", &rec.remote]), STOP_LIMIT, false);
-    match pulled {
-        Ok(Ran::Exited { code: Some(0), .. }) if local.is_file() => Ok(()),
-        _ => Err(AppError::new("phone_failed", "Couldn't copy the recording from the phone")),
+    match check {
+        Ok(Ran::Exited { code: Some(0), stdout }) if stdout.starts_with(b"yes") => Err(Kept::Retry(AppError::new(
+            "phone_failed",
+            "Couldn't copy the recording from the phone. Click the red dot to try again",
+        ))),
+        Ok(Ran::Exited { code: Some(0), stdout }) if stdout.starts_with(b"no") => {
+            Err(Kept::Gone(AppError::new("phone_failed", "The phone didn't save a recording")))
+        }
+        _ => Err(Kept::Gone(AppError::new(
+            "phone_failed",
+            format!("Lost the phone before the recording was copied. It is still on the phone at {}", rec.remote),
+        ))),
     }
 }
 

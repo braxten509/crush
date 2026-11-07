@@ -19,6 +19,7 @@
   let failed = $state(false);
   let loadedDuration = $state(0);
   let marks = $state([]);
+  let capturing = $state(false);
   let opener = null;
 
   const attachment = $derived(ui.viewer?.video ?? null);
@@ -43,6 +44,7 @@
     playing = false;
     failed = false;
     loadedDuration = 0;
+    capturing = false;
     marks = video ? untrack(() => [...(video.marks ?? [])]) : [];
   });
 
@@ -102,9 +104,10 @@
     return () => video.cancelVideoFrameCallback(handle);
   });
 
-  function whenShown(video) {
-    if (!video.seeking) return Promise.resolve();
-    return new Promise((done) => video.addEventListener("seeked", () => done(), { once: true }));
+  // Waits until every pending seek is done (a step during the wait starts
+  // another one).
+  async function whenShown(video) {
+    while (video.seeking) await new Promise((done) => video.addEventListener("seeked", () => done(), { once: true }));
   }
 
   function grab(video) {
@@ -121,18 +124,31 @@
     return { mime, base64: url.slice(url.indexOf(",") + 1) };
   }
 
+  // The picture is kept only if, once the frame is shown, the viewer still
+  // shows that frame of that video; a step or a close in the meantime drops
+  // it.
   async function toggleMark() {
-    if (!player || !attachment || failed) return;
+    if (!player || !attachment || failed || capturing) return;
     if (playing) togglePlay();
+    const video = attachment;
+    const element = player;
     const frame = at;
     if (marks.some((m) => m.frame === frame)) {
       marks = marks.filter((m) => m.frame !== frame);
-    } else {
-      await whenShown(player);
-      const picture = grab(player);
-      marks = [...marks, { frame, time: frames[frame] ?? 0, ...picture }].sort((a, b) => a.frame - b.frame);
+      setVideoMarks(video, $state.snapshot(marks));
+      return;
     }
-    setVideoMarks(attachment, $state.snapshot(marks));
+    capturing = true;
+    try {
+      await whenShown(element);
+      const target = seekTime(frame);
+      if (attachment !== video || player !== element || at !== frame || Math.abs(element.currentTime - target) > 1e-3) return;
+      const picture = grab(element);
+      marks = [...marks, { frame, time: frames[frame] ?? 0, ...picture }].sort((a, b) => a.frame - b.frame);
+      setVideoMarks(video, $state.snapshot(marks));
+    } finally {
+      capturing = false;
+    }
   }
 
   function unmark(frame) {
@@ -255,7 +271,7 @@
           <p class="where" data-video-frame>Frame {at + 1} of {frames.length} · {clockTime(time)}</p>
           <button type="button" class="box" aria-label="Next frame" title="Next frame (→)" data-video-next disabled={at >= frames.length - 1} onclick={() => step(1)}>▶</button>
           <button type="button" class="box" title="Play or pause (Space)" data-video-play onclick={togglePlay}>{playing ? "Pause" : "Play"}</button>
-          <button type="button" class="box mark" class:on={markedHere} title="Mark this frame (M)" data-video-mark disabled={failed} onclick={toggleMark}>{markedHere ? "Unmark frame" : "Mark frame"}</button>
+          <button type="button" class="box mark" class:on={markedHere} title="Mark this frame (M)" data-video-mark disabled={failed || capturing} onclick={toggleMark}>{markedHere ? "Unmark frame" : "Mark frame"}</button>
         </div>
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div class="track" bind:this={track} onpointerdown={trackDown} onpointermove={trackMove} data-video-track>
@@ -399,18 +415,24 @@
     color: var(--slate);
     opacity: 0.6;
   }
+  /* Sized by its words; the Send button's colours (owner, 2026-11-07). */
   .box.mark {
-    min-width: calc(150 * var(--px));
-    border-color: var(--vermilion);
-    background: var(--vermilion);
-    color: var(--paper);
+    border-color: var(--vermilion-fill);
+    background: var(--vermilion-fill);
+    color: var(--on-accent);
   }
   .box.mark:hover:not(:disabled) {
     background: var(--vermilion-fill);
+    filter: brightness(1.08);
   }
-  .box.mark.on {
+  .box.mark.on,
+  .box.mark.on:hover:not(:disabled) {
     background: var(--paper-raised);
     color: var(--vermilion-ink);
+    filter: none;
+  }
+  .box.mark.on:hover:not(:disabled) {
+    background: var(--control-hover);
   }
   .track {
     position: relative;

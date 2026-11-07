@@ -447,6 +447,14 @@ func (b Builder) buildProvider(providerCfg config.ProviderConfig, model config.S
 		}
 	}
 
+	if wireType == catwalk.TypeMessages && config.AnthropicProgressUpdates(providerCfg.ID, model.Model) {
+		if v := headers["anthropic-beta"]; v != "" {
+			headers["anthropic-beta"] = v + "," + config.AnthropicProgressUpdatesBeta
+		} else {
+			headers["anthropic-beta"] = config.AnthropicProgressUpdatesBeta
+		}
+	}
+
 	apiKey, _ := b.Config.Resolve(providerCfg.APIKey)
 	baseURL, _ := b.Config.Resolve(providerCfg.BaseURL)
 

@@ -280,8 +280,24 @@ func anthropicOptions(c *optionsCall) fantasy.ProviderOptions {
 		c.merged["thinking"] = map[string]any{"budget_tokens": 2000}
 	}
 
+	if config.AnthropicProgressUpdates(c.provider.ID, c.model.ModelCfg.Model) {
+		c.merged["thinking_display"] = config.AnthropicThinkingDisplayUpdates
+	}
+
 	options := fantasy.ProviderOptions{}
 	if parsed, err := anthropic.ParseOptions(c.merged); err == nil {
+		if config.AnthropicProgressUpdates(c.provider.ID, c.model.ModelCfg.Model) {
+			// Fantasy only emits the thinking configuration when effort or
+			// a budget is set. Claude 5 also needs this on catalog entries
+			// without reasoning metadata, and rejects manual budgets.
+			parsed.ExtraBody = maps.Clone(parsed.ExtraBody)
+			if parsed.ExtraBody == nil {
+				parsed.ExtraBody = make(map[string]any)
+			}
+			parsed.ExtraBody["thinking"] = map[string]any{
+				"type": "adaptive", "display": config.AnthropicThinkingDisplayUpdates,
+			}
+		}
 		options[anthropic.Name] = parsed
 	}
 	return options

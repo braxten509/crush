@@ -58,17 +58,20 @@ type ContentPart interface {
 }
 
 type ReasoningContent struct {
-	Thinking         string                             `json:"thinking"`
-	Signature        string                             `json:"signature"`
-	ThoughtSignature string                             `json:"thought_signature"` // Used for google
-	ToolID           string                             `json:"tool_id"`           // Used for openrouter google models
-	ResponsesData    *openai.ResponsesReasoningMetadata `json:"responses_data"`
-	StartedAt        int64                              `json:"started_at,omitempty"`
-	FinishedAt       int64                              `json:"finished_at,omitempty"`
-	RedactedData     string                             `json:"redacted_data,omitempty"`
-	Placed           bool                               `json:"placed,omitempty"`
-	TextOffset       int                                `json:"text_offset,omitempty"`
-	ToolCallIndex    int                                `json:"tool_call_index,omitempty"`
+	// DisplayTextLength is the copy shown as normal chat text. Replay skips
+	// that copy and sends the original signed thinking block exactly once.
+	DisplayTextLength int                                `json:"display_text_length,omitempty"`
+	Thinking          string                             `json:"thinking"`
+	Signature         string                             `json:"signature"`
+	ThoughtSignature  string                             `json:"thought_signature"` // Used for google
+	ToolID            string                             `json:"tool_id"`           // Used for openrouter google models
+	ResponsesData     *openai.ResponsesReasoningMetadata `json:"responses_data"`
+	StartedAt         int64                              `json:"started_at,omitempty"`
+	FinishedAt        int64                              `json:"finished_at,omitempty"`
+	RedactedData      string                             `json:"redacted_data,omitempty"`
+	Placed            bool                               `json:"placed,omitempty"`
+	TextOffset        int                                `json:"text_offset,omitempty"`
+	ToolCallIndex     int                                `json:"tool_call_index,omitempty"`
 }
 
 func (tc ReasoningContent) String() string {
@@ -487,6 +490,22 @@ func (m *Message) AppendReasoningContent(delta string) {
 	m.Parts[i] = c
 }
 
+// ShowProgressUpdate copies only the new text from the current signed block
+// into the visible reply. The signed block remains unchanged for replay.
+func (m *Message) ShowProgressUpdate(text string) {
+	if text == "" {
+		return
+	}
+	i := m.openReasoningIndex()
+	c := m.Parts[i].(ReasoningContent)
+	if c.DisplayTextLength == 0 && m.Content().Text != "" {
+		text = "\n\n" + text
+	}
+	c.DisplayTextLength += len(text)
+	m.Parts[i] = c
+	m.AppendContent(text)
+}
+
 func (m *Message) AppendThoughtSignature(signature string, toolCallID string) {
 	i := m.openReasoningIndex()
 	c := m.Parts[i].(ReasoningContent)
@@ -726,6 +745,7 @@ func (m *Message) assistantParts() []fantasy.MessagePart {
 
 	for _, block := range blocks {
 		emit(block.TextOffset, block.ToolCallIndex)
+		textAt = min(textAt+block.DisplayTextLength, len(text))
 		if part, ok := reasoningPart(block, true); ok {
 			parts = append(parts, part)
 		}

@@ -143,12 +143,20 @@ func (p progressInterruptTool) Run(ctx context.Context, call fantasy.ToolCall) (
 	return p.AgentTool.Run(ctx, call)
 }
 
+func (t *turn) progressUpdatesEnabled() bool {
+	return !t.isCLI && config.AnthropicProgressUpdates(t.chatModel.ModelCfg.Provider, t.chatModel.ModelCfg.Model)
+}
+
 func (t *turn) onReasoningStart(id string, reasoning fantasy.ReasoningContent) error {
 	t.currentAssistant.ActivityDetail = ""
 	t.currentAssistant.Activity = "thinking"
 	t.currentAssistant.ActivityAt = time.Now().Unix()
 	t.currentAssistant.FinishThinking()
 	t.currentAssistant.StartReasoning(reasoning.Text)
+	if t.progressUpdatesEnabled() && reasoning.Text != "" {
+		t.currentAssistant.ShowProgressUpdate(reasoning.Text)
+		t.noteVisibleAssistantText()
+	}
 	return t.a.messages.Update(t.genCtx, *t.currentAssistant)
 }
 
@@ -157,6 +165,13 @@ func (t *turn) onReasoningDelta(id string, text string) error {
 	t.currentAssistant.Activity = "thinking"
 	t.currentAssistant.ActivityAt = time.Now().Unix()
 	t.currentAssistant.AppendReasoningContent(text)
+	if t.progressUpdatesEnabled() && text != "" {
+		t.currentAssistant.ShowProgressUpdate(text)
+		if strings.TrimSpace(text) != "" {
+			t.noteVisibleAssistantText()
+		}
+		t.currentAssistant.Activity = "responding"
+	}
 	return t.a.messages.Update(t.genCtx, *t.currentAssistant)
 }
 
@@ -179,6 +194,12 @@ func (t *turn) onReasoningEnd(id string, reasoning fantasy.ReasoningContent) err
 	if openaiData, ok := reasoning.ProviderMetadata[openai.Name]; ok {
 		if reasoning, ok := openaiData.(*openai.ResponsesReasoningMetadata); ok {
 			t.currentAssistant.SetReasoningResponsesData(reasoning)
+		}
+	}
+	if t.progressUpdatesEnabled() {
+		blocks := t.currentAssistant.ReasoningBlocks()
+		if len(blocks) > 0 && blocks[len(blocks)-1].DisplayTextLength > 0 {
+			t.currentAssistant.ShowProgressUpdate("\n\n")
 		}
 	}
 	t.currentAssistant.FinishThinking()
@@ -280,6 +301,9 @@ func (t *turn) onToolCall(tc fantasy.ToolCallContent) error {
 // toolResultMu.
 func (t *turn) onToolResult(result fantasy.ToolResultContent) error {
 	toolResult := t.a.convertToToolResult(result)
+	if t.wasInterruptedForProgress() && toolResult.IsError && strings.Contains(toolResult.Content, context.Canceled.Error()) {
+		toolResult.Content = progressInterruptedToolCallResult
+	}
 	if _, ok := t.sanitizedToolCalls.Get(result.ToolCallID); ok {
 		toolResult.Content = "Tool call failed: arguments were not valid JSON. Please check your tool call format and try again."
 		toolResult.IsError = true

@@ -306,9 +306,9 @@ anthropic: &ProviderOptions{Effort: &"none"}
 == anthropic/anthropic zai-org
 anthropic: &ProviderOptions{Thinking: &ThinkingProviderOption{BudgetTokens: 2000}}
 == anthropic/anthropic claude
-anthropic: &ProviderOptions{Effort: &"max"}
+anthropic: &ProviderOptions{Effort: &"max", ThinkingDisplay: &"updates", ExtraBody: {thinking: (map[string]interface {}){display: (string)"updates", type: (string)"adaptive"}}}
 == anthropic/anthropic claude-think
-anthropic: &ProviderOptions{Thinking: &ThinkingProviderOption{BudgetTokens: 2000}}
+anthropic: &ProviderOptions{Thinking: &ThinkingProviderOption{BudgetTokens: 2000}, ThinkingDisplay: &"updates", ExtraBody: {thinking: (map[string]interface {}){display: (string)"updates", type: (string)"adaptive"}}}
 == anthropic/minimax plain
 anthropic: &ProviderOptions{}
 == anthropic/minimax reasoning-default

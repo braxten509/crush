@@ -294,6 +294,9 @@ func anthropicOptions(c *optionsCall) fantasy.ProviderOptions {
 			if parsed.ExtraBody == nil {
 				parsed.ExtraBody = make(map[string]any)
 			}
+			// Do not let Fantasy validate a legacy manual budget before
+			// applying the adaptive request override below.
+			parsed.Thinking = nil
 			parsed.ExtraBody["thinking"] = map[string]any{
 				"type": "adaptive", "display": config.AnthropicThinkingDisplayUpdates,
 			}

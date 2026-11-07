@@ -29,10 +29,24 @@ func TestProgressUpdateWireIncludesDisplayWithoutEffort(t *testing.T) {
 	require.NoError(t, err)
 	model, err := provider.LanguageModel(t.Context(), "claude-opus-5-5")
 	require.NoError(t, err)
-	selected := config.SelectedModel{Provider: "anthropic", Model: "claude-opus-5-5"}
-	opts := Options(catwalk.Model{ID: selected.Model}, selected, config.ProviderConfig{ID: "anthropic", Type: catwalk.TypeMessages})
-	_, err = model.Generate(t.Context(), fantasy.Call{Prompt: fantasy.Prompt{fantasy.NewUserMessage("check")}, ProviderOptions: opts})
-	require.NoError(t, err)
-	body := <-requests
-	require.Equal(t, map[string]any{"type": "adaptive", "display": "updates"}, body["thinking"])
+	for _, tc := range []struct {
+		name     string
+		thinking map[string]any
+	}{
+		{name: "default"},
+		{name: "adaptive", thinking: map[string]any{"type": "adaptive"}},
+		{name: "legacy budget", thinking: map[string]any{"budget_tokens": 2000}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			selected := config.SelectedModel{Provider: "anthropic", Model: "claude-opus-5-5"}
+			if tc.thinking != nil {
+				selected.ProviderOptions = map[string]any{"thinking": tc.thinking}
+			}
+			opts := Options(catwalk.Model{ID: selected.Model}, selected, config.ProviderConfig{ID: "anthropic", Type: catwalk.TypeMessages})
+			_, err := model.Generate(t.Context(), fantasy.Call{Prompt: fantasy.Prompt{fantasy.NewUserMessage("check")}, ProviderOptions: opts})
+			require.NoError(t, err)
+			body := <-requests
+			require.Equal(t, map[string]any{"type": "adaptive", "display": "updates"}, body["thinking"])
+		})
+	}
 }

@@ -12,14 +12,16 @@
   // The save button (an arrow into a box, left of Fit) saves the picture
   // through the system's Save window (electron/main.cjs, will-download). A
   // picture attached but not sent yet (ui.viewer.attachment) also gets the
-  // red pen and Undo (Ctrl+Z): lines drawn on it go into the attachment
-  // when the viewer closes (marks.js, markAttachment). Owner, 2026-11-01.
+  // red pen, Text and Undo (Ctrl+Z): lines and notes drawn on it go into
+  // the attachment when the viewer closes (marks.js, markAttachment). Text:
+  // click a spot, type, Enter keeps it, Esc drops it. Owner, 2026-11-01,
+  // text 2026-11-08.
   import { unfold } from "../../lib/motion.js";
   import { tick, untrack } from "svelte";
   import { file_read } from "../../lib/engine/commands.js";
   import { markAttachment } from "../../lib/stores/composer.svelte.js";
   import Icon from "../Icon.svelte";
-  import { bakeMarks, drawLines, penWidth } from "./marks.js";
+  import { bakeMarks, drawLines, NOTE_FONT, noteSize, penWidth } from "./marks.js";
   import { bindKey } from "../../lib/keys.js";
   import { conn } from "../../lib/stores/connection.svelte.js";
   import { openViewer, ui } from "../../lib/stores/ui.svelte.js";
@@ -37,8 +39,10 @@
   let canvas = $state(null);
   let picture = $state(null);
   let sheet = $state(null);
-  let pen = $state(false);
-  let lines = $state([]);
+  let tool = $state(null); // "pen", "text" or none
+  let lines = $state([]); // lines and notes, in drawing order
+  let draft = $state(null); // the note being typed: { x, y, text }
+  let noteBox = $state(null);
   let place = $state({ left: 0, top: 0, width: 0, height: 0 });
   let src = $state("");
   let bytes = $state(null);
@@ -60,7 +64,7 @@
   $effect(() => {
     viewing.name = open ? name : "";
     viewing.size = open ? size : "";
-    viewing.pen = pen;
+    viewing.pen = tool === "pen";
     viewing.lines = lines.length;
   });
 
@@ -72,8 +76,9 @@
     natural = { width: 0, height: 0 };
     viewing.fit = true;
     zoom = 1;
-    pen = false;
+    tool = null;
     lines = [];
+    draft = null;
     // Closing (or another picture) puts the lines into the attachment.
     const attachment = pic?.attachment;
     const keep = () => {
@@ -171,21 +176,53 @@
   }
 
   function drawStart(event) {
-    if (!pen || event.button !== 0 || !natural.width) return;
+    if (!tool || event.button !== 0 || !natural.width) return;
     event.preventDefault();
     event.stopPropagation();
+    if (draft) {
+      keepNote();
+      return;
+    }
+    if (tool === "text") {
+      draft = { ...pointAt(event), text: "" };
+      tick().then(() => noteBox?.focus({ preventScroll: true }));
+      return;
+    }
     sheet.setPointerCapture(event.pointerId);
     lines.push([pointAt(event)]);
   }
 
   function drawMove(event) {
-    if (!pen || !sheet?.hasPointerCapture(event.pointerId)) return;
+    if (tool !== "pen" || !sheet?.hasPointerCapture(event.pointerId)) return;
     lines[lines.length - 1].push(pointAt(event));
   }
 
   function undo() {
     lines.pop();
   }
+
+  function pick(next) {
+    keepNote();
+    tool = tool === next ? null : next;
+  }
+
+  function keepNote() {
+    if (!draft) return;
+    const text = draft.text.trim();
+    if (text) lines.push({ text, x: draft.x, y: draft.y });
+    draft = null;
+  }
+
+  function noteKey(event) {
+    if (event.key === "Enter") keepNote();
+    else if (event.key === "Escape") draft = null;
+    else return;
+    event.preventDefault();
+    root?.focus({ preventScroll: true });
+  }
+
+  // The typing box lies where the note will be drawn, at the same size.
+  const shown = $derived(natural.width ? place.width / natural.width : 1);
 
   // Actual size starts centered on the picture.
   function setFit(fit) {
@@ -209,7 +246,7 @@
   // Dragging pans the picture at actual size.
   let drag = null;
   function down(event) {
-    if (pen || !movable || event.button !== 0 || !canvas) return;
+    if (tool || !movable || event.button !== 0 || !canvas) return;
     event.preventDefault();
     drag = { x: event.clientX, y: event.clientY, left: canvas.scrollLeft, top: canvas.scrollTop };
     const move = (e) => {
@@ -278,7 +315,7 @@
     if (!open) return;
     const unbind = Object.entries(KEYS).map(([combo, run]) =>
       bindKey("overlay", combo, () => {
-        if (!pic) return false;
+        if (!pic || draft) return false;
         run();
         return true;
       }),
@@ -312,8 +349,9 @@
       {#if size}<p class="size">{size}</p>{/if}
       <div class="buttons">
         {#if markable}
-          <button type="button" class="icon pen" class:on={pen} aria-pressed={pen} title="Red pen" aria-label="Red pen" data-viewer-pen onclick={() => (pen = !pen)}><Icon name="pen" size={16} /></button>
-          {#if pen}<button type="button" disabled={lines.length === 0} data-viewer-undo onclick={undo}>Undo</button>{/if}
+          <button type="button" class="icon pen" class:on={tool === "pen"} aria-pressed={tool === "pen"} title="Red pen" aria-label="Red pen" data-viewer-pen onclick={() => pick("pen")}><Icon name="pen" size={16} /></button>
+          <button type="button" class:active={tool === "text"} aria-pressed={tool === "text"} title="Add text: click a spot, type, Enter" data-viewer-text onclick={() => pick("text")}>Text</button>
+          {#if tool}<button type="button" disabled={lines.length === 0} data-viewer-undo onclick={undo}>Undo</button>{/if}
         {/if}
         <button type="button" class="icon" title="Save picture" aria-label="Save picture" disabled={!src} data-viewer-save onclick={save}><Icon name="download" size={16} /></button>
         <button type="button" class:active={viewing.fit} aria-pressed={viewing.fit} data-viewer-fit onclick={() => setFit(true)}>Fit</button>
@@ -340,7 +378,8 @@
         {#if markable && natural.width}
           <canvas
             class="sheet"
-            class:drawing={pen}
+            class:drawing={tool}
+            class:typing={tool === "text"}
             width={natural.width}
             height={natural.height}
             style:left="{place.left}px"
@@ -352,6 +391,23 @@
             onpointerdown={drawStart}
             onpointermove={drawMove}
           ></canvas>
+          {#if draft}
+            <input
+              class="note"
+              type="text"
+              aria-label="Text to add"
+              spellcheck="false"
+              bind:value={draft.text}
+              bind:this={noteBox}
+              style:left="{place.left + draft.x * shown}px"
+              style:top="{place.top + draft.y * shown}px"
+              style:font-size="{noteSize(natural.width, natural.height) * shown}px"
+              style:font-family={NOTE_FONT}
+              data-viewer-note
+              onkeydown={noteKey}
+              onblur={keepNote}
+            />
+          {/if}
         {/if}
       {/if}
     </div>
@@ -429,6 +485,25 @@
     pointer-events: auto;
     cursor: crosshair;
     touch-action: none;
+  }
+  .sheet.typing {
+    cursor: text;
+  }
+  /* White with a black shadow, as the note is drawn (marks.js). */
+  .note {
+    position: absolute;
+    min-width: 2ch;
+    field-sizing: content;
+    padding: 0;
+    border: none;
+    outline: 1px dashed rgba(255, 255, 255, 0.8);
+    background: transparent;
+    color: #ffffff;
+    caret-color: #ffffff;
+    font-weight: 600;
+    line-height: 1.2;
+    text-shadow: 0 0.05em 0.17em rgba(0, 0, 0, 0.95), 0 0.05em 0.17em rgba(0, 0, 0, 0.95);
+    transform: translateY(-50%);
   }
   .viewer :global(.rule.viewer-rule) {
     flex: none;

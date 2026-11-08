@@ -6,7 +6,9 @@
   import { setVideoMarks } from "../../lib/stores/composer.svelte.js";
   import { bindKey } from "../../lib/keys.js";
   import { openViewer, ui } from "../../lib/stores/ui.svelte.js";
+  import Icon from "../Icon.svelte";
   import Rule from "../Rule.svelte";
+  import { bakeMarks, drawLines, NOTE_FONT, noteSize, penWidth } from "./marks.js";
 
   const FALLBACK_FPS = 30;
   const BIG_STEP = 10;
@@ -28,6 +30,20 @@
   let base = $state({ width: 0, height: 0 });
   let dragged = false;
   let opener = null;
+  // The red pen and Text draw on the frame shown (owner, 2026-11-08). Each
+  // frame keeps its own lines and notes; drawing on a frame marks it, and
+  // its marked picture is the frame with them (mark.plain is the frame
+  // without them).
+  let sheet = $state(null);
+  let noteBox = $state(null);
+  let tool = $state(null); // "pen", "text" or none
+  let drawn = $state({}); // frame → lines and notes
+  let draft = $state(null); // the note being typed: { frame, x, y, text }
+  let spot = $state({ left: 0, top: 0, width: 0, height: 0 });
+  let natural = $state({ width: 0, height: 0 });
+  // Per opened video, so one video's late work never touches another's.
+  let saves = {}; // frame → the latest save's number
+  let captures = new Map(); // frame → the picture being taken
 
   const attachment = $derived(ui.viewer?.video ?? null);
   const open = $derived(Boolean(attachment));
@@ -42,6 +58,8 @@
   const time = $derived(frames[at] ?? 0);
   const zoomed = $derived(zoom > 1 && base.width > 0);
   const markedHere = $derived(marks.some((m) => m.frame === at));
+  const here = $derived(drawn[at] ?? []);
+  const shown = $derived(natural.width ? spot.width / natural.width : 1);
   const sizeText = $derived(
     [info.width && info.height ? `${info.width} × ${info.height}` : "", duration ? clockTime(duration) : "", info.bytes ? `${(info.bytes / 1048576).toFixed(1)} MB` : ""].filter(Boolean).join(" · "),
   );
@@ -54,7 +72,13 @@
     loadedDuration = 0;
     capturing = false;
     zoom = 1;
+    tool = null;
+    draft = null;
+    natural = { width: 0, height: 0 };
     marks = video ? untrack(() => [...(video.marks ?? [])]) : [];
+    drawn = Object.fromEntries(untrack(() => marks.filter((m) => m.notes?.length).map((m) => [m.frame, [...m.notes]])));
+    saves = {};
+    captures = new Map();
   });
 
   function close() {
@@ -70,6 +94,15 @@
   function show(index) {
     if (!player) return;
     const target = Math.max(0, Math.min(frames.length - 1, index));
+    keepNote();
+    // A frame being marked is taken before the viewer moves on.
+    if (captures.size) {
+      const pending = captures;
+      Promise.all(pending.values()).then(() => {
+        if (captures === pending) show(target);
+      });
+      return;
+    }
     if (playing) player.pause();
     at = target;
     player.currentTime = seekTime(target);
@@ -93,6 +126,7 @@
   function togglePlay() {
     if (!player) return;
     if (player.paused) {
+      if (captures.size) return;
       if (at >= frames.length - 1) player.currentTime = 0;
       player.play().catch(() => {});
     } else {
@@ -135,35 +169,160 @@
 
   // The picture is kept only if, once the frame is shown, the viewer still
   // shows that frame of that video; a step or a close in the meantime drops
-  // it.
+  // it. Gives the mark, or null.
+  function capture(frame) {
+    if (captures.has(frame)) return captures.get(frame);
+    const video = attachment;
+    const element = player;
+    const mine = captures;
+    let job = null;
+    job = (async () => {
+      capturing = true;
+      try {
+        await whenShown(element);
+        const target = seekTime(frame);
+        if (attachment !== video || player !== element || at !== frame || Math.abs(element.currentTime - target) > 1e-3) return null;
+        const existing = marks.find((m) => m.frame === frame);
+        if (existing) return existing;
+        const mark = { frame, time: frames[frame] ?? 0, ...grab(element) };
+        marks = [...marks, mark].sort((a, b) => a.frame - b.frame);
+        setVideoMarks(video, $state.snapshot(marks));
+        return mark;
+      } finally {
+        if (mine.get(frame) === job) mine.delete(frame);
+        if (captures === mine) capturing = mine.size > 0;
+      }
+    })();
+    mine.set(frame, job);
+    return job;
+  }
+
   async function toggleMark() {
     if (!player || !attachment || failed || capturing) return;
     if (playing) togglePlay();
-    const video = attachment;
-    const element = player;
-    const frame = at;
-    if (marks.some((m) => m.frame === frame)) {
-      marks = marks.filter((m) => m.frame !== frame);
-      setVideoMarks(video, $state.snapshot(marks));
+    if (marks.some((m) => m.frame === at)) {
+      unmark(at);
       return;
     }
-    capturing = true;
-    try {
-      await whenShown(element);
-      const target = seekTime(frame);
-      if (attachment !== video || player !== element || at !== frame || Math.abs(element.currentTime - target) > 1e-3) return;
-      const picture = grab(element);
-      marks = [...marks, { frame, time: frames[frame] ?? 0, ...picture }].sort((a, b) => a.frame - b.frame);
-      setVideoMarks(video, $state.snapshot(marks));
-    } finally {
-      capturing = false;
-    }
+    await capture(at);
   }
 
+  // Unmarking drops the frame's lines and notes too.
   function unmark(frame) {
+    saves[frame] = (saves[frame] ?? 0) + 1; // a save still running is dropped
     marks = marks.filter((m) => m.frame !== frame);
+    delete drawn[frame];
+    if (draft?.frame === frame) draft = null;
     setVideoMarks(attachment, $state.snapshot(marks));
   }
+
+  // The frame's marked picture again, with its lines and notes; the frame is
+  // marked first if it is not yet. Only the latest save of a frame is kept.
+  // A save that ends after the viewer closed still goes into its video.
+  async function saveFrame(frame) {
+    const video = attachment;
+    const counter = saves;
+    const number = (counter[frame] = (counter[frame] ?? 0) + 1);
+    const notes = $state.snapshot(drawn[frame] ?? []);
+    const mark = marks.find((m) => m.frame === frame) ?? (await capture(frame));
+    if (!mark || counter[frame] !== number) return;
+    const plain = mark.plain ?? { mime: mark.mime, base64: mark.base64 };
+    const picture = notes.length ? await bakeMarks(`data:${plain.mime};base64,${plain.base64}`, notes, MAX_ATTACHMENT_BYTES) : plain;
+    if (counter[frame] !== number) return;
+    const here = attachment === video;
+    const list = here ? marks : $state.snapshot(video.marks ?? []);
+    if (!list.some((m) => m.frame === frame)) return;
+    const next = list.map((m) => (m.frame === frame ? { ...m, plain, notes, mime: picture.mime, base64: picture.base64 } : m));
+    if (here) marks = next;
+    setVideoMarks(video, here ? $state.snapshot(next) : next);
+  }
+
+  function pick(next) {
+    keepNote();
+    if (playing) togglePlay();
+    tool = tool === next ? null : next;
+  }
+
+  function sheetPoint(event) {
+    const box = sheet.getBoundingClientRect();
+    return {
+      x: ((event.clientX - box.left) / box.width) * natural.width,
+      y: ((event.clientY - box.top) / box.height) * natural.height,
+    };
+  }
+
+  function drawStart(event) {
+    if (!tool || event.button !== 0 || !natural.width || failed) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (draft) {
+      keepNote();
+      return;
+    }
+    if (playing) togglePlay();
+    const frame = at;
+    if (tool === "text") {
+      draft = { frame, ...sheetPoint(event), text: "" };
+      tick().then(() => noteBox?.focus({ preventScroll: true }));
+      return;
+    }
+    sheet.setPointerCapture(event.pointerId);
+    drawn[frame] = [...(drawn[frame] ?? []), [sheetPoint(event)]];
+  }
+
+  function drawMove(event) {
+    if (tool !== "pen" || !sheet?.hasPointerCapture(event.pointerId)) return;
+    drawn[at]?.at(-1)?.push(sheetPoint(event));
+  }
+
+  function drawEnd(event) {
+    if (tool !== "pen" || !sheet?.hasPointerCapture(event.pointerId)) return;
+    sheet.releasePointerCapture(event.pointerId);
+    saveFrame(at);
+  }
+
+  function keepNote() {
+    if (!draft) return;
+    const { frame, x, y } = draft;
+    const text = draft.text.trim();
+    draft = null;
+    if (!text) return;
+    drawn[frame] = [...(drawn[frame] ?? []), { text, x, y }];
+    saveFrame(frame);
+  }
+
+  function noteKey(event) {
+    if (event.key === "Enter") keepNote();
+    else if (event.key === "Escape") draft = null;
+    else return;
+    event.preventDefault();
+    root?.focus({ preventScroll: true });
+  }
+
+  function undo() {
+    if (!drawn[at]?.length) return;
+    drawn[at] = drawn[at].slice(0, -1);
+    saveFrame(at);
+  }
+
+  // The sheet lies exactly over the video, in the video's own pixels.
+  $effect(() => {
+    if (!player || !screen) return;
+    const element = player;
+    const measure = () => (spot = { left: element.offsetLeft, top: element.offsetTop, width: element.offsetWidth, height: element.offsetHeight });
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    observer.observe(screen);
+    return () => observer.disconnect();
+  });
+
+  $effect(() => {
+    if (!sheet || !natural.width) return;
+    const context = sheet.getContext("2d");
+    context.clearRect(0, 0, sheet.width, sheet.height);
+    drawLines(context, here, penWidth(natural.width, natural.height));
+  });
 
   function trackIndex(event) {
     const box = track.getBoundingClientRect();
@@ -187,6 +346,7 @@
 
   function loaded() {
     loadedDuration = Number.isFinite(player?.duration) ? player.duration : 0;
+    natural = { width: player?.videoWidth || info.width, height: player?.videoHeight || info.height };
     show(at);
   }
 
@@ -263,6 +423,7 @@
     m: () => toggleMark(),
     M: () => toggleMark(),
     "Shift+M": () => toggleMark(),
+    "Ctrl+Z": () => undo(),
     Space: () => togglePlay(),
     Tab: () => cycle(false),
     "Shift+Tab": () => cycle(true),
@@ -272,7 +433,7 @@
     if (!open) return;
     const unbind = Object.entries(KEYS).map(([combo, run]) =>
       bindKey("overlay", combo, () => {
-        if (!ui.viewer?.video) return false;
+        if (!ui.viewer?.video || draft) return false;
         run();
         return true;
       }),
@@ -330,14 +491,55 @@
               style:height={zoomed ? `${base.height * zoom}px` : null}
               onclick={videoClick}
             ></video>
+            {#if natural.width && !playing}
+              <canvas
+                class="sheet"
+                class:drawing={tool}
+                class:typing={tool === "text"}
+                width={natural.width}
+                height={natural.height}
+                style:left="{spot.left}px"
+                style:top="{spot.top}px"
+                style:width="{spot.width}px"
+                style:height="{spot.height}px"
+                bind:this={sheet}
+                data-video-sheet
+                onpointerdown={drawStart}
+                onpointermove={drawMove}
+                onpointerup={drawEnd}
+                onlostpointercapture={drawEnd}
+              ></canvas>
+              {#if draft && draft.frame === at}
+                <input
+                  class="note"
+                  type="text"
+                  aria-label="Text to add"
+                  spellcheck="false"
+                  bind:value={draft.text}
+                  bind:this={noteBox}
+                  style:left="{spot.left + draft.x * shown}px"
+                  style:top="{spot.top + draft.y * shown}px"
+                  style:font-size="{noteSize(natural.width, natural.height) * shown}px"
+                  style:font-family={NOTE_FONT}
+                  data-video-note
+                  onkeydown={noteKey}
+                  onblur={keepNote}
+                />
+              {/if}
+            {/if}
           {/if}
         </div>
         <div class="controls">
+          <button type="button" class="box" aria-label="Back {BIG_STEP} frames" title="Back {BIG_STEP} frames (Shift+←)" data-video-back disabled={at === 0} onclick={() => step(-BIG_STEP)}>◀◀</button>
           <button type="button" class="box" aria-label="Previous frame" title="Previous frame (←)" data-video-prev disabled={at === 0} onclick={() => step(-1)}>◀</button>
           <p class="where" data-video-frame>Frame {at + 1} of {frames.length} · {clockTime(time)}</p>
           <button type="button" class="box" aria-label="Next frame" title="Next frame (→)" data-video-next disabled={at >= frames.length - 1} onclick={() => step(1)}>▶</button>
+          <button type="button" class="box" aria-label="Forward {BIG_STEP} frames" title="Forward {BIG_STEP} frames (Shift+→)" data-video-forward disabled={at >= frames.length - 1} onclick={() => step(BIG_STEP)}>▶▶</button>
           <button type="button" class="box" title="Play or pause (Space)" data-video-play onclick={togglePlay}>{playing ? "Pause" : "Play"}</button>
           <button type="button" class="box mark" class:on={markedHere} title="Mark this frame (M)" data-video-mark disabled={failed || capturing} onclick={toggleMark}>{markedHere ? "Unmark frame" : "Mark frame"}</button>
+          <button type="button" class="box tool pen" class:on={tool === "pen"} aria-pressed={tool === "pen"} title="Red pen: draw on this frame" aria-label="Red pen" data-video-pen disabled={failed} onclick={() => pick("pen")}><Icon name="pen" size={16} /></button>
+          <button type="button" class="box tool" class:on={tool === "text"} aria-pressed={tool === "text"} title="Add text: click a spot, type, Enter" data-video-text disabled={failed} onclick={() => pick("text")}>Text</button>
+          <button type="button" class="box" title="Undo on this frame (Ctrl+Z)" data-video-undo disabled={here.length === 0} onclick={undo}>Undo</button>
         </div>
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div class="track" bind:this={track} onpointerdown={trackDown} onpointermove={trackMove} data-video-track>
@@ -435,6 +637,7 @@
     gap: calc(14 * var(--px));
   }
   .screen {
+    position: relative;
     flex: 1;
     min-height: 0;
     width: 100%;
@@ -458,6 +661,43 @@
   .screen.zoomed video {
     max-width: none;
     max-height: none;
+  }
+  .sheet {
+    position: absolute;
+    pointer-events: none;
+  }
+  .sheet.drawing {
+    pointer-events: auto;
+    cursor: crosshair;
+    touch-action: none;
+  }
+  .sheet.typing {
+    cursor: text;
+  }
+  /* White with a black shadow, as the note is drawn (marks.js). */
+  .note {
+    position: absolute;
+    min-width: 2ch;
+    field-sizing: content;
+    padding: 0;
+    border: none;
+    outline: 1px dashed rgba(255, 255, 255, 0.8);
+    background: transparent;
+    color: #ffffff;
+    caret-color: #ffffff;
+    font-weight: 600;
+    line-height: 1.2;
+    text-shadow: 0 0.05em 0.17em rgba(0, 0, 0, 0.95), 0 0.05em 0.17em rgba(0, 0, 0, 0.95);
+    transform: translateY(-50%);
+  }
+  .box.tool {
+    display: flex;
+    align-items: center;
+  }
+  .box.tool.on {
+    border-color: #e5322d;
+    color: #e5322d;
+    box-shadow: inset 0 calc(-2 * var(--px)) 0 #e5322d;
   }
   .failed {
     margin: auto;

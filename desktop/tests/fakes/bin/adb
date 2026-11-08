@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# A stand-in for adb, so no check ever reaches a real phone. With no
+# $HOME/fake-phone folder it sees no phone; with one, it is a phone whose
+# screen is $HOME/fake-phone/screen.png and whose recording is
+# $HOME/fake-phone/video.mp4 (tests/driver/viewer_notes.py).
+dir="$HOME/fake-phone"
+[ "$1" = "-s" ] && shift 2
+case "$1" in
+  devices)
+    echo "List of devices attached"
+    [ -d "$dir" ] && printf 'FAKE01\tdevice\n'
+    echo ;;
+  exec-out) cat "$dir/screen.png" ;;
+  pull) cp "$dir/video.mp4" "$3" ;;
+  shell)
+    case "$2" in
+      *screenrecord*)
+        rm -f "$dir/stop"
+        echo 4242
+        while [ ! -e "$dir/stop" ]; do sleep 0.2; done ;;
+      kill) touch "$dir/stop" ;;
+      test*) echo yes ;;
+    esac ;;
+  mdns) ;;
+esac
+exit 0

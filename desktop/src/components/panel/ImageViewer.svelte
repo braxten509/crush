@@ -15,7 +15,7 @@
   // red pen and Undo (Ctrl+Z): lines drawn on it go into the attachment
   // when the viewer closes (marks.js, markAttachment). Owner, 2026-11-01.
   import { unfold } from "../../lib/motion.js";
-  import { untrack } from "svelte";
+  import { tick, untrack } from "svelte";
   import { file_read } from "../../lib/engine/commands.js";
   import { markAttachment } from "../../lib/stores/composer.svelte.js";
   import Icon from "../Icon.svelte";
@@ -29,6 +29,9 @@
   import { base64Bytes, dataBytes, dataMime, pictureName, pictureSize, saveName, viewerSource } from "./viewer.js";
 
   const PAN_STEP = 40;
+  // Ctrl + mouse wheel zooms in up to 10 times the starting size, never
+  // smaller than it (owner, 2026-11-08).
+  const MAX_ZOOM = 10;
 
   let root = $state(null);
   let canvas = $state(null);
@@ -40,10 +43,14 @@
   let src = $state("");
   let bytes = $state(null);
   let natural = $state({ width: 0, height: 0 });
+  let zoom = $state(1);
+  let base = $state({ width: 0, height: 0 });
   let opener = null;
 
   const pic = $derived(ui.viewer?.video ? null : ui.viewer);
   const open = $derived(Boolean(pic));
+  const zoomed = $derived(zoom > 1 && base.width > 0);
+  const movable = $derived(!viewing.fit || zoomed);
   const markable = $derived(Boolean(pic?.attachment));
   const name = $derived(pictureName(pic));
   const size = $derived(pictureSize(natural.width, natural.height, bytes));
@@ -64,6 +71,7 @@
     bytes = null;
     natural = { width: 0, height: 0 };
     viewing.fit = true;
+    zoom = 1;
     pen = false;
     lines = [];
     // Closing (or another picture) puts the lines into the attachment.
@@ -182,6 +190,7 @@
   // Actual size starts centered on the picture.
   function setFit(fit) {
     viewing.fit = fit;
+    zoom = 1;
     if (fit) return;
     requestAnimationFrame(() => {
       if (!canvas) return;
@@ -191,7 +200,7 @@
   }
 
   function pan(dx, dy) {
-    if (viewing.fit || !canvas) return;
+    if (!movable || !canvas) return;
     const step = PAN_STEP * scale();
     canvas.scrollLeft += dx * step;
     canvas.scrollTop += dy * step;
@@ -200,7 +209,7 @@
   // Dragging pans the picture at actual size.
   let drag = null;
   function down(event) {
-    if (pen || viewing.fit || event.button !== 0 || !canvas) return;
+    if (pen || !movable || event.button !== 0 || !canvas) return;
     event.preventDefault();
     drag = { x: event.clientX, y: event.clientY, left: canvas.scrollLeft, top: canvas.scrollTop };
     const move = (e) => {
@@ -216,6 +225,32 @@
     window.addEventListener("mousemove", move);
     window.addEventListener("mouseup", up);
   }
+
+  // Ctrl + wheel: zoom toward the mouse, keeping the spot under it in place.
+  async function wheel(event) {
+    if (!event.ctrlKey || !picture || !canvas || !natural.width) return;
+    event.preventDefault();
+    const next = Math.max(1, Math.min(MAX_ZOOM, zoom * Math.exp(-event.deltaY * 0.002)));
+    if (next === zoom) return;
+    if (zoom === 1) base = { width: picture.offsetWidth, height: picture.offsetHeight };
+    const box = canvas.getBoundingClientRect();
+    const x = event.clientX - box.left;
+    const y = event.clientY - box.top;
+    const fx = (canvas.scrollLeft + x - picture.offsetLeft) / picture.offsetWidth;
+    const fy = (canvas.scrollTop + y - picture.offsetTop) / picture.offsetHeight;
+    zoom = next;
+    await tick();
+    if (!picture || !canvas) return;
+    canvas.scrollLeft = picture.offsetLeft + fx * picture.offsetWidth - x;
+    canvas.scrollTop = picture.offsetTop + fy * picture.offsetHeight - y;
+  }
+
+  $effect(() => {
+    if (!canvas) return;
+    const element = canvas;
+    element.addEventListener("wheel", wheel, { passive: false });
+    return () => element.removeEventListener("wheel", wheel);
+  });
 
   // Tab and Shift+Tab walk the bar's buttons and stay inside.
   function cycle(back) {
@@ -288,7 +323,7 @@
     </div>
     <Rule marks="both" class="viewer-rule" />
     <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="canvas" class:actual={!viewing.fit} bind:this={canvas} onmousedown={down}>
+    <div class="canvas" class:actual={movable} bind:this={canvas} onmousedown={down}>
       {#if viewing.state === "failed"}
         <p class="failed">{PICTURE_FAILED}</p>
       {:else if src}
@@ -296,8 +331,8 @@
           {src}
           alt={name}
           draggable="false"
-          style:width={!viewing.fit && natural.width ? `${natural.width / ratio()}px` : null}
-          style:height={!viewing.fit && natural.height ? `${natural.height / ratio()}px` : null}
+          style:width={zoomed ? `${base.width * zoom}px` : !viewing.fit && natural.width ? `${natural.width / ratio()}px` : null}
+          style:height={zoomed ? `${base.height * zoom}px` : !viewing.fit && natural.height ? `${natural.height / ratio()}px` : null}
           bind:this={picture}
           onload={loaded}
           onerror={failed}

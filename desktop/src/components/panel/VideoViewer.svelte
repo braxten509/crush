@@ -1,5 +1,5 @@
 <script>
-  import { untrack } from "svelte";
+  import { tick, untrack } from "svelte";
   import { unfold } from "../../lib/motion.js";
   import { MAX_ATTACHMENT_BYTES } from "../../lib/composer/paste.js";
   import { clockTime } from "../../lib/composer/recording.js";
@@ -10,6 +10,9 @@
 
   const FALLBACK_FPS = 30;
   const BIG_STEP = 10;
+  // Ctrl + mouse wheel zooms in up to 10 times the starting size, never
+  // smaller than it; dragging moves around (owner, 2026-11-08).
+  const MAX_ZOOM = 10;
 
   let root = $state(null);
   let player = $state(null);
@@ -20,6 +23,10 @@
   let loadedDuration = $state(0);
   let marks = $state([]);
   let capturing = $state(false);
+  let screen = $state(null);
+  let zoom = $state(1);
+  let base = $state({ width: 0, height: 0 });
+  let dragged = false;
   let opener = null;
 
   const attachment = $derived(ui.viewer?.video ?? null);
@@ -33,6 +40,7 @@
     return Array.from({ length: count }, (_, i) => i / FALLBACK_FPS);
   });
   const time = $derived(frames[at] ?? 0);
+  const zoomed = $derived(zoom > 1 && base.width > 0);
   const markedHere = $derived(marks.some((m) => m.frame === at));
   const sizeText = $derived(
     [info.width && info.height ? `${info.width} × ${info.height}` : "", duration ? clockTime(duration) : "", info.bytes ? `${(info.bytes / 1048576).toFixed(1)} MB` : ""].filter(Boolean).join(" · "),
@@ -45,6 +53,7 @@
     failed = false;
     loadedDuration = 0;
     capturing = false;
+    zoom = 1;
     marks = video ? untrack(() => [...(video.marks ?? [])]) : [];
   });
 
@@ -181,6 +190,60 @@
     show(at);
   }
 
+  // Ctrl + wheel: zoom toward the mouse, keeping the spot under it in place.
+  async function wheel(event) {
+    if (!event.ctrlKey || !player || !screen) return;
+    event.preventDefault();
+    const next = Math.max(1, Math.min(MAX_ZOOM, zoom * Math.exp(-event.deltaY * 0.002)));
+    if (next === zoom) return;
+    if (zoom === 1) base = { width: player.offsetWidth, height: player.offsetHeight };
+    const box = screen.getBoundingClientRect();
+    const x = event.clientX - box.left;
+    const y = event.clientY - box.top;
+    const fx = (screen.scrollLeft + x - player.offsetLeft) / player.offsetWidth;
+    const fy = (screen.scrollTop + y - player.offsetTop) / player.offsetHeight;
+    zoom = next;
+    await tick();
+    if (!player || !screen) return;
+    screen.scrollLeft = player.offsetLeft + fx * player.offsetWidth - x;
+    screen.scrollTop = player.offsetTop + fy * player.offsetHeight - y;
+  }
+
+  $effect(() => {
+    if (!screen) return;
+    const element = screen;
+    element.addEventListener("wheel", wheel, { passive: false });
+    return () => element.removeEventListener("wheel", wheel);
+  });
+
+  // Dragging moves a zoomed video; a drag is not a click (no play/pause).
+  function screenDown(event) {
+    dragged = false;
+    if (!zoomed || event.button !== 0 || !screen) return;
+    event.preventDefault();
+    const element = screen;
+    const start = { x: event.clientX, y: event.clientY, left: element.scrollLeft, top: element.scrollTop };
+    const move = (e) => {
+      if (Math.abs(e.clientX - start.x) + Math.abs(e.clientY - start.y) > 3) dragged = true;
+      element.scrollLeft = start.left - (e.clientX - start.x);
+      element.scrollTop = start.top - (e.clientY - start.y);
+    };
+    const up = () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+  }
+
+  function videoClick() {
+    if (dragged) {
+      dragged = false;
+      return;
+    }
+    togglePlay();
+  }
+
   function cycle(back) {
     const buttons = [...(root?.querySelectorAll("button") ?? [])];
     if (buttons.length === 0) return;
@@ -247,7 +310,8 @@
     <Rule marks="both" class="viewer-rule" />
     <div class="body">
       <div class="stage">
-        <div class="screen">
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div class="screen" class:zoomed bind:this={screen} onmousedown={screenDown}>
           {#if failed}
             <p class="failed">Couldn't play this recording.</p>
           {:else}
@@ -262,7 +326,9 @@
               onpause={() => (playing = false)}
               onended={() => ((playing = false), show(frames.length - 1))}
               onerror={() => (failed = true)}
-              onclick={togglePlay}
+              style:width={zoomed ? `${base.width * zoom}px` : null}
+              style:height={zoomed ? `${base.height * zoom}px` : null}
+              onclick={videoClick}
             ></video>
           {/if}
         </div>
@@ -373,17 +439,28 @@
     min-height: 0;
     width: 100%;
     display: flex;
-    align-items: center;
-    justify-content: center;
+    overflow: hidden;
   }
+  /* Auto margins center the video without cutting off a zoomed one's start. */
   video {
     display: block;
+    flex: none;
+    box-sizing: border-box;
+    margin: auto;
     max-width: 100%;
     max-height: 100%;
     border: 1px solid var(--rule-faint);
     background: var(--figure);
   }
+  .screen.zoomed {
+    cursor: grab;
+  }
+  .screen.zoomed video {
+    max-width: none;
+    max-height: none;
+  }
   .failed {
+    margin: auto;
     font: var(--t-body-small);
     color: var(--slate);
   }

@@ -537,6 +537,9 @@
           <button type="button" class="box" aria-label="Forward {BIG_STEP} frames" title="Forward {BIG_STEP} frames (Shift+→)" data-video-forward disabled={at >= frames.length - 1} onclick={() => step(BIG_STEP)}>▶▶</button>
           <button type="button" class="box" title="Play or pause (Space)" data-video-play onclick={togglePlay}>{playing ? "Pause" : "Play"}</button>
           <button type="button" class="box mark" class:on={markedHere} title="Mark this frame (M)" data-video-mark disabled={failed || capturing} onclick={toggleMark}>{markedHere ? "Unmark frame" : "Mark frame"}</button>
+        </div>
+        <!-- The drawing tools get their own row under the frame buttons (owner, 2026-11-08). -->
+        <div class="controls">
           <button type="button" class="box tool pen" class:on={tool === "pen"} aria-pressed={tool === "pen"} title="Red pen: draw on this frame" aria-label="Red pen" data-video-pen disabled={failed} onclick={() => pick("pen")}><Icon name="pen" size={16} /></button>
           <button type="button" class="box tool" class:on={tool === "text"} aria-pressed={tool === "text"} title="Add text: click a spot, type, Enter" data-video-text disabled={failed} onclick={() => pick("text")}>Text</button>
           <button type="button" class="box" title="Undo on this frame (Ctrl+Z)" data-video-undo disabled={here.length === 0} onclick={undo}>Undo</button>

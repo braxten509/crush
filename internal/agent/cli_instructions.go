@@ -4,6 +4,9 @@ package agent
 // shell commands pass (shelltool.CommandBlocked), which refuses without
 // asking anyone. A helper took a refused `~/` path for the user's no and
 // stopped its task (owner, 2026-11-06: keep the guard, teach the helpers).
+// It also says a sub-agent may not start helpers of its own: one handed its
+// files to its own helpers, ended, and their work ended with it (owner,
+// 2026-11-09).
 const subAgentCommandNote = `<crush_command_guard>
 Crush checks every shell command you run and refuses, without asking anyone,
 one that runs a blocked program (downloads, sudo, package installs) or has a
@@ -12,7 +15,15 @@ pattern. Write commands with full paths (/home/... rather than ~ or $HOME) and
 plain words: name the files, or use find or grep -r instead of a pattern; run
 an inner command first and use its answer in the next one. A refusal is the
 guard's, not the user's: rewrite the command and carry on.
-</crush_command_guard>`
+</crush_command_guard>
+
+<crush_no_helpers>
+You are a helper (a sub-agent) started by another agent. You may not start
+helpers of your own: no crush spawn, no Agent, Task or fork tool, no
+background agents, and no agent CLI started by a command. Do all of your task
+yourself in this run. Your run ends with your final message, and anything a
+helper of yours was still doing would end with it (owner, 2026-11-09).
+</crush_no_helpers>`
 
 const sharedCLIInstructions = `<crush_instruction_sources>
 Inside Crush, use the user's messages, Crush's instructions, the shared memory,

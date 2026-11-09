@@ -31,6 +31,8 @@
   import Icon from "./Icon.svelte";
   import ChatRow from "./list/ChatRow.svelte";
   import TerminalRows from "./leftlist/TerminalRows.svelte";
+  import TodoRows from "./leftlist/TodoRows.svelte";
+  import { todosIn } from "../lib/stores/listtodos.svelte.js";
   import { searchFocused, setSearchField } from "./list/listfocus.js";
   import { newChat, newTerminal, startIn } from "../lib/leftlist/store.svelte.js";
   import { listRoom } from "./panel/panel.svelte.js";
@@ -149,6 +151,8 @@
   const groups = $derived(chatGroups(now));
   const rows = $derived(groups.flatMap((group) => group.rows));
   const empty = $derived(groups.length === 0 ? "No open chats" : "");
+  // Every heading, for a todo's "Move to" (TodoRows.svelte).
+  const folderTargets = $derived(groups.map((group) => ({ dir: group.dir, label: group.label })));
 
   const searchHint = $derived(start.platform === "macos" ? "⌘K" : "Ctrl K");
 
@@ -320,7 +324,7 @@
         <div class="folder">
           <Icon name="folder-filled" size={12} class="folder-icon" />
           <span class="folder-name" title={group.dir}>{group.label}</span>
-          {#if group.rows.length === 0 && group.terminals.length === 0}
+          {#if group.rows.length === 0 && group.terminals.length === 0 && todosIn(group.dir).length === 0}
             <button class="folder-button folder-drop" type="button" aria-label="Remove {group.label}" title="Remove folder" onclick={() => dropFolder(group.dir)}>
               <Icon name="close" size={12} frame={30} />
             </button>
@@ -335,14 +339,24 @@
               <ChatRow {row} />
             {/each}
           </ul>
-        {:else if group.terminals.length === 0}
+        {:else if group.terminals.length === 0 && todosIn(group.dir).length === 0}
           <p class="folder-empty">No open chats</p>
         {/if}
         {#if group.terminals.length > 0}
           <TerminalRows tabs={group.terminals} />
         {/if}
+        <TodoRows dir={group.dir} folders={folderTargets} />
       </section>
     {/each}
+
+    <!-- Todos with no folder (owner, 2026-11-09): always last of the folders. -->
+    <section class="group" aria-label="No project" data-folder="">
+      <div class="folder">
+        <Icon name="folder-filled" size={12} class="folder-icon" />
+        <span class="folder-name">No project</span>
+      </div>
+      <TodoRows dir="" folders={folderTargets} />
+    </section>
 
     {#each listSections("rows") as entry (entry.id)}
       <entry.component />

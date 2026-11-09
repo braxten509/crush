@@ -5,12 +5,13 @@
   // words in place: Enter or leaving the box keeps them, Esc drops the edit,
   // empty words take the todo away. A right-click opens a small menu (the
   // folder "+" menu's look, ChatList.svelte): Edit, Delete, and Move to each
-  // other folder or No project. Under the rows a quiet "+ todo" line opens a
-  // box for a new one: Enter adds it and leaves the box open for the next,
-  // Esc or leaving it closes it (words left in it are kept).
+  // other folder or No project. The folder "+" menu's New Todo (owner,
+  // 2026-11-09) opens a box under the rows for a new one: Enter adds it and
+  // leaves the box open for the next, Esc or leaving it closes it (words
+  // left in it are kept).
   import { unfold } from "../../lib/motion.js";
   import { bindKey } from "../../lib/keys.js";
-  import { addTodo, dropTodo, editTodo, moveTodo, todosIn } from "../../lib/stores/listtodos.svelte.js";
+  import { addTodo, dropTodo, editTodo, listTodos, moveTodo, stopTodo, todosIn } from "../../lib/stores/listtodos.svelte.js";
 
   // folders: every heading of the list, {dir, label}, for "Move to".
   let { dir = "", folders = [] } = $props();
@@ -19,7 +20,7 @@
 
   let editing = $state(""); // the todo being edited
   let draft = $state("");
-  let adding = $state(false);
+  const adding = $derived(listTodos.addingIn === dir);
   let fresh = $state("");
 
   function edit(todo) {
@@ -54,14 +55,14 @@
     } else if (event.key === "Escape") {
       event.preventDefault();
       fresh = "";
-      adding = false;
+      stopTodo();
     }
   }
 
   function leaveAdd() {
     addTodo(fresh, dir);
     fresh = "";
-    adding = false;
+    if (adding) stopTodo();
   }
 
   function focusSelect(node) {
@@ -159,14 +160,12 @@
       {/if}
     </li>
   {/each}
-  <li class="todo add-line">
-    {#if adding}
-      <span class="plus" aria-hidden="true">+</span>
+  {#if adding}
+    <li class="todo add-line">
+      <span class="tick blank" aria-hidden="true"></span>
       <input class="box" type="text" aria-label="New todo" placeholder="Write a todo…" maxlength="300" bind:value={fresh} use:focusSelect onkeydown={onAddKey} onblur={leaveAdd} />
-    {:else}
-      <button class="add" type="button" onclick={() => (adding = true)}><span class="plus" aria-hidden="true">+</span>todo</button>
-    {/if}
-  </li>
+    </li>
+  {/if}
 </ul>
 
 {#if menu}
@@ -248,36 +247,10 @@
   .box:focus-visible {
     border-color: var(--vermilion);
   }
-  .add {
-    display: flex;
-    align-items: center;
-    padding: 0;
-    border: 0;
-    background: none;
-    font: var(--t-small);
-    color: var(--slate);
-    cursor: pointer;
-  }
-  .add:hover {
-    color: var(--ink);
-    text-decoration: underline;
-    text-decoration-thickness: 1px;
-    text-underline-offset: calc(4 * var(--px));
-  }
-  .add:focus-visible {
-    outline: 1px solid var(--vermilion);
-    outline-offset: calc(2 * var(--px));
-  }
-  /* The "+" fills the tick box's column, so the words start where theirs do. */
-  .plus {
-    display: inline-block;
-    width: calc(16 * var(--px));
-    margin-right: calc(12 * var(--px));
-    text-align: center;
-    color: var(--slate);
-  }
-  .add-line .plus + .box {
-    margin-left: calc(-19 * var(--px));
+  /* The new todo's row keeps the tick box's room, so its box starts where
+     an edited todo's does. */
+  .tick.blank {
+    visibility: hidden;
   }
 
   /* The folder "+" menu's paper and hairline (ChatList.svelte .plus-menu). */

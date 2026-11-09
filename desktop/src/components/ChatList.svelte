@@ -32,7 +32,7 @@
   import ChatRow from "./list/ChatRow.svelte";
   import TerminalRows from "./leftlist/TerminalRows.svelte";
   import TodoRows from "./leftlist/TodoRows.svelte";
-  import { todosIn } from "../lib/stores/listtodos.svelte.js";
+  import { startTodo, todosIn } from "../lib/stores/listtodos.svelte.js";
   import { searchFocused, setSearchField } from "./list/listfocus.js";
   import { newChat, newTerminal, startIn } from "../lib/leftlist/store.svelte.js";
   import { listRoom } from "./panel/panel.svelte.js";
@@ -64,7 +64,7 @@
   });
 
   // A folder's "+" opens a small menu right under it, its right edge on the
-  // "+" (owner, 2026-11-05): New Chat, New Terminal, both in that folder.
+  // "+" (owner, 2026-11-05): New Chat, New Terminal, New Todo, all in that folder.
   // ↑/↓ move, Enter picks, Esc, Tab, a press outside, a scroll or the
   // window losing focus closes it.
   let plus = $state(null); // {dir, button} while open
@@ -85,7 +85,9 @@
   function pickPlus(what) {
     const dir = plus?.dir;
     closePlus();
-    if (dir) startIn(what, dir);
+    if (!dir) return;
+    if (what === "todo") startTodo(dir);
+    else startIn(what, dir);
   }
 
   $effect(() => {
@@ -354,6 +356,10 @@
       <div class="folder">
         <Icon name="folder-filled" size={12} class="folder-icon" />
         <span class="folder-name">No project</span>
+        <!-- Only todos go here, so its "+" opens the box at once. -->
+        <button class="folder-button folder-new" type="button" aria-label="New todo with no project" title="New todo" onclick={() => startTodo("")}>
+          <Icon name="plus" frame={30} />
+        </button>
       </div>
       <TodoRows dir="" folders={folderTargets} />
     </section>
@@ -382,6 +388,7 @@
     >
       <button class="plus-entry" type="button" role="menuitem" onclick={() => pickPlus("session")}>New Chat</button>
       <button class="plus-entry" type="button" role="menuitem" onclick={() => pickPlus("terminal")}>New Terminal</button>
+      <button class="plus-entry" type="button" role="menuitem" onclick={() => pickPlus("todo")}>New Todo</button>
     </div>
   {/if}
 

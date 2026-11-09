@@ -7,7 +7,8 @@ import { folderKey, keepFolders } from "./listfolders.svelte.js";
 
 const KEY = "crush.todos";
 
-export const listTodos = $state({ list: read() });
+// addingIn: the folder whose new-todo box is open ("" for No project), else null.
+export const listTodos = $state({ list: read(), addingIn: null });
 
 function read() {
   try {
@@ -61,6 +62,15 @@ export function moveTodo(id, dir) {
   const list = listTodos.list.map((t) => (t.id === id ? { ...t, dir: k } : t));
   keepTheirFolders(list.filter((t) => t.id === id));
   write(list);
+}
+
+// The folder "+" menu's New Todo (ChatList.svelte) opens that folder's box.
+export function startTodo(dir) {
+  listTodos.addingIn = folderKey(dir);
+}
+
+export function stopTodo() {
+  listTodos.addingIn = null;
 }
 
 // Ticked or deleted: either way it goes.

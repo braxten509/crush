@@ -273,6 +273,9 @@ func mountGocryptfs(ctx context.Context, device, mount, password string) error {
 	if err := os.MkdirAll(mount, 0o700); err != nil {
 		return err
 	}
+	if err := unlockMountPoint(mount); err != nil {
+		return err
+	}
 	// gocryptfs reads the password from stdin (not a terminal), mounts,
 	// and leaves its daemon running. The user's systemd starts it, so it
 	// outlives this engine as KDE's own mount does, and the mount works
@@ -345,7 +348,40 @@ func unmountGocryptfs(ctx context.Context, mount string) error {
 	if out, err := exec.CommandContext(ctx, args[0], args[1:]...).CombinedOutput(); err != nil {
 		return fmt.Errorf("the vault did not close: %s", strings.TrimSpace(string(out)))
 	}
+	lockMountPoint(mount)
 	return nil
+}
+
+// kdeMountMarker is the .directory file Plasma Vault writes into a closed
+// vault's mount point (folder icon plus this key).
+const kdeMountMarker = "X-KDE-LockVaultMountPoint=true"
+
+// unlockMountPoint undoes Plasma Vault's lock on a closed vault's mount
+// point, as its own open does: KDE leaves the folder execute-only
+// (d--x------) with a .directory marker inside, and gocryptfs refuses
+// both ("permission denied", then "not empty").
+func unlockMountPoint(mount string) error {
+	if err := os.Chmod(mount, 0o700); err != nil {
+		return err
+	}
+	marker := filepath.Join(mount, ".directory")
+	if data, err := os.ReadFile(marker); err == nil && strings.Contains(string(data), kdeMountMarker) {
+		if err := os.Remove(marker); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// lockMountPoint puts Plasma Vault's lock back after Crush closed the
+// vault itself, so nothing gets written into the bare folder.
+func lockMountPoint(mount string) {
+	if mounted(mount) {
+		return
+	}
+	_ = os.WriteFile(filepath.Join(mount, ".directory"),
+		[]byte("[Desktop Entry]\nIcon=folder-encrypted\n"+kdeMountMarker+"\n"), 0o644)
+	_ = os.Chmod(mount, 0o100)
 }
 
 func (v KDEVault) Create(ctx context.Context) error {

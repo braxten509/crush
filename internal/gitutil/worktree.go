@@ -176,6 +176,11 @@ func CleanupChatWorktree(mainDir, workDir string) error {
 			return nil
 		}
 	}
+	if filepath.Base(filepath.Dir(filepath.Clean(workDir))) != "worktrees" {
+		// Not a Crush copy (<data>/worktrees/<chat id>): an agent's own
+		// git worktree is the agent's to remove, never Crush's.
+		return nil
+	}
 	info, err := os.Stat(workDir)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil

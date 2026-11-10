@@ -143,6 +143,11 @@ func (o Ops) CloseSessionBranch(ctx context.Context, sessionID string) (session.
 		return sess, nil
 	}
 	mainDir := o.Cfg.WorkingDir()
+	if sess.WorkDir != mainDir && o.Cfg.Config() != nil && o.Cfg.Config().Options != nil &&
+		!gitutil.IsCrushCopy(o.Cfg.Config().Options.DataDirectory, sess.WorkDir) {
+		// The agent's own copy stays, and the chat reopens in it.
+		return sess, nil
+	}
 	if sess.WorkDir == mainDir {
 		return o.App.Sessions.SetBranch(ctx, sessionID, sess.Branch, "")
 	}

@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -46,8 +47,11 @@ type turn struct {
 	isCLI            bool
 	workDir          string
 	mainBranchBefore string
-	promptPrefix     string
-	fileReview       *turnFileReview
+	// ownWork is the last place this turn's agent itself changed a file or
+	// ran git commit (helpers' steps never reach this turn's tool calls).
+	ownWork      string
+	promptPrefix string
+	fileReview   *turnFileReview
 
 	// queuedAgain is set when the call went (back) into the queue, which
 	// then owns its headless lifetime reservation.
@@ -579,8 +583,8 @@ func (t *turn) buildSystemPrompt() ([]fantasy.AgentTool, string, error) {
 }
 
 // syncSessionBranch isolates a branch switch that happened in the main folder
-// into this chat's own folder copy, or records a branch switch that happened
-// inside this chat's folder copy.
+// into this chat's own folder copy, follows the copy the agent itself works
+// in, or records a branch switch that happened inside this chat's folder copy.
 func (t *turn) syncSessionBranch() {
 	a := t.a
 	if a.cfg == nil || a.sessions == nil || t.call.SessionID == "" {
@@ -593,7 +597,10 @@ func (t *turn) syncSessionBranch() {
 			if t.cliModel != nil {
 				t.cliModel.Dir = wtDir
 			}
+			return
 		}
+	}
+	if t.followOwnWork() {
 		return
 	}
 	if t.workDir != "" && t.workDir != a.cfg.WorkingDir() {
@@ -601,6 +608,97 @@ func (t *turn) syncSessionBranch() {
 			_, _ = a.sessions.SetBranch(t.ctx, t.call.SessionID, cur, t.workDir)
 		}
 	}
+}
+
+// followOwnWork points the chat at the copy of the project (a git worktree
+// the agent made itself) where the agent last changed files or committed
+// this turn, so the top bar and the next turn use it. It points the chat
+// back at the main folder when the agent's newest work is there or its copy
+// was deleted. Crush's own copies (the branch menu's) are left alone.
+func (t *turn) followOwnWork() bool {
+	a := t.a
+	mainDir := a.cfg.WorkingDir()
+	dataDir := a.dataDir()
+	chat, err := a.sessions.Get(t.ctx, t.call.SessionID)
+	if err != nil {
+		return false
+	}
+	agentCopy := chat.WorkDir != "" && !gitutil.IsCrushCopy(dataDir, chat.WorkDir)
+	if agentCopy && !gitutil.HasCheckout(chat.WorkDir) {
+		_, _ = a.sessions.SetBranch(t.ctx, chat.ID, "", "")
+		return true
+	}
+	if t.ownWork == "" {
+		return false
+	}
+	root := gitutil.SameRepoWorktree(mainDir, t.ownWork)
+	if root == "" || gitutil.IsCrushCopy(dataDir, root) {
+		return false
+	}
+	if sameDir(root, mainDir) {
+		if agentCopy {
+			_, _ = a.sessions.SetBranch(t.ctx, chat.ID, "", "")
+			return true
+		}
+		return false
+	}
+	if sameDir(root, chat.WorkDir) {
+		return false
+	}
+	branch := gitutil.CurrentBranch(root)
+	if branch == "" {
+		return false
+	}
+	_, _ = a.sessions.SetBranch(t.ctx, chat.ID, branch, root)
+	return true
+}
+
+// noteOwnWork remembers where a tool call of the agent's own changed a file
+// or ran git commit.
+func (t *turn) noteOwnWork(name, input string) {
+	base := t.workDir
+	if base == "" && t.a.cfg != nil {
+		base = t.a.cfg.WorkingDir()
+	}
+	if path := cliagent.EditedFile(name, input); path != "" {
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(base, path)
+		}
+		t.ownWork = filepath.Dir(path)
+		return
+	}
+	if name != tools.BashToolName {
+		return
+	}
+	var params tools.BashParams
+	if json.Unmarshal([]byte(input), &params) != nil || params.Command == "" {
+		return
+	}
+	start := base
+	if params.WorkingDir != "" {
+		if filepath.IsAbs(params.WorkingDir) {
+			start = params.WorkingDir
+		} else {
+			start = filepath.Join(base, params.WorkingDir)
+		}
+	}
+	if dirs := gitutil.CommitDirs(params.Command, start); len(dirs) > 0 {
+		t.ownWork = dirs[len(dirs)-1]
+	}
+}
+
+// sameDir compares two folders after resolving links.
+func sameDir(a, b string) bool {
+	if a == "" || b == "" {
+		return false
+	}
+	if real, err := filepath.EvalSymlinks(a); err == nil {
+		a = real
+	}
+	if real, err := filepath.EvalSymlinks(b); err == nil {
+		b = real
+	}
+	return filepath.Clean(a) == filepath.Clean(b)
 }
 
 // loadHistory loads the session and its messages, starts titling a new

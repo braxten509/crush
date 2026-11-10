@@ -802,10 +802,7 @@ func (a *sessionAgent) sessionWorkingDir(ctx context.Context, sessionID string) 
 		return "", ""
 	}
 	mainDir := a.cfg.WorkingDir()
-	dataDir := ""
-	if a.cfg.Config() != nil && a.cfg.Config().Options != nil {
-		dataDir = a.cfg.Config().Options.DataDirectory
-	}
+	dataDir := a.dataDir()
 	if a.sessions == nil || sessionID == "" {
 		return mainDir, gitutil.CurrentBranch(mainDir)
 	}
@@ -813,6 +810,11 @@ func (a *sessionAgent) sessionWorkingDir(ctx context.Context, sessionID string) 
 	for range 8 {
 		chat, err := a.sessions.Get(ctx, curID)
 		if err != nil {
+			break
+		}
+		if chat.Branch != "" && chat.WorkDir != "" && !gitutil.IsCrushCopy(dataDir, chat.WorkDir) && !gitutil.HasCheckout(chat.WorkDir) {
+			// The agent's own copy was deleted: back to the main folder.
+			_, _ = a.sessions.SetBranch(ctx, curID, "", "")
 			break
 		}
 		if chat.Branch != "" && dataDir != "" {
@@ -833,6 +835,14 @@ func (a *sessionAgent) sessionWorkingDir(ctx context.Context, sessionID string) 
 	return mainDir, gitutil.CurrentBranch(mainDir)
 }
 
+// dataDir is Crush's data folder for the project ("" when unknown).
+func (a *sessionAgent) dataDir() string {
+	if a.cfg == nil || a.cfg.Config() == nil || a.cfg.Config().Options == nil {
+		return ""
+	}
+	return a.cfg.Config().Options.DataDirectory
+}
+
 // isolateBranchSwitch moves a branch switch that an agent performed in the
 // main folder into sessionID's own folder copy and restores the main folder's
 // previous branch so other chats in the folder do not change branch.
@@ -841,10 +851,7 @@ func (a *sessionAgent) isolateBranchSwitch(ctx context.Context, sessionID, mainB
 		return "", false
 	}
 	mainDir := a.cfg.WorkingDir()
-	dataDir := ""
-	if a.cfg.Config() != nil && a.cfg.Config().Options != nil {
-		dataDir = a.cfg.Config().Options.DataDirectory
-	}
+	dataDir := a.dataDir()
 	if dataDir == "" {
 		return "", false
 	}

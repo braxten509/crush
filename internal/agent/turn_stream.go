@@ -279,6 +279,7 @@ func (t *turn) onToolCall(tc fantasy.ToolCallContent) error {
 	t.toolResultMu.Lock()
 	defer t.toolResultMu.Unlock()
 	t.fileReview.track(tc.ToolCallID, tc.ToolName, tc.Input)
+	t.noteOwnWork(tc.ToolName, tc.Input)
 	input, wasSanitized := sanitizeToolInput(tc.ToolName, tc.ToolCallID, tc.Input)
 	if wasSanitized {
 		t.sanitizedToolCalls.Set(tc.ToolCallID, true)

@@ -246,7 +246,7 @@ func (t *turn) dispatch(ctx context.Context) dispatchOutcome {
 	if a.tasks != nil {
 		env := a.tasks.env(t.call.SessionID)
 		if a.isSubAgent {
-			env = []string{TasksDirEnv + "=" + a.tasks.dir, TasksSessionEnv + "="}
+			env = append([]string{TasksDirEnv + "=" + a.tasks.dir, TasksSessionEnv + "="}, a.tasks.chatFolderEnv(t.call.SessionID)...)
 		}
 		runCtx = context.WithValue(runCtx, tools.ShellEnvContextKey, env)
 	}
@@ -539,6 +539,10 @@ func (t *turn) buildSystemPrompt() ([]fantasy.AgentTool, string, error) {
 		systemPrompt += "\n\n" + note
 	}
 	t.promptPrefix = a.promptPrefixFor(t.chatModel)
+	if note := chatFolderNote(ownChatFolder(t.genCtx)); note != "" && !t.isCLI {
+		// CLI agents get it with Crush's shared instructions instead.
+		systemPrompt += "\n\n" + note
+	}
 	if !t.isCLI && a.cfg != nil && a.cfg.Config().Options != nil && a.cfg.Config().Options.DisableInstructionFiles {
 		systemPrompt += "\n\n" + sharedCLIInstructions + "\n\n" + memoryInstructions(a.isSubAgent)
 		if a.tasks != nil && !a.isSubAgent {

@@ -21,7 +21,9 @@ import (
 	"github.com/charmbracelet/crush/internal/openchats"
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/crush/internal/question"
+	"github.com/charmbracelet/crush/internal/secretguard"
 	"github.com/charmbracelet/crush/internal/secureentry"
+	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/shell"
 )
 
@@ -365,9 +367,23 @@ func cliBackgroundRunning(sessionID string) bool {
 	return len(rest) > 0
 }
 
-// env is added to the CLI process of a session that may spawn tasks.
+// env is added to the CLI process of a session that may spawn tasks. It
+// also names the chat's private folder (chat_folder.go).
 func (h *taskHub) env(sessionID string) []string {
-	return []string{TasksDirEnv + "=" + h.dir, TasksSessionEnv + "=" + sessionID}
+	env := []string{TasksDirEnv + "=" + h.dir, TasksSessionEnv + "=" + sessionID}
+	return append(env, h.chatFolderEnv(sessionID)...)
+}
+
+// chatFolderEnv names the private folder of the chat sessionID belongs to.
+func (h *taskHub) chatFolderEnv(sessionID string) []string {
+	var sessions session.Service
+	if h.c != nil {
+		sessions = h.c.sessions
+	}
+	if dir := chatFolder(context.Background(), sessions, sessionID); dir != "" {
+		return []string{secretguard.ChatFolderEnv + "=" + dir}
+	}
+	return nil
 }
 
 // BackgroundProcessName names the task result telling an agent that a

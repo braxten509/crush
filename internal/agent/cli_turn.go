@@ -15,6 +15,7 @@ import (
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/db"
 	"github.com/charmbracelet/crush/internal/message"
+	"github.com/charmbracelet/crush/internal/secretguard"
 	"github.com/charmbracelet/crush/internal/session"
 )
 
@@ -111,6 +112,9 @@ func (a *sessionAgent) cliStream(m *cliagent.Model, call SessionAgentCall, histo
 		}
 		// Native memory is disabled; every CLI receives Crush's shared store.
 		shared := sharedCLIInstructions
+		if note := chatFolderNote(envValue(env, secretguard.ChatFolderEnv)); note != "" {
+			shared += "\n\n" + note
+		}
 		if a.isSubAgent {
 			shared += "\n\n" + subAgentCommandNote
 		}

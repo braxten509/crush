@@ -80,6 +80,9 @@ var errCrash = errors.New("crash (test)")
 // retryWait spaces retries of a busy checkpoint or gate.
 var retryWait = 200 * time.Millisecond
 
+// phaseOpening marks a first lock that has not reached the vault yet.
+const phaseOpening = "open"
+
 func sleepChan() <-chan time.Time { return time.After(retryWait) }
 
 // Start begins the background work: crash recovery and, with Shown, the
@@ -278,7 +281,11 @@ func (s *Service) startLock(ctx context.Context, id string) error {
 		if s.BeforeLock != nil {
 			s.BeforeLock(ctx, id)
 		}
-		return s.setState(ctx, id, session.LockStateLocking, state)
+		phase := state
+		if state == "" {
+			phase = phaseOpening
+		}
+		return s.setState(ctx, id, session.LockStateLocking, phase)
 	})
 }
 
@@ -858,7 +865,7 @@ func (s *Service) lockNow(ctx context.Context, root string) (err error) {
 			return
 		}
 		back := session.LockStateRelock
-		if now == session.LockStateLocking && prior == "" {
+		if now == session.LockStateLocking && (prior == "" || prior == phaseOpening) {
 			back = ""
 		}
 		_ = s.setState(bg, root, back, "")
@@ -869,6 +876,12 @@ func (s *Service) lockNow(ctx context.Context, root string) (err error) {
 	mount, err := s.openVault(ctx)
 	if err != nil {
 		return err
+	}
+	// Once copying can begin, recovery must protect the chat as before.
+	if state == session.LockStateLocking && prior == phaseOpening {
+		if err := s.setState(ctx, root, session.LockStateLocking, ""); err != nil {
+			return err
+		}
 	}
 	ids, err := s.tree(ctx, root)
 	if err != nil {

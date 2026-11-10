@@ -2,7 +2,8 @@
   // The Sessions sheet (desktop-design-5-6 2.5, look 5.7; DLG-076 to DLG-088):
   // a port of internal/ui/dialog/sessions/sessions.go. Rows are this
   // workspace's saved chats from GET …/saved-sessions, newest first, with
-  // "~/folder · 3 hours ago" in the info column (35 % budget). Enter, Tab and
+  // "~/folder · 3 hours ago" in the info column, always shown and cut with
+  // "…" past half the row (owner, 2026-11-09: no hiding it). Enter, Tab and
   // Ctrl+Y open the selected chat; Ctrl+R renames it in its row, Ctrl+X asks
   // to delete it; both go through POST …/saved-sessions as the terminal's
   // CatalogChange. One list: the chats of the 10 most recently used folders,
@@ -301,7 +302,6 @@
       filterText={(row) => row.Title ?? ""}
       groups={() => "Recent"}
       info={(row) => infoText(row, leftList.home, now)}
-      infoBudget={35}
       {query}
       bind:selected
       onChoose={(row) => open(row)}

@@ -74,21 +74,21 @@ type vaultDevice struct {
 // with no_new_privs, so it never runs gocryptfs or fusermount itself.
 type KDEVault struct{}
 
-func (KDEVault) object() (dbus.BusObject, error) {
-	conn, err := dbus.ConnectSessionBus()
+// call owns the private connection until the synchronous reply arrives.
+// In particular, polling a closed vault must not leave a connection behind
+// each time: those connections can exhaust the desktop's D-Bus broker.
+func (KDEVault) call(ctx context.Context, method string, args ...any) *dbus.Call {
+	conn, err := dbus.ConnectSessionBus(dbus.WithContext(ctx))
 	if err != nil {
-		return nil, fmt.Errorf("Plasma Vault is not reachable: %w", err) //nolint:staticcheck
+		return &dbus.Call{Err: fmt.Errorf("Plasma Vault is not reachable: %w", err)} //nolint:staticcheck
 	}
-	return conn.Object(vaultService, vaultPath), nil
+	defer conn.Close()
+	return conn.Object(vaultService, vaultPath).CallWithContext(ctx, vaultInterface+"."+method, 0, args...)
 }
 
 func (v KDEVault) device(ctx context.Context) (vaultDevice, bool, error) {
-	obj, err := v.object()
-	if err != nil {
-		return vaultDevice{}, false, err
-	}
 	var devices []vaultDevice
-	if err := obj.CallWithContext(ctx, vaultInterface+".availableDevices", 0).Store(&devices); err != nil {
+	if err := v.call(ctx, "availableDevices").Store(&devices); err != nil {
 		return vaultDevice{}, false, fmt.Errorf("Plasma Vault did not list its vaults: %w", err) //nolint:staticcheck
 	}
 	for _, d := range devices {
@@ -213,12 +213,8 @@ func (v KDEVault) Open(ctx context.Context) (string, error) {
 	if mounted(mount) {
 		return mount, nil
 	}
-	obj, err := v.object()
-	if err != nil {
-		return "", err
-	}
 	// openVault returns at once while KDE shows its password box.
-	if err := obj.CallWithContext(ctx, vaultInterface+".openVault", 0, d.Device).Err; err != nil {
+	if err := v.call(ctx, "openVault", d.Device).Err; err != nil {
 		return "", fmt.Errorf("Plasma Vault did not open the vault: %w", err) //nolint:staticcheck
 	}
 	ctx, cancel := context.WithTimeout(ctx, openWait)
@@ -229,7 +225,17 @@ func (v KDEVault) Open(ctx context.Context) (string, error) {
 		if mounted(mount) {
 			return mount, nil
 		}
-		if now, ok, err := v.device(ctx); err == nil && ok && now.Status == vaultOpened {
+		now, ok, err := v.device(ctx)
+		if err != nil {
+			if ctx.Err() != nil {
+				return "", ErrVaultClosed
+			}
+			return "", err
+		}
+		if !ok {
+			return "", ErrNoVault
+		}
+		if now.Status == vaultOpened {
 			mount = v.mountPoint(now)
 			if mounted(mount) {
 				return mount, nil
@@ -262,9 +268,7 @@ func (v KDEVault) OpenWith(ctx context.Context, password string) (string, error)
 		return "", err
 	}
 	// Let Plasma Vault see it open (its tray and closeVault).
-	if obj, err := v.object(); err == nil {
-		_ = obj.CallWithContext(ctx, vaultInterface+".updateStatus", 0).Err
-	}
+	_ = v.call(ctx, "updateStatus").Err
 	return mount, nil
 }
 
@@ -319,12 +323,8 @@ func (v KDEVault) Close(ctx context.Context) error {
 			return nil // in use
 		}
 	}
-	obj, err := v.object()
-	if err != nil {
-		return err
-	}
 	// closeVault, never forceCloseVault (owner, 2026-11-03).
-	if err := obj.CallWithContext(ctx, vaultInterface+".closeVault", 0, d.Device).Err; err != nil {
+	if err := v.call(ctx, "closeVault", d.Device).Err; err != nil {
 		return err
 	}
 	// A vault Crush opened itself may be one KDE missed; then unmount it
@@ -385,11 +385,7 @@ func lockMountPoint(mount string) {
 }
 
 func (v KDEVault) Create(ctx context.Context) error {
-	obj, err := v.object()
-	if err != nil {
-		return err
-	}
-	return obj.CallWithContext(ctx, vaultInterface+".requestNewVault", 0).Err
+	return v.call(ctx, "requestNewVault").Err
 }
 
 // newVault makes the vault Crush uses; the desktop checks' test seam swaps

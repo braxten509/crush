@@ -41,6 +41,7 @@ func (s *Service) hideOrphans(ctx context.Context) error {
 //     are gone, so the wipes finish (no vault needed);
 //   - unlocking: the vault copy is still the chat; what was copied back is
 //     wiped and the chat is locked again;
+//   - a first lock still waiting for the vault: nothing moved, so undo it;
 //   - locking, or unlocked with no live Crush owning it: the chat is
 //     hidden at once (relock) and put back into the vault, which asks for
 //     the password when the vault is closed; cancelled, it stays hidden and
@@ -118,6 +119,12 @@ func (s *Service) recoverOne(ctx context.Context, id, state, phase string) bool 
 		}
 		return false
 	case session.LockStateLocking:
+		if phase == phaseOpening {
+			if err := s.setState(ctx, id, "", ""); err != nil {
+				s.notify(id, err)
+			}
+			return false
+		}
 		if phase == "wipe" {
 			if err := s.finishLock(ctx, id); err != nil {
 				s.notify(id, err)

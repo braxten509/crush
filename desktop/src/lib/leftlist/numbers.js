@@ -59,6 +59,10 @@ export function chatGroups(now = Date.now()) {
     const k = terminalFolder(tab);
     if (k && !groups.some((group) => group.dir === k)) groups.push({ dir: k, rows: [] });
   }
+  // The home folder is drawn last, as No project (owner, 2026-11-09).
+  const home = leftList.home ? clean(leftList.home) : "";
+  const at = home ? groups.findIndex((group) => clean(group.dir) === home) : -1;
+  if (at >= 0) groups.push(...groups.splice(at, 1));
   return groups.map((group) => ({
     ...group,
     terminals: tabs.filter((tab) => terminalFolder(tab) === group.dir),

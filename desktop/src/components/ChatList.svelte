@@ -34,7 +34,8 @@
   import TodoRows from "./leftlist/TodoRows.svelte";
   import { startTodo, todosIn } from "../lib/stores/listtodos.svelte.js";
   import { searchFocused, setSearchField } from "./list/listfocus.js";
-  import { newChat, newTerminal, startIn } from "../lib/leftlist/store.svelte.js";
+  import { leftList, newChat, newTerminal, startIn } from "../lib/leftlist/store.svelte.js";
+  import { clean } from "../lib/leftlist/picker.js";
   import { listRoom } from "./panel/panel.svelte.js";
   import { listMarks } from "./start/marks.js";
   import { start } from "./start/start.svelte.js";
@@ -64,7 +65,8 @@
   });
 
   // A folder's "+" opens a small menu right under it, its right edge on the
-  // "+" (owner, 2026-11-05): New Chat, New Terminal, New Todo, all in that folder.
+  // "+" (owner, 2026-11-05): New Chat, Open Chat (the chat search showing only
+  // that folder's chats, owner 2026-11-09), New Terminal, New Todo, all in that folder.
   // ↑/↓ move, Enter picks, Esc, Tab, a press outside, a scroll or the
   // window losing focus closes it.
   let plus = $state(null); // {dir, button} while open
@@ -86,7 +88,9 @@
     const dir = plus?.dir;
     closePlus();
     if (!dir) return;
-    if (what === "todo") startTodo(dir);
+    // No project's todos stay under "" (its dir is home for chats and terminals).
+    if (what === "todo") startTodo(dir === home ? "" : dir);
+    else if (what === "open") openDialog("sessions", { folder: dir });
     else startIn(what, dir);
   }
 
@@ -150,9 +154,15 @@
     return true;
   }
 
-  const groups = $derived(chatGroups(now));
-  const rows = $derived(groups.flatMap((group) => group.rows));
-  const empty = $derived(groups.length === 0 ? "No open chats" : "");
+  // No project is the home folder (owner, 2026-11-09): what runs in ~ shows
+  // under No project, never as its own "~" folder, and its "+" starts there.
+  const home = $derived(leftList.home ? clean(leftList.home) : "");
+  const allGroups = $derived(chatGroups(now));
+  const homeGroup = $derived(home ? allGroups.find((group) => clean(group.dir) === home) : null);
+  const groups = $derived(allGroups.filter((group) => group !== homeGroup));
+  // Drawn order: the folders, then No project.
+  const rows = $derived([...groups, ...(homeGroup ? [homeGroup] : [])].flatMap((group) => group.rows));
+  const empty = $derived(allGroups.length === 0 ? "No open chats" : "");
   // Every heading, for a todo's "Move to" (TodoRows.svelte).
   const folderTargets = $derived(groups.map((group) => ({ dir: group.dir, label: group.label })));
 
@@ -351,17 +361,37 @@
       </section>
     {/each}
 
-    <!-- Todos with no folder (owner, 2026-11-09): always last of the folders. -->
+    <!-- No project, always last of the folders: todos with no folder and the
+         chats and terminals of the home folder (owner, 2026-11-09). Its "+"
+         is a folder's menu on ~ (no home known yet: New Todo at once). -->
     <section class="group" aria-label="No project" data-folder="">
       <div class="folder">
         <Icon name="folder-filled" size={12} class="folder-icon" />
-        <span class="folder-name">No project</span>
-        <!-- Only todos go here, so its "+" opens the box at once. -->
-        <button class="folder-button folder-new" type="button" aria-label="New todo with no project" title="New todo" onclick={() => startTodo("")}>
-          <Icon name="plus" frame={30} />
-        </button>
+        <span class="folder-name" title={leftList.home}>No project</span>
+        {#if home}
+          <button class="folder-button folder-new" class:open={plus?.dir === home} type="button" aria-label="New in No project" aria-haspopup="menu" aria-expanded={plus?.dir === home} onclick={(event) => togglePlus(event, home)}>
+            <Icon name="plus" frame={30} />
+          </button>
+        {:else}
+          <button class="folder-button folder-new" type="button" aria-label="New todo with no project" title="New todo" onclick={() => startTodo("")}>
+            <Icon name="plus" frame={30} />
+          </button>
+        {/if}
       </div>
+      {#if homeGroup?.rows.length > 0}
+        <ul class="list">
+          {#each homeGroup.rows as row (row.id)}
+            <ChatRow {row} />
+          {/each}
+        </ul>
+      {/if}
+      {#if homeGroup?.terminals.length > 0}
+        <TerminalRows tabs={homeGroup.terminals} />
+      {/if}
       <TodoRows dir="" folders={folderTargets} />
+      {#if homeGroup && todosIn(homeGroup.dir).length > 0}
+        <TodoRows dir={homeGroup.dir} folders={folderTargets} />
+      {/if}
     </section>
 
     {#each listSections("rows") as entry (entry.id)}
@@ -387,6 +417,7 @@
       transition:unfold={{ from: "top" }}
     >
       <button class="plus-entry" type="button" role="menuitem" onclick={() => pickPlus("session")}>New Chat</button>
+      <button class="plus-entry" type="button" role="menuitem" onclick={() => pickPlus("open")}>Open Chat</button>
       <button class="plus-entry" type="button" role="menuitem" onclick={() => pickPlus("terminal")}>New Terminal</button>
       <button class="plus-entry" type="button" role="menuitem" onclick={() => pickPlus("todo")}>New Todo</button>
     </div>

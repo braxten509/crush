@@ -13,6 +13,8 @@
   // another folder switches the window there in
   // place. Session events rename or remove rows in place.
   //   query? (the filter's first text: the left list's search box, START-021's id)
+  //   folder? (only that folder's chats, under its name: the folder "+"
+  //   menu's Open Chat, owner 2026-11-09)
   import { onMount, tick, untrack } from "svelte";
   import Buttons from "../kit/Buttons.svelte";
   import Field from "../kit/Field.svelte";
@@ -23,8 +25,9 @@
   import { api } from "../../lib/engine/api.js";
   import { file_info } from "../../lib/engine/commands.js";
   import { onEvent } from "../../lib/engine/events.js";
+  import { short } from "../../lib/leftlist/picker.js";
   import { leftList } from "../../lib/leftlist/store.svelte.js";
-  import { infoText, inProject } from "../../lib/sessions/match.js";
+  import { humanizeTime, infoText, inProject } from "../../lib/sessions/match.js";
   import { isClosed, reopen } from "../../lib/stores/closed.svelte.js";
   import { conn } from "../../lib/stores/connection.svelte.js";
   import { openInFolder } from "../../lib/stores/openchats.svelte.js";
@@ -37,7 +40,7 @@
   const FOLDERS = 10; // the list reads the 10 most recently used folders (owner, 2026-10-20)
   const BUSY = "Agent is busy, please wait..."; // sessions.go:196-198
 
-  let { query: firstQuery = "" } = $props();
+  let { query: firstQuery = "", folder = "" } = $props();
 
   let query = $state(untrack(() => firstQuery));
   let rows = $state([]);
@@ -79,9 +82,9 @@
 
   async function read() {
     try {
-      const all = (await api.savedSessions(sessions.currentId || "", FOLDERS)) ?? [];
+      const all = (await (folder ? api.savedSessions(sessions.currentId || "", 0, folder) : api.savedSessions(sessions.currentId || "", FOLDERS))) ?? [];
       const keep = rows[selected]?.ID ?? sessions.currentId;
-      rows = [...all].sort((a, b) => Number(b.UpdatedAt ?? 0) - Number(a.UpdatedAt ?? 0));
+      rows = [...all].filter((row) => !folder || inProject(row, folder)).sort((a, b) => Number(b.UpdatedAt ?? 0) - Number(a.UpdatedAt ?? 0));
       failed = false;
       const at = rows.findIndex((row) => row.ID === keep);
       selected = at >= 0 ? at : rows.length > 0 ? 0 : -1;
@@ -293,15 +296,15 @@
   {:else if failed}
     <p class="state">Couldn't read the saved chats. <button class="retry" type="button" onclick={read}>Try again</button></p>
   {:else if rows.length === 0}
-    <p class="state">No saved chats yet</p>
+    <p class="state">{folder ? "No saved chats in this folder yet" : "No saved chats yet"}</p>
   {/if}
   {#if loaded && rows.length > 0}
     <FilterList
       bind:this={list}
       items={shownRows}
       filterText={(row) => row.Title ?? ""}
-      groups={() => "Recent"}
-      info={(row) => infoText(row, leftList.home, now)}
+      groups={() => (folder ? short(folder, leftList.home) : "Recent")}
+      info={(row) => (folder ? humanizeTime(Number(row.UpdatedAt ?? 0), now) : infoText(row, leftList.home, now))}
       {query}
       bind:selected
       onChoose={(row) => open(row)}

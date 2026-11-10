@@ -287,8 +287,9 @@ export const api = {
 
   // [session.Session] with PascalCase keys; selected: the shown chat's id.
   // folders: also the chats of that many most recently used folders.
-  savedSessions: (selected, folders = 0) => {
-    const query = { ...(selected ? { selected } : {}), ...(folders > 0 ? { folders: String(folders) } : {}) };
+  // folder set: only that folder's chats (the folder "+" menu's Open Chat).
+  savedSessions: (selected, folders = 0, folder = "") => {
+    const query = { ...(selected ? { selected } : {}), ...(folders > 0 ? { folders: String(folders) } : {}), ...(folder ? { folder } : {}) };
     return get("saved-sessions", Object.keys(query).length ? query : undefined);
   },
   // session.CatalogChange {DiscardEmpty, Session, Remove}.

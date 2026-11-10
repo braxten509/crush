@@ -191,9 +191,10 @@ func (c *controllerV1) setLastPick(r *http.Request, req config.SelectedModel) (r
 
 // listSavedSessions lists saved chats across every project.
 func (c *controllerV1) listSavedSessions(r *http.Request, _ rpc.Empty) ([]session.Session, error) {
-	// ?folders=N also lists the N most recently used projects' chats.
+	// ?folders=N also lists the N most recently used projects' chats;
+	// ?folder=DIR lists only that folder's.
 	folders, _ := strconv.Atoi(r.URL.Query().Get("folders"))
-	return c.backend.ListRecentSavedSessions(r.Context(), r.PathValue("id"), r.URL.Query().Get("selected"), max(folders, 0))
+	return c.backend.ListRecentSavedSessions(r.Context(), r.PathValue("id"), r.URL.Query().Get("selected"), max(folders, 0), r.URL.Query().Get("folder"))
 }
 
 // changeSavedSession renames or deletes a saved chat, or discards an

@@ -28,6 +28,28 @@ type Catalog struct {
 	// recently used saved projects (the desktop's Recent, owner
 	// 2026-10-20); the terminal's own list stays this workspace's.
 	Folders int
+	// Folder, when set, lists only that project's chats (the desktop's
+	// folder "+" menu Open Chat, owner 2026-11-09); it wins over Folders.
+	Folder string
+}
+
+// only is the one location whose folder is dir: the current workspace or a
+// saved project; none when dir is neither.
+func (c Catalog) only(dir string) ([]projects.Project, error) {
+	want := catalogPath(dir)
+	if catalogPath(c.Directory) == want {
+		return []projects.Project{{Path: c.Directory, DataDir: c.DataDirectory}}, nil
+	}
+	known, err := projects.List()
+	if err != nil {
+		return nil, err
+	}
+	for _, project := range known {
+		if project.DataDir != "" && catalogPath(project.Path) == want {
+			return []projects.Project{project}, nil
+		}
+	}
+	return nil, nil
 }
 
 // recent is the current workspace, then the n most recently used saved
@@ -77,7 +99,12 @@ func catalogPath(path string) string {
 // message may be in flight. The DELETE rechecks message existence atomically.
 func (c Catalog) List(ctx context.Context, selected string) ([]session.Session, error) {
 	locations := []projects.Project{{Path: c.Directory, DataDir: c.DataDirectory}}
-	if c.Folders > 0 {
+	if c.Folder != "" {
+		var err error
+		if locations, err = c.only(c.Folder); err != nil {
+			return nil, err
+		}
+	} else if c.Folders > 0 {
 		var err error
 		if locations, err = c.recent(c.Folders); err != nil {
 			return nil, err

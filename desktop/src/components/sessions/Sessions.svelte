@@ -25,9 +25,8 @@
   import { api } from "../../lib/engine/api.js";
   import { file_info } from "../../lib/engine/commands.js";
   import { onEvent } from "../../lib/engine/events.js";
-  import { short } from "../../lib/leftlist/picker.js";
   import { leftList } from "../../lib/leftlist/store.svelte.js";
-  import { humanizeTime, infoText, inProject } from "../../lib/sessions/match.js";
+  import { folderName, humanizeTime, infoText, inProject } from "../../lib/sessions/match.js";
   import { isClosed, reopen } from "../../lib/stores/closed.svelte.js";
   import { conn } from "../../lib/stores/connection.svelte.js";
   import { openInFolder } from "../../lib/stores/openchats.svelte.js";
@@ -303,7 +302,7 @@
       bind:this={list}
       items={shownRows}
       filterText={(row) => row.Title ?? ""}
-      groups={() => (folder ? short(folder, leftList.home) : "Recent")}
+      groups={() => (folder ? folderName(folder, leftList.home) : "Recent")}
       info={(row) => (folder ? humanizeTime(Number(row.UpdatedAt ?? 0), now) : infoText(row, leftList.home, now))}
       {query}
       bind:selected

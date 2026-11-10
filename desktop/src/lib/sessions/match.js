@@ -45,10 +45,16 @@ export function humanizeTime(then, now = Date.now()) {
   return magnitude.text.replace("%d", String(Math.floor(diff / magnitude.by))).replace("%s", label);
 }
 
+// A folder as the chat search writes it: the home folder is "No project",
+// as in the left list (owner, 2026-11-09); any other is "~/short/path".
+export function folderName(dir, home) {
+  return home && clean(dir) === clean(home) ? "No project" : short(dir, home);
+}
+
 // The row's info text (item.go:82-89).
 export function infoText(row, home, now = Date.now()) {
   const when = humanizeTime(Number(row?.UpdatedAt ?? 0), now);
-  return row?.Directory ? `${short(row.Directory, home)} · ${when}` : when;
+  return row?.Directory ? `${folderName(row.Directory, home)} · ${when}` : when;
 }
 
 // A saved chat of another folder opens in that folder's window (DLG-088).

@@ -40,7 +40,19 @@ refs, stashes, tags or worktrees, rewrite existing history, prune recovery data,
 or force/delete remote refs. This also applies indirectly through scripts,
 wrappers, libraries and alternate executables. Safe inspection, staging, new
 commits, ordinary fast-forward pushes and non-discarding switches are allowed.
+The one exception is cleaning up your own branch copy, below.
 </crush_instruction_sources>
+
+<crush_branch_copies>
+To work on a branch other than the one the project folder is on, make your
+own copy of the project with git worktree add (for example in
+<project>-wt/<branch> next to the project folder) and work only there. Leave
+the project folder's own branch alone. After you merge that branch into
+another branch, delete your copy with git worktree remove <copy> (no --force)
+and then the merged branch with git branch -d <branch> (not -D). Do this only
+for copies and branches you made yourself, and only when the copy has no
+uncommitted work; if either command refuses, leave it and tell the user.
+</crush_branch_copies>
 
 <crush_work_checks>
 Before starting a change, write down how you will know it worked: a check

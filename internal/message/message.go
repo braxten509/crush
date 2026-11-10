@@ -360,7 +360,7 @@ func (s *service) fromDBItem(item db.Message) (Message, error) {
 	if err != nil {
 		return Message{}, err
 	}
-	return Message{
+	return s.withLive(Message{
 		ID:                      item.ID,
 		SessionID:               item.SessionID,
 		Role:                    MessageRole(item.Role),
@@ -374,5 +374,5 @@ func (s *service) fromDBItem(item db.Message) (Message, error) {
 		PrismModelName:          item.PrismModelName.String,
 		PrismHypercreditSavings: floatPtr(item.PrismHypercreditSavings),
 		PrismDollarSavings:      floatPtr(item.PrismDollarSavings),
-	}, nil
+	}), nil
 }

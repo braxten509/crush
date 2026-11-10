@@ -41,6 +41,45 @@ type pendingState struct {
 	// ID; until then baseline is the zero value and must not be
 	// treated as a real prior state.
 	hasFlushed bool
+
+	// live is the newest live status of an unfinished message. It is
+	// never written to SQL, so reads put it back (see [service.withLive]):
+	// a chat read again mid-turn would otherwise lose "Thinking" until
+	// the next live event.
+	live liveStatus
+}
+
+// liveStatus holds the live-only fields of a [Message].
+type liveStatus struct {
+	compacting bool
+	activityAt int64
+	activity   string
+	detail     string
+}
+
+// rememberLive keeps msg's live fields while it is unfinished. Caller
+// must hold s.mu.
+func (p *pendingState) rememberLive(msg *Message) {
+	if msg.IsFinished() {
+		p.live = liveStatus{}
+		return
+	}
+	p.live = liveStatus{compacting: msg.IsCompacting, activityAt: msg.ActivityAt, activity: msg.Activity, detail: msg.ActivityDetail}
+}
+
+// withLive puts the remembered live fields back on a message read from SQL.
+func (s *service) withLive(msg Message) Message {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p, ok := s.pending[msg.ID]
+	if !ok || p.live == (liveStatus{}) {
+		return msg
+	}
+	msg.IsCompacting = p.live.compacting
+	msg.ActivityAt = p.live.activityAt
+	msg.Activity = p.live.activity
+	msg.ActivityDetail = p.live.detail
+	return msg
 }
 
 // flushBaseline is the compact projection of a flushed [Message] that
@@ -87,6 +126,7 @@ func (s *service) Update(ctx context.Context, msg Message) error {
 		}
 		p.latest = cloned
 		p.dirty = true
+		p.rememberLive(&cloned)
 		s.mu.Unlock()
 		return s.flushOne(ctx, msg.ID, true)
 	}
@@ -99,6 +139,7 @@ func (s *service) Update(ctx context.Context, msg Message) error {
 	}
 	p.latest = cloned
 	p.dirty = true
+	p.rememberLive(&cloned)
 
 	var prev *flushBaseline
 	if p.hasFlushed {

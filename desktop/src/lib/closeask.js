@@ -1,9 +1,10 @@
-// The close question (owner, 2026-10-27): when the last window closes while
-// an engine this window keeps joined runs a chat's turn or a sub-agent
-// (`crush spawn`), the "close" sheet asks first: Close window only (the
-// engines keep the work going, as before), Stop engine (each engine with work
-// stops it all and exits) or Cancel (nothing closes). Otherwise the window
-// closes as it always did, with no question.
+// The close question (owner, 2026-10-27; asked at every last-window close
+// since 2026-11-09, work or not): the "close" sheet asks first: Close window
+// only (the engines keep running while a chat's turn, a sub-agent or a chat
+// waiting for its usage limit to reset is left, then turn off), Stop engine
+// (every engine this window keeps joined stops it all and exits) or Cancel
+// (nothing closes). With no engine answering, the window closes with no
+// question.
 import { dialogRegistered, openDialog } from "./dialogs.js";
 import { api } from "./engine/api.js";
 import { windowCloseHold } from "./engine/commands.js";
@@ -13,24 +14,24 @@ export const CLOSE_SHEET = "close";
 // How long one engine may take to tell its work; a slower one runs none.
 const READ_LIMIT_MS = 3000;
 
-// The running work of every folder this window keeps joined: {chats,
-// helpers, dirs}, dirs being the folders whose engine runs some ("" the shown
-// one). Folders of one project share an engine, counted once. An engine that
-// does not answer, or predates the counts (GET /v1/engine busy_chats and
-// running_helpers), or not within READ_LIMIT_MS, runs none.
+// The work of every folder this window keeps joined: {chats, helpers,
+// waiting, dirs}, dirs being one folder per engine that answered ("" the
+// shown one). Folders of one project share an engine, counted once. An
+// engine that does not answer within READ_LIMIT_MS is left out; one that
+// predates a count (GET /v1/engine busy_chats, running_helpers,
+// waiting_chats) runs none of it.
 export async function runningWork() {
   const dirs = ["", ...Object.keys(conn.folders ?? {}).filter((dir) => !inFolder(dir))];
   const infos = await Promise.all(dirs.map((dir) => limited(api.engine(dir))));
-  const work = { chats: 0, helpers: 0, dirs: [] };
+  const work = { chats: 0, helpers: 0, waiting: 0, dirs: [] };
   const seen = new Set();
   infos.forEach((info, i) => {
-    const chats = Number(info?.busy_chats) || 0;
-    const helpers = Number(info?.running_helpers) || 0;
     const engine = `${info?.pid}:${info?.data_dir}`;
-    if (chats + helpers === 0 || seen.has(engine)) return;
+    if (!info || seen.has(engine)) return;
     seen.add(engine);
-    work.chats += chats;
-    work.helpers += helpers;
+    work.chats += Number(info.busy_chats) || 0;
+    work.helpers += Number(info.running_helpers) || 0;
+    work.waiting += Number(info.waiting_chats) || 0;
     work.dirs.push(dirs[i]);
   });
   return work;
@@ -43,11 +44,15 @@ function limited(promise) {
   return Promise.race([promise.catch(() => null), late]).finally(() => clearTimeout(timer));
 }
 
-// The sheet's line: "2 chats and 1 sub-agent are still working."
-export function workLine(chats, helpers) {
+// The sheet's line: "2 chats and 1 sub-agent are still working. 1 chat is
+// waiting for its usage limit to reset.", or "Nothing is working right now."
+export function workLine(chats, helpers, waiting = 0) {
   const count = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
   const parts = [chats > 0 ? count(chats, "chat") : "", helpers > 0 ? count(helpers, "sub-agent") : ""].filter(Boolean);
-  return `${parts.join(" and ")} ${chats + helpers === 1 ? "is" : "are"} still working.`;
+  const lines = [];
+  if (parts.length) lines.push(`${parts.join(" and ")} ${chats + helpers === 1 ? "is" : "are"} still working.`);
+  if (waiting > 0) lines.push(`${count(waiting, "chat")} ${waiting === 1 ? "is" : "are"} waiting for a usage limit to reset.`);
+  return lines.length ? lines.join(" ") : "Nothing is working right now.";
 }
 
 // What closing this window does: {choice: "window" | "stop" | "cancel",
@@ -64,9 +69,9 @@ export async function askBeforeClose() {
   try {
     if (others > 0) return plain;
     const work = await runningWork();
-    if (work.chats + work.helpers === 0) return plain;
+    if (work.dirs.length === 0) return plain;
     const choice = await new Promise((done) => {
-      if (!openDialog(CLOSE_SHEET, { chats: work.chats, helpers: work.helpers, answer: done })) done("window");
+      if (!openDialog(CLOSE_SHEET, { chats: work.chats, helpers: work.helpers, waiting: work.waiting, answer: done })) done("window");
     });
     answer = { choice, stop: choice === "stop" ? work.dirs : [] };
     return answer;

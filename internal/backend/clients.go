@@ -216,7 +216,7 @@ func (b *Backend) linger(ws *Workspace) {
 // (owner, 2026-10-22: Remote vanished from a chat after clicking another
 // folder's chat; its folder closed with the share still on).
 func workspaceWorking(ws *Workspace) bool {
-	return ws.App != nil && (agent.HasRunningWork(ws.AgentCoordinator) || ws.hasLiveShare())
+	return ws.App != nil && (agent.HasRunningWork(ws.AgentCoordinator) || agent.WaitingChats(ws.AgentCoordinator) > 0 || ws.hasLiveShare())
 }
 
 func anyAppOpen() bool {

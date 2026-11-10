@@ -1,18 +1,18 @@
 <script>
   // The close question (owner, 2026-10-27; sketch "A · inside the app"; asked
-  // by lib/closeask.js): the last window closes while chats or sub-agents
-  // still work. "Close window only" is selected when it opens; ←/→ and Tab
+  // by lib/closeask.js): the last window closes, work or not (owner,
+  // 2026-11-09). "Close window only" is selected when it opens; ←/→ and Tab
   // switch; Enter and Space press the selected button; W, S and C press
   // theirs; Esc cancels. Leaving the sheet any other way cancels too, so the
   // close never waits on a sheet that is gone.
-  //   chats, helpers (counts), answer("window" | "stop" | "cancel")
+  //   chats, helpers, waiting (counts), answer("window" | "stop" | "cancel")
   import { onDestroy } from "svelte";
   import Buttons from "../kit/Buttons.svelte";
   import Sheet from "../kit/Sheet.svelte";
   import { CLOSE_SHEET, workLine } from "../../lib/closeask.js";
   import { closeDialog } from "../../lib/dialogs.js";
 
-  let { chats = 0, helpers = 0, answer = () => {} } = $props();
+  let { chats = 0, helpers = 0, waiting = 0, answer = () => {} } = $props();
 
   const BUTTONS = [
     { id: "cancel", label: "Cancel", key: "c" },
@@ -64,7 +64,7 @@
 
 <Sheet id={CLOSE_SHEET} title="Close Crush" width="small" help={[{ key: "←/→", text: "switch options" }, { key: "enter", text: "confirm" }, { key: "esc", text: "cancel" }]} {onKey}>
   <div class="close">
-    <p class="line">{workLine(chats, helpers)} Keep the engine running, or stop everything?</p>
+    <p class="line">{workLine(chats, helpers, waiting)} Keep the engine running, or stop everything?</p>
     <div class="buttons"><Buttons buttons={BUTTONS} bind:selected onPress={press} /></div>
   </div>
 </Sheet>

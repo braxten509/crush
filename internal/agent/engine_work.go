@@ -32,6 +32,17 @@ func RunningWork(c Coordinator) (chats, helpers int) {
 	return len(co.busySessions()), helpers
 }
 
+// WaitingChats counts c's chats waiting for a usage limit to reset, to be
+// continued then. They keep a closed desktop's engine running like work
+// does (owner, 2026-11-09), so the chat goes on at the reset.
+func WaitingChats(c Coordinator) int {
+	co, ok := c.(*coordinator)
+	if !ok || co == nil {
+		return 0
+	}
+	return co.limitRetries.count()
+}
+
 // StopAllWork ends every chat turn and sub-agent of c for good, as the
 // user's stop does, before the engine exits. A shutdown saves the helpers it
 // cuts off and the chats waiting for a usage limit to reset, for the next

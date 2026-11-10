@@ -21,6 +21,9 @@ type EngineInfo struct {
 	// before its last window closes while either is not 0.
 	BusyChats      int `json:"busy_chats"`
 	RunningHelpers int `json:"running_helpers"`
+	// WaitingChats counts chats waiting for a usage limit to reset; they
+	// keep the engine running after the desktop's last window closes.
+	WaitingChats int `json:"waiting_chats"`
 }
 
 // PromptPending is the prompt_pending event: whether a chat waits for a

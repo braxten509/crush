@@ -191,6 +191,9 @@ func limitRetryNote(at time.Time) string {
 type limitRetries struct {
 	mu      sync.Mutex
 	pending map[string]chan struct{} // closed to drop the retry
+	// firing counts retries sent but not yet back, so a chat is never
+	// uncounted between its wait ending and its turn starting.
+	firing int
 
 	// Test hooks; zero values use the real clock.
 	now  func() time.Time
@@ -235,7 +238,13 @@ func (r *limitRetries) plan(sessionID string, at time.Time, send func()) {
 			return // dropped or replaced as the time came
 		}
 		delete(r.pending, sessionID)
+		r.firing++
 		r.mu.Unlock()
+		defer func() {
+			r.mu.Lock()
+			r.firing--
+			r.mu.Unlock()
+		}()
 		send()
 	}()
 }
@@ -259,6 +268,13 @@ func (r *limitRetries) stopAll() {
 		close(stop)
 		delete(r.pending, sessionID)
 	}
+}
+
+// count is how many chats wait for their usage limit to reset.
+func (r *limitRetries) count() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.pending) + r.firing
 }
 
 // has reports whether the chat already has a planned retry in this Crush.

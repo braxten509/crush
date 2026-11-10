@@ -125,6 +125,7 @@ func (b *Backend) EngineInfo(address string) proto.EngineInfo {
 		chats, helpers := agent.RunningWork(ws.coordinator())
 		info.BusyChats += chats
 		info.RunningHelpers += helpers
+		info.WaitingChats += agent.WaitingChats(ws.coordinator())
 	}
 	if live != 1 {
 		info.WorkspaceID, info.WorkspacePath = "", ""

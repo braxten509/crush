@@ -533,6 +533,18 @@ func (w *AppWorkspace) SetSessionModel(ctx context.Context, sessionID string, mo
 	return w.ops.SetSessionModel(ctx, sessionID, model)
 }
 
+func (w *AppWorkspace) GitBranches(context.Context) (proto.GitBranchesResponse, error) {
+	return w.ops.GitBranches(), nil
+}
+
+func (w *AppWorkspace) SetSessionBranch(ctx context.Context, sessionID, branch string, create bool) (session.Session, error) {
+	return w.ops.SetSessionBranch(ctx, sessionID, branch, create)
+}
+
+func (w *AppWorkspace) CloseSessionBranch(ctx context.Context, sessionID string) (session.Session, error) {
+	return w.ops.CloseSessionBranch(ctx, sessionID)
+}
+
 func (w *AppWorkspace) LockSession(ctx context.Context, sessionID string) (session.Session, error) {
 	return w.ops.LockSession(ctx, sessionID)
 }

@@ -81,6 +81,30 @@ func (c *Client) SetSessionModel(ctx context.Context, id, sessionID string, mode
 	return &sess, nil
 }
 
+// GitBranches lists the current branch and local branches of a workspace.
+func (c *Client) GitBranches(ctx context.Context, id string) (proto.GitBranchesResponse, error) {
+	return newCall(c, rpc.GitBranches, "get git branches", "git branches").at(id).get(ctx)
+}
+
+// SetSessionBranch switches a single chat to branch (creating it when create is true).
+func (c *Client) SetSessionBranch(ctx context.Context, id, sessionID, branch string, create bool) (*proto.Session, error) {
+	sess, err := newCall(c, rpc.SetSessionBranch, "set session branch", "session").at(id, sessionID).
+		do(ctx, proto.SetSessionBranchRequest{Branch: branch, Create: create})
+	if err != nil {
+		return nil, err
+	}
+	return &sess, nil
+}
+
+// CloseSessionBranch cleans up a closed chat's extra folder copy if clean.
+func (c *Client) CloseSessionBranch(ctx context.Context, id, sessionID string) (*proto.Session, error) {
+	sess, err := newCall(c, rpc.CloseSessionBranch, "close session branch", "session").at(id, sessionID).get(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &sess, nil
+}
+
 // LockSession locks a chat, or an unlocked locked chat again (owner,
 // 2026-11-03). It answers with the chat marked locking.
 func (c *Client) LockSession(ctx context.Context, id, sessionID string) (*proto.Session, error) {

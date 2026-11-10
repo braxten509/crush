@@ -545,6 +545,22 @@ func (c *controllerV1) agentEndpoints() []apigen.Endpoint {
 			Fails(400, 404, 500).
 			Build(),
 
+		route(c, rpc.SetSessionBranch, c.setSessionBranch).
+			Summary("Switch a chat to its own Git branch").
+			Tags("sessions").
+			PathParam("id", "Workspace ID").
+			PathParam("sid", "Session ID").
+			Fails(400, 404, 500).
+			Build(),
+
+		route(c, rpc.CloseSessionBranch, c.closeSessionBranch).
+			Summary("Clean up a closed chat's extra folder copy if clean").
+			Tags("sessions").
+			PathParam("id", "Workspace ID").
+			PathParam("sid", "Session ID").
+			Fails(404, 500).
+			Build(),
+
 		route(c, rpc.LockSession, c.lockSession).
 			Summary("Lock a chat into the vault, or lock an unlocked locked chat again").
 			Description("A closed vault opens with the password typed in Crush (409 wrong_password when wrong). Answers at once with the chat marked locking; 409 with the reason while the chat has work running.").
@@ -714,6 +730,13 @@ func (c *controllerV1) configEndpoints() []apigen.Endpoint {
 
 		route(c, rpc.GitBranch, c.getGitBranch).
 			Summary("Get current Git branch").
+			Tags("git").
+			PathParam("id", "Workspace ID").
+			Fails(404, 500).
+			Build(),
+
+		route(c, rpc.GitBranches, c.getGitBranches).
+			Summary("List current and local Git branches").
 			Tags("git").
 			PathParam("id", "Workspace ID").
 			Fails(404, 500).

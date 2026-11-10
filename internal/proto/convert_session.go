@@ -33,6 +33,8 @@ func SessionFromDomain(s session.Session) Session {
 		UpdatedAt:        s.UpdatedAt,
 		ContextBudget:    ContextBudgetFromDomain(s.ContextBudget),
 		Model:            SessionModelFromDomain(s.Model),
+		Branch:           s.Branch,
+		WorkDir:          s.WorkDir,
 		EstimatedUsage:   s.EstimatedUsage,
 		LockState:        s.LockState,
 	}
@@ -61,6 +63,8 @@ func SessionToDomain(s Session) session.Session {
 		UpdatedAt:        s.UpdatedAt,
 		ContextBudget:    ContextBudgetToDomain(s.ContextBudget),
 		Model:            SessionModelToDomain(s.Model),
+		Branch:           s.Branch,
+		WorkDir:          s.WorkDir,
 		EstimatedUsage:   s.EstimatedUsage,
 		LockState:        s.LockState,
 	}

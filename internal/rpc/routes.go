@@ -45,6 +45,7 @@ var (
 	WorkspaceEvents   = Op[Empty, Empty]{Method: get, Path: "/v1/workspaces/{id}/events"}
 	AllUserMessages   = Op[Empty, []proto.Message]{Method: get, Path: "/v1/workspaces/{id}/messages/user"}
 	GitBranch         = Op[Empty, proto.GitBranchResponse]{Method: get, Path: "/v1/workspaces/{id}/git/branch"}
+	GitBranches       = Op[Empty, proto.GitBranchesResponse]{Method: get, Path: "/v1/workspaces/{id}/git/branches"}
 	ProviderUsable    = Op[Empty, proto.ProviderAvailabilityResponse]{Method: get, Path: "/v1/workspaces/{id}/providers/availability"}
 	ProjectNeedsInit  = Op[Empty, proto.ProjectNeedsInitResponse]{Method: get, Path: "/v1/workspaces/{id}/project/needs-init"}
 	ProjectInit       = Op[Empty, Empty]{Method: post, Path: "/v1/workspaces/{id}/project/init"}
@@ -68,6 +69,8 @@ var (
 	SessionUserMessages  = Op[Empty, []proto.Message]{Method: get, Path: "/v1/workspaces/{id}/sessions/{sid}/messages/user"}
 	SetKeptSkill         = Op[proto.SetKeptSkillRequest, proto.Session]{Method: post, Path: "/v1/workspaces/{id}/sessions/{sid}/kept-skills"}
 	SetSessionModel      = Op[proto.SetSessionModelRequest, proto.Session]{Method: post, Path: "/v1/workspaces/{id}/sessions/{sid}/model"}
+	SetSessionBranch     = Op[proto.SetSessionBranchRequest, proto.Session]{Method: post, Path: "/v1/workspaces/{id}/sessions/{sid}/git/branch"}
+	CloseSessionBranch   = Op[Empty, proto.Session]{Method: del, Path: "/v1/workspaces/{id}/sessions/{sid}/git/branch"}
 	// Locked chats (owner, 2026-11-03): both answer at once with the chat
 	// marked locking or unlocking; the rest arrives as session events.
 	LockSession   = Op[proto.LockSessionRequest, proto.Session]{Method: post, Path: "/v1/workspaces/{id}/sessions/{sid}/lock"}

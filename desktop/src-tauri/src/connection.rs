@@ -275,6 +275,7 @@ const ROUTES: &[(&str, &str)] = &[
     ("POST", "/v1/local-models/unload"),
     ("GET", "agent"),
     ("GET", "git/branch"),
+    ("GET", "git/branches"),
     ("GET", "providers/availability"),
     ("GET", "lsps"),
     ("GET", "mcp/states"),
@@ -292,6 +293,8 @@ const ROUTES: &[(&str, &str)] = &[
     ("GET", "sessions/{sid}/filetracker/files"),
     ("POST", "sessions/{sid}/kept-skills"),
     ("POST", "sessions/{sid}/model"),
+    ("POST", "sessions/{sid}/git/branch"),
+    ("DELETE", "sessions/{sid}/git/branch"),
     // Locked chats (owner, 2026-11-03).
     ("POST", "sessions/{sid}/lock"),
     ("POST", "sessions/{sid}/unlock"),
@@ -2549,6 +2552,7 @@ mod tests {
         design.extend(LAST_PICK_ROUTES.iter().copied());
         design.extend(LOCK_ROUTES.iter().copied());
         design.extend([("GET", "/v1/local-models"), ("POST", "/v1/local-models/load"), ("POST", "/v1/local-models/unload")]);
+        design.extend([("GET", "git/branches"), ("POST", "sessions/{sid}/git/branch"), ("DELETE", "sessions/{sid}/git/branch")]);
         design.sort();
         assert_eq!(listed, design, "the route list is design 1.3's table, 5-6's 6.5, the fallback, other-folder, catalog and last-pick routes, no more and no less");
         for (method, pattern) in ROUTES {

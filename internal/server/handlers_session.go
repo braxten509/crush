@@ -137,6 +137,24 @@ func (c *controllerV1) setSessionModel(r *http.Request, req proto.SetSessionMode
 	return proto.SessionFromDomain(sess), nil
 }
 
+// getGitBranches lists the current branch and local branches of the workspace.
+func (c *controllerV1) getGitBranches(r *http.Request, _ rpc.Empty) (proto.GitBranchesResponse, error) {
+	return c.backend.GitBranches(r.PathValue("id"))
+}
+
+// setSessionBranch switches a single chat to a branch (creating it when
+// req.Create is true).
+func (c *controllerV1) setSessionBranch(r *http.Request, req proto.SetSessionBranchRequest) (proto.Session, error) {
+	sess, err := c.backend.SetSessionBranch(r.Context(), r.PathValue("id"), r.PathValue("sid"), req.Branch, req.Create)
+	return c.sessionResult(r, sess, err)
+}
+
+// closeSessionBranch cleans up a closed chat's extra folder copy if clean.
+func (c *controllerV1) closeSessionBranch(r *http.Request, _ rpc.Empty) (proto.Session, error) {
+	sess, err := c.backend.CloseSessionBranch(r.Context(), r.PathValue("id"), r.PathValue("sid"))
+	return c.sessionResult(r, sess, err)
+}
+
 // lockSession locks a chat (owner, 2026-11-03).
 func (c *controllerV1) lockSession(r *http.Request, req proto.LockSessionRequest) (proto.Session, error) {
 	sess, err := c.backend.LockSession(r.Context(), r.PathValue("id"), r.PathValue("sid"), req.Password)

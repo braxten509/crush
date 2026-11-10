@@ -43,6 +43,81 @@
     const id = sessions.currentId ? parentOf(sessions.currentId) : null;
     return id && sessions.byId[id] ? { id, title: sessions.byId[id].title || "New Session" } : null;
   });
+  const activeBranch = $derived.by(() => {
+    const sid = sessions.currentId;
+    const chatBranch = sid ? sessions.byId[sid]?.branch : "";
+    return chatBranch || ws.branch || "";
+  });
+
+  let branchMenuOpen = $state(false);
+  let branchList = $state([]);
+  let creatingBranch = $state(false);
+  let newBranchName = $state("");
+  let branchSaving = $state(false);
+  let branchWrap = $state(null);
+
+  async function toggleBranchMenu() {
+    if (!sessions.currentId) return;
+    if (branchMenuOpen) {
+      branchMenuOpen = false;
+      creatingBranch = false;
+      newBranchName = "";
+      return;
+    }
+    branchMenuOpen = true;
+    creatingBranch = false;
+    newBranchName = "";
+    try {
+      const res = await api.gitBranches(sessions.currentId);
+      branchList = Array.isArray(res?.branches) ? res.branches : [];
+    } catch {
+      branchList = activeBranch ? [activeBranch] : [];
+    }
+  }
+
+  async function pickBranch(branch, create = false) {
+    const sid = sessions.currentId;
+    const target = String(branch ?? "").trim();
+    if (!sid || !target || branchSaving) return;
+    branchSaving = true;
+    try {
+      const updated = await api.setSessionBranch(sid, { branch: target, create });
+      if (updated?.id && sessions.byId[updated.id]) {
+        sessions.byId[updated.id] = { ...sessions.byId[updated.id], ...updated };
+      }
+      branchMenuOpen = false;
+      creatingBranch = false;
+      newBranchName = "";
+    } catch (error) {
+      notify("error", error?.message ?? String(error));
+    } finally {
+      branchSaving = false;
+    }
+  }
+
+  $effect(() => {
+    if (!branchMenuOpen) return;
+    function onPointerDown(ev) {
+      if (branchWrap && !branchWrap.contains(ev.target)) {
+        branchMenuOpen = false;
+        creatingBranch = false;
+        newBranchName = "";
+      }
+    }
+    function onKeyDown(ev) {
+      if (ev.key === "Escape") {
+        branchMenuOpen = false;
+        creatingBranch = false;
+        newBranchName = "";
+      }
+    }
+    window.addEventListener("pointerdown", onPointerDown, true);
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown, true);
+      window.removeEventListener("keydown", onKeyDown, true);
+    };
+  });
 
   async function exportChat() {
     const sid = sessions.currentId;
@@ -86,8 +161,69 @@
       <span class="path branched" data-probe="title-branch">
         <span class="from">{"Branched from "}</span><button class="parent" type="button" tabindex="-1" title="{isClosed(parent.id) ? 'Reopen' : 'Open'} {parent.title}" onclick={openParent}><span class="parent-title">{parent.title}</span></button>
       </span>
-    {:else if ws.branch}
-      <span class="path" data-probe="title-branch" title="Git branch">{ws.branch}</span>
+    {:else if activeBranch}
+      <span class="branch-wrap" bind:this={branchWrap}>
+        {#if sessions.currentId}
+          <button
+            type="button"
+            tabindex="-1"
+            class="path branch-btn"
+            data-probe="title-branch"
+            title="Switch branch for this chat"
+            aria-expanded={branchMenuOpen}
+            onclick={toggleBranchMenu}
+          >{activeBranch}</button>
+        {:else}
+          <span class="path" data-probe="title-branch" title="Git branch">{activeBranch}</span>
+        {/if}
+        {#if branchMenuOpen}
+          <div class="branch-menu" data-probe="title-branch-menu" role="menu">
+            {#each branchList as b (b)}
+              <button
+                type="button"
+                class="branch-item"
+                class:current={b === activeBranch}
+                role="menuitem"
+                disabled={branchSaving}
+                onclick={() => pickBranch(b, false)}
+              >
+                <span class="branch-check">{b === activeBranch ? "✓" : ""}</span>
+                <span class="branch-name">{b}</span>
+              </button>
+            {/each}
+            <div class="branch-sep"></div>
+            {#if creatingBranch}
+              <form
+                class="branch-new-form"
+                onsubmit={(ev) => {
+                  ev.preventDefault();
+                  pickBranch(newBranchName, true);
+                }}
+              >
+                <input
+                  type="text"
+                  class="branch-new-input"
+                  placeholder="New branch name"
+                  bind:value={newBranchName}
+                  disabled={branchSaving}
+                  autofocus
+                />
+              </form>
+            {:else}
+              <button
+                type="button"
+                class="branch-item branch-create"
+                role="menuitem"
+                disabled={branchSaving}
+                onclick={() => (creatingBranch = true)}
+              >
+                <span class="branch-check">+</span>
+                <span class="branch-name">New branch…</span>
+              </button>
+            {/if}
+          </div>
+        {/if}
+      </span>
     {/if}
     </span>
     <span class="buttons">
@@ -215,6 +351,94 @@
     letter-spacing: var(--track-path);
     text-transform: uppercase;
     color: var(--slate);
+  }
+  .branch-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: baseline;
+    flex: 0 5 auto;
+    min-width: 0;
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
+  }
+  .branch-btn {
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: pointer;
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
+  }
+  .branch-btn:hover {
+    color: var(--ink);
+  }
+  .branch-menu {
+    position: absolute;
+    top: calc(100% + 6 * var(--px));
+    left: calc(15 * var(--px));
+    z-index: 80;
+    min-width: calc(180 * var(--px));
+    max-width: calc(280 * var(--px));
+    max-height: calc(260 * var(--px));
+    overflow-y: auto;
+    padding: calc(4 * var(--px));
+    background: var(--paper-raised, var(--paper));
+    border: 1px solid var(--rule);
+    border-radius: calc(6 * var(--px));
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.14);
+    font: var(--t-item);
+    letter-spacing: normal;
+    text-transform: none;
+    color: var(--ink);
+  }
+  .branch-item {
+    display: flex;
+    align-items: center;
+    gap: calc(6 * var(--px));
+    width: 100%;
+    padding: calc(5 * var(--px)) calc(8 * var(--px));
+    border: 0;
+    border-radius: calc(4 * var(--px));
+    background: none;
+    font: inherit;
+    color: var(--ink);
+    text-align: left;
+    cursor: pointer;
+  }
+  .branch-item:hover {
+    background: var(--control-hover);
+  }
+  .branch-item.current {
+    font-weight: 500;
+  }
+  .branch-check {
+    flex: none;
+    width: calc(14 * var(--px));
+    color: var(--slate);
+    text-align: center;
+  }
+  .branch-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .branch-sep {
+    height: 1px;
+    margin: calc(4 * var(--px)) 0;
+    background: var(--rule-faint);
+  }
+  .branch-new-form {
+    padding: calc(4 * var(--px));
+  }
+  .branch-new-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: calc(4 * var(--px)) calc(6 * var(--px));
+    border: 1px solid var(--rule);
+    border-radius: calc(4 * var(--px));
+    background: var(--paper);
+    font: inherit;
+    color: var(--ink);
   }
   /* On a branch: "Branched from " keeps its width and a long parent title is
      cut with "…" (a button draws its text in an inner box, so the cut is on

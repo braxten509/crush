@@ -81,7 +81,11 @@ func (h *taskHub) background(req TaskRequest) TaskReply {
 			input = tools.JobOutputParams{ShellID: id}
 		}
 	} else {
-		tool = shelltool.NewBashTool(h.c.permissions, h.c.cfg.WorkingDir(), options.DataDirectory, options.Attribution, options.GetMaxBackgroundJobs(), h.c.cfg.Config().Permissions, reportStartedJob)
+		workDir := h.c.cfg.WorkingDir()
+		if chat, err := h.c.sessions.Get(ctx, req.Session); err == nil && chat.WorkDir != "" {
+			workDir = chat.WorkDir
+		}
+		tool = shelltool.NewBashTool(h.c.permissions, workDir, options.DataDirectory, options.Attribution, options.GetMaxBackgroundJobs(), h.c.cfg.Config().Permissions, reportStartedJob)
 		input = tools.BashParams{Command: params.Command, WorkingDir: params.WorkingDir, Description: params.Name, RunInBackground: true}
 	}
 	// The secrets guard, then the tool hooks, as on an agent's own tools.

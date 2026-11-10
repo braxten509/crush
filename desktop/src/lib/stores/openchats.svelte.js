@@ -7,7 +7,7 @@
 // change made here. A deleted chat leaves the list.
 import { untrack } from "svelte";
 import { openChatsAdd, openChatsGet, openChatsRemove } from "../engine/commands.js";
-import { setChatFolder } from "../engine/api.js";
+import { api, setChatFolder } from "../engine/api.js";
 import { onEvent, onFolderResync } from "../engine/events.js";
 import { chatClosed } from "../remote/share.js";
 import { conn, inFolder, joinedFolder, switchFolder } from "./connection.svelte.js";
@@ -151,6 +151,7 @@ function leaveShown(id) {
 export async function closeListed(id) {
   if (!id) return false;
   const wasShown = sessions.currentId === id;
+  api.closeSessionBranch(id).catch(() => {});
   openChats.list = openChats.list.filter((c) => c.id !== id);
   chatClosed(id);
   if (wasShown) {

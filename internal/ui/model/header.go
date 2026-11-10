@@ -177,6 +177,9 @@ func renderHeaderDetails(
 	workingDir := com.Workspace.WorkingDir()
 	cwd := t.Header.WorkingDir.Render(fsext.DirTrim(fsext.PrettyPath(workingDir), dirTrimLimit))
 
+	if session != nil && session.Branch != "" {
+		gitBranch = session.Branch
+	}
 	if gitBranch != "" {
 		// Reserve space for the separator between branch and path and
 		// at least some of the path.

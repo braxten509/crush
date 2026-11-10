@@ -19,13 +19,20 @@ import (
 // allowed, then the MCP tools it is allowed, sorted by name, guarded and
 // wrapped with the tool hooks.
 func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, isSubAgent bool) ([]fantasy.AgentTool, error) {
+	return c.buildToolsInDir(ctx, agent, isSubAgent, c.cfg.WorkingDir())
+}
+
+func (c *coordinator) buildToolsInDir(ctx context.Context, agent config.Agent, isSubAgent bool, workingDir string) ([]fantasy.AgentTool, error) {
+	if workingDir == "" {
+		workingDir = c.cfg.WorkingDir()
+	}
 	allowed := c.buildableToolNames(agent, isSubAgent)
 	allTools, err := c.subAgentTools(ctx, agent, allowed)
 	if err != nil {
 		return nil, err
 	}
 
-	allTools = append(allTools, c.builtinTools(allowed)...)
+	allTools = append(allTools, c.builtinToolsInDir(allowed, workingDir)...)
 
 	var filteredTools []fantasy.AgentTool
 	for _, tool := range allTools {
@@ -33,7 +40,7 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent, isSubA
 			filteredTools = append(filteredTools, tool)
 		}
 	}
-	filteredTools = append(filteredTools, c.allowedMCPTools(agent)...)
+	filteredTools = append(filteredTools, c.allowedMCPToolsInDir(agent, workingDir)...)
 	slices.SortFunc(filteredTools, func(a, b fantasy.AgentTool) int {
 		return strings.Compare(a.Info().Name, b.Info().Name)
 	})
@@ -101,26 +108,30 @@ func (c *coordinator) subAgentTools(ctx context.Context, agent config.Agent, all
 
 // builtinTools builds every built-in tool the agent could be allowed.
 func (c *coordinator) builtinTools(allowed []string) []fantasy.AgentTool {
+	return c.builtinToolsInDir(allowed, c.cfg.WorkingDir())
+}
+
+func (c *coordinator) builtinToolsInDir(allowed []string, workingDir string) []fantasy.AgentTool {
 	cfg := c.cfg.Config()
 	logFile := filepath.Join(cfg.Options.DataDirectory, "logs", "crush.log")
 
 	allTools := []fantasy.AgentTool{
-		shelltool.NewBashTool(c.permissions, c.cfg.WorkingDir(), cfg.Options.DataDirectory, cfg.Options.Attribution, cfg.Options.GetMaxBackgroundJobs(), cfg.Permissions, reportStartedJob),
+		shelltool.NewBashTool(c.permissions, workingDir, cfg.Options.DataDirectory, cfg.Options.Attribution, cfg.Options.GetMaxBackgroundJobs(), cfg.Permissions, reportStartedJob),
 		tools.NewCrushInfoTool(c.cfg, c.lspManager, c.allSkills, c.activeSkills, c.skillTracker),
 		tools.NewCrushLogsTool(logFile),
 		shelltool.NewJobOutputTool(c.cfg.Config().Options.DataDirectory),
 		shelltool.NewJobKillTool(),
-		webtool.NewDownloadTool(c.permissions, c.cfg.WorkingDir(), nil),
-		tools.NewEditTool(c.lspManager, c.permissions, c.history, c.filetracker, c.cfg.WorkingDir()),
-		tools.NewMultiEditTool(c.lspManager, c.permissions, c.history, c.filetracker, c.cfg.WorkingDir()),
-		webtool.NewFetchTool(c.permissions, c.cfg.WorkingDir(), nil),
-		tools.NewGlobTool(c.cfg.WorkingDir(), c.cfg.Config().Tools.Glob),
-		tools.NewGrepTool(c.cfg.WorkingDir(), c.cfg.Config().Tools.Grep),
-		tools.NewLsTool(c.permissions, c.cfg.WorkingDir(), c.cfg.Config().Tools.Ls),
+		webtool.NewDownloadTool(c.permissions, workingDir, nil),
+		tools.NewEditTool(c.lspManager, c.permissions, c.history, c.filetracker, workingDir),
+		tools.NewMultiEditTool(c.lspManager, c.permissions, c.history, c.filetracker, workingDir),
+		webtool.NewFetchTool(c.permissions, workingDir, nil),
+		tools.NewGlobTool(workingDir, c.cfg.Config().Tools.Glob),
+		tools.NewGrepTool(workingDir, c.cfg.Config().Tools.Grep),
+		tools.NewLsTool(c.permissions, workingDir, c.cfg.Config().Tools.Ls),
 		webtool.NewSourcegraphTool(nil),
 		tools.NewTodosTool(c.sessions),
-		tools.NewViewTool(c.lspManager, c.permissions, c.filetracker, c.skillTracker, c.cfg.WorkingDir(), c.cfg.Config().Options.SkillsPaths...),
-		tools.NewWriteTool(c.lspManager, c.permissions, c.history, c.filetracker, c.cfg.WorkingDir()),
+		tools.NewViewTool(c.lspManager, c.permissions, c.filetracker, c.skillTracker, workingDir, c.cfg.Config().Options.SkillsPaths...),
+		tools.NewWriteTool(c.lspManager, c.permissions, c.history, c.filetracker, workingDir),
 	}
 
 	// Interactive-only, and never given to sub-agents; effectiveToolNames
@@ -139,8 +150,8 @@ func (c *coordinator) builtinTools(allowed []string) []fantasy.AgentTool {
 			tools.NewSymbolsTool(c.lspManager),
 			tools.NewDefinitionTool(c.lspManager),
 			tools.NewCallHierarchyTool(c.lspManager),
-			tools.NewRenameTool(c.lspManager, c.permissions, c.history, c.filetracker, c.cfg.WorkingDir()),
-			tools.NewReplaceSymbolTool(c.lspManager, c.permissions, c.history, c.filetracker, c.cfg.WorkingDir()),
+			tools.NewRenameTool(c.lspManager, c.permissions, c.history, c.filetracker, workingDir),
+			tools.NewReplaceSymbolTool(c.lspManager, c.permissions, c.history, c.filetracker, workingDir),
 		)
 	}
 
@@ -156,8 +167,12 @@ func (c *coordinator) builtinTools(allowed []string) []fantasy.AgentTool {
 
 // allowedMCPTools returns the registered MCP tools the agent may use.
 func (c *coordinator) allowedMCPTools(agent config.Agent) []fantasy.AgentTool {
+	return c.allowedMCPToolsInDir(agent, c.cfg.WorkingDir())
+}
+
+func (c *coordinator) allowedMCPToolsInDir(agent config.Agent, workingDir string) []fantasy.AgentTool {
 	var allowed []fantasy.AgentTool
-	for _, tool := range tools.GetMCPTools(c.permissions, c.cfg, c.cfg.WorkingDir()) {
+	for _, tool := range tools.GetMCPTools(c.permissions, c.cfg, workingDir) {
 		if agent.AllowedMCP == nil {
 			// No MCP restrictions
 			allowed = append(allowed, tool)

@@ -869,6 +869,26 @@ func (w *ClientWorkspace) SetSessionModel(ctx context.Context, sessionID string,
 	return proto.SessionToDomain(*sess), nil
 }
 
+func (w *ClientWorkspace) GitBranches(ctx context.Context) (proto.GitBranchesResponse, error) {
+	return w.client.GitBranches(ctx, w.workspaceID())
+}
+
+func (w *ClientWorkspace) SetSessionBranch(ctx context.Context, sessionID, branch string, create bool) (session.Session, error) {
+	sess, err := w.client.SetSessionBranch(ctx, w.workspaceID(), sessionID, branch, create)
+	if err != nil {
+		return session.Session{}, err
+	}
+	return proto.SessionToDomain(*sess), nil
+}
+
+func (w *ClientWorkspace) CloseSessionBranch(ctx context.Context, sessionID string) (session.Session, error) {
+	sess, err := w.client.CloseSessionBranch(ctx, w.workspaceID(), sessionID)
+	if err != nil {
+		return session.Session{}, err
+	}
+	return proto.SessionToDomain(*sess), nil
+}
+
 func (w *ClientWorkspace) LockSession(ctx context.Context, sessionID string) (session.Session, error) {
 	sess, err := w.client.LockSession(ctx, w.workspaceID(), sessionID)
 	if err != nil {

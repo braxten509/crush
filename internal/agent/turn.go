@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"github.com/charmbracelet/crush/internal/agent/tools/mcp"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/csync"
+	"github.com/charmbracelet/crush/internal/gitutil"
 	"github.com/charmbracelet/crush/internal/hooks"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/session"
@@ -39,11 +41,13 @@ type turn struct {
 	ac     *activeCancel
 
 	// chatModel is the model snapshot the whole turn runs on.
-	chatModel    Model
-	cliModel     *cliagent.Model
-	isCLI        bool
-	promptPrefix string
-	fileReview   *turnFileReview
+	chatModel        Model
+	cliModel         *cliagent.Model
+	isCLI            bool
+	workDir          string
+	mainBranchBefore string
+	promptPrefix     string
+	fileReview       *turnFileReview
 
 	// queuedAgain is set when the call went (back) into the queue, which
 	// then owns its headless lifetime reservation.
@@ -417,8 +421,8 @@ func (t *turn) run() (*fantasy.AgentResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	workingDir := ""
-	if a.cfg != nil {
+	workingDir := t.workDir
+	if workingDir == "" && a.cfg != nil {
 		workingDir = a.cfg.WorkingDir()
 	}
 	if reason := KimiUnusable(t.chatModel.ModelCfg.Provider, workingDir); reason != "" {
@@ -471,6 +475,7 @@ func (t *turn) run() (*fantasy.AgentResult, error) {
 	t.fileReview = a.startFileReview(t.genCtx, t.call.SessionID, t.chatModel)
 	defer t.fileReview.finish(t.ctx)
 	result, err := stream(t.genCtx, streamCall)
+	t.syncSessionBranch()
 
 	a.eventPromptResponded(t.call.SessionID, t.chatModel, time.Since(startTime).Truncate(time.Second))
 
@@ -509,8 +514,25 @@ func (t *turn) buildSystemPrompt() ([]fantasy.AgentTool, string, error) {
 	if chat, err := a.sessions.Get(t.ctx, t.call.SessionID); err == nil {
 		t.currentSession = chat
 	}
+	t.workDir, t.mainBranchBefore = a.sessionWorkingDir(t.ctx, t.call.SessionID)
+	if t.workDir != "" && a.cfg != nil && t.workDir != a.cfg.WorkingDir() && a.toolsForDir != nil {
+		if dirTools, err := a.toolsForDir(t.ctx, t.workDir); err == nil {
+			agentTools = filterToolsForChannel(dirTools, t.call.Channel, mcp.GetStates())
+		}
+	}
 	t.cliModel, t.isCLI = t.chatModel.Model.(*cliagent.Model)
+	if t.isCLI && t.cliModel != nil && t.workDir != "" {
+		cmCopy := *t.cliModel
+		cmCopy.Dir = t.workDir
+		t.cliModel = &cmCopy
+		t.chatModel.Model = t.cliModel
+	}
 	systemPrompt := a.systemPrompt.Get()
+	if t.workDir != "" && a.cfg != nil && t.workDir != a.cfg.WorkingDir() {
+		mainSlash := filepath.ToSlash(a.cfg.WorkingDir())
+		workSlash := filepath.ToSlash(t.workDir)
+		systemPrompt = strings.ReplaceAll(systemPrompt, "Working directory: "+mainSlash, "Working directory: "+workSlash)
+	}
 	systemPrompt = withCurrentSkillPolicy(systemPrompt, currentSkillPolicy(a.cfg))
 	if note := memoryStatus().AgentNote(); note != "" && !t.isCLI {
 		// CLI agents get the note with their turn's text instead.
@@ -550,6 +572,31 @@ func (t *turn) buildSystemPrompt() ([]fantasy.AgentTool, string, error) {
 		}
 	}
 	return agentTools, systemPrompt, nil
+}
+
+// syncSessionBranch isolates a branch switch that happened in the main folder
+// into this chat's own folder copy, or records a branch switch that happened
+// inside this chat's folder copy.
+func (t *turn) syncSessionBranch() {
+	a := t.a
+	if a.cfg == nil || a.sessions == nil || t.call.SessionID == "" {
+		return
+	}
+	if t.mainBranchBefore != "" {
+		if wtDir, moved := a.isolateBranchSwitch(t.ctx, t.call.SessionID, t.mainBranchBefore); moved {
+			t.workDir = wtDir
+			t.mainBranchBefore = ""
+			if t.cliModel != nil {
+				t.cliModel.Dir = wtDir
+			}
+		}
+		return
+	}
+	if t.workDir != "" && t.workDir != a.cfg.WorkingDir() {
+		if cur := gitutil.CurrentBranch(t.workDir); cur != "" && cur != t.currentSession.Branch {
+			_, _ = a.sessions.SetBranch(t.ctx, t.call.SessionID, cur, t.workDir)
+		}
+	}
 }
 
 // loadHistory loads the session and its messages, starts titling a new

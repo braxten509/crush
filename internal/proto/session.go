@@ -39,6 +39,8 @@ type Session struct {
 	UpdatedAt        int64           `json:"updated_at"`
 	ContextBudget    *ContextBudget  `json:"context_budget,omitempty"` // nil when the domain Provider is ""
 	Model            json.RawMessage `json:"model,omitempty"`          // config.SelectedModel: the model this chat owns
+	Branch           string          `json:"branch,omitempty"`         // Git branch this chat runs on
+	WorkDir          string          `json:"work_dir,omitempty"`       // separate folder copy when on another branch
 	EstimatedUsage   bool            `json:"estimated_usage"`
 	// LockState is "" for a normal chat, or locking, locked, unlocking,
 	// unlocked or relock (owner, 2026-11-03: locked chats).
@@ -62,6 +64,18 @@ type ContextBudget struct {
 // config.SelectedModel, so a model picked in a chat never reaches another.
 type SetSessionModelRequest struct {
 	Model json.RawMessage `json:"model"`
+}
+
+// GitBranchesResponse lists the local Git branches and the main folder's branch.
+type GitBranchesResponse struct {
+	Current  string   `json:"current"`
+	Branches []string `json:"branches"`
+}
+
+// SetSessionBranchRequest switches or creates the Git branch one chat runs on.
+type SetSessionBranchRequest struct {
+	Branch string `json:"branch"`
+	Create bool   `json:"create,omitempty"`
 }
 
 // LockSessionRequest locks a chat. Password is the vault password typed

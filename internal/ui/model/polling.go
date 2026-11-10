@@ -94,9 +94,18 @@ func (m *UI) hyperCreditsTicker() tea.Cmd {
 // path. A failed read keeps whatever the last poll reported.
 func (m *UI) fetchGitBranch() tea.Cmd {
 	ws := m.com.Workspace
+	var sessionID string
+	if m.session != nil {
+		sessionID = m.session.ID
+	}
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), gitBranchFetchTimeout)
 		defer cancel()
+		if sessionID != "" {
+			if sess, err := ws.GetSession(ctx, sessionID); err == nil && sess.Branch != "" {
+				return gitBranchUpdatedMsg{branch: sess.Branch}
+			}
+		}
 		branch, err := ws.GitBranch(ctx)
 		if err != nil {
 			slog.Warn("Failed to read the git branch", "error", err)

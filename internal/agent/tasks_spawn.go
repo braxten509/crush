@@ -22,6 +22,7 @@ import (
 	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/agent/tools/shelltool"
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/gitutil"
 )
 
 // cliName is the short name agents use for a CLI provider type.
@@ -110,6 +111,18 @@ func (h *taskHub) spawn(req TaskRequest) (*Task, error) {
 		return nil, err
 	}
 	selected.Account = h.taskAccount(req.Session, *provider, "")
+	var parentBranch string
+	if h.c != nil && h.c.sessions != nil && h.c.cfg != nil {
+		if chat, err := h.c.sessions.Get(ctx, req.Session); err == nil && chat.Branch != "" {
+			parentBranch = chat.Branch
+			if req.Dir == "" && h.c.cfg.Config() != nil && h.c.cfg.Config().Options != nil {
+				wtDir, _ := gitutil.EnsureChatWorktree(h.c.cfg.WorkingDir(), h.c.cfg.Config().Options.DataDirectory, req.Session, chat.Branch, chat.WorkDir)
+				if wtDir != "" && wtDir != h.c.cfg.WorkingDir() {
+					req.Dir = wtDir
+				}
+			}
+		}
+	}
 	if req.Dir != "" {
 		if info, err := os.Stat(req.Dir); err != nil || !info.IsDir() || !filepath.IsAbs(req.Dir) {
 			return nil, fmt.Errorf("the folder %q is not there", req.Dir)
@@ -124,6 +137,9 @@ func (h *taskHub) spawn(req TaskRequest) (*Task, error) {
 	child, err := h.c.sessions.CreateTaskSession(ctx, uuid.NewString(), req.Session, name)
 	if err != nil {
 		return nil, err
+	}
+	if parentBranch != "" && req.Dir != "" {
+		_, _ = h.c.sessions.SetBranch(ctx, child.ID, parentBranch, req.Dir)
 	}
 	// The worker's chat keeps the worker's own model, not its parent's.
 	if choice, err := json.Marshal(selected); err == nil {
@@ -216,8 +232,9 @@ func (h *taskHub) subAgent(ctx context.Context, provider config.ProviderConfig, 
 		titles:               &h.c.titles,
 	})
 	if !config.IsCLIProviderType(provider.Type) {
+		workDir := cmp.Or(dir, h.c.cfg.WorkingDir())
 		agentCfg := apiSubAgentConfig(h.c.cfg.Config().Agents, readOnly)
-		nativeTools, err := h.c.buildTools(ctx, agentCfg, true)
+		nativeTools, err := h.c.buildToolsInDir(ctx, agentCfg, true, workDir)
 		if err != nil {
 			return nil, Model{}, err
 		}
@@ -229,7 +246,7 @@ func (h *taskHub) subAgent(ctx context.Context, provider config.ProviderConfig, 
 		if !readOnly {
 			buildPrompt = coderPrompt
 		}
-		p, err := buildPrompt(agentprompt.WithWorkingDir(h.c.cfg.WorkingDir()))
+		p, err := buildPrompt(agentprompt.WithWorkingDir(workDir))
 		if err != nil {
 			return nil, Model{}, err
 		}

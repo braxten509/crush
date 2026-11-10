@@ -102,6 +102,59 @@ func (o Ops) GitBranch() string {
 	return gitutil.CurrentBranch(o.Cfg.WorkingDir())
 }
 
+// GitBranches returns the current Git branch and all local branch names of
+// the working directory.
+func (o Ops) GitBranches() proto.GitBranchesResponse {
+	dir := o.Cfg.WorkingDir()
+	return proto.GitBranchesResponse{
+		Current:  gitutil.CurrentBranch(dir),
+		Branches: gitutil.Branches(dir),
+	}
+}
+
+// SetSessionBranch switches a single chat to branch (creating it when
+// create is true) inside its own folder copy when branch differs from the
+// main project folder's branch.
+func (o Ops) SetSessionBranch(ctx context.Context, sessionID, branch string, create bool) (session.Session, error) {
+	if o.IsSessionBusy(sessionID) {
+		return session.Session{}, errors.New("cannot switch branch while the chat is busy")
+	}
+	mainDir := o.Cfg.WorkingDir()
+	var dataDir string
+	if o.Cfg.Config() != nil && o.Cfg.Config().Options != nil {
+		dataDir = o.Cfg.Config().Options.DataDirectory
+	}
+	resolvedBranch, workDir, err := gitutil.SwitchChatBranch(mainDir, dataDir, sessionID, branch, create)
+	if err != nil {
+		return session.Session{}, err
+	}
+	return o.App.Sessions.SetBranch(ctx, sessionID, resolvedBranch, workDir)
+}
+
+// CloseSessionBranch removes a closed chat's extra folder copy if it has no
+// unsaved file edits, while keeping its branch name saved so reopening the
+// chat recreates the folder copy automatically.
+func (o Ops) CloseSessionBranch(ctx context.Context, sessionID string) (session.Session, error) {
+	sess, err := o.App.Sessions.Get(ctx, sessionID)
+	if err != nil {
+		return session.Session{}, err
+	}
+	if o.IsSessionBusy(sessionID) || sess.WorkDir == "" {
+		return sess, nil
+	}
+	mainDir := o.Cfg.WorkingDir()
+	if sess.WorkDir == mainDir {
+		return o.App.Sessions.SetBranch(ctx, sessionID, sess.Branch, "")
+	}
+	if err := gitutil.CleanupChatWorktree(mainDir, sess.WorkDir); err != nil {
+		if errors.Is(err, gitutil.ErrDirtyWorktree) {
+			return sess, nil
+		}
+		return sess, err
+	}
+	return o.App.Sessions.SetBranch(ctx, sessionID, sess.Branch, "")
+}
+
 // ProviderAvailability says, by provider id, why a provider cannot run in
 // the workspace's folder. Empty when every provider can run.
 func (o Ops) ProviderAvailability() map[string]string {

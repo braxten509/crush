@@ -30,6 +30,7 @@ import (
 	"github.com/charmbracelet/crush/internal/agent/notify"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/csync"
+	"github.com/charmbracelet/crush/internal/gitutil"
 	"github.com/charmbracelet/crush/internal/hooks"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/permission"
@@ -266,6 +267,7 @@ type sessionAgent struct {
 	// not reach another).
 	chatModels   chatModelCache
 	newChatModel func() (config.SelectedModel, bool)
+	toolsForDir  func(ctx context.Context, workingDir string) ([]fantasy.AgentTool, error)
 }
 
 // chatModelBuilder builds a model from a chat's saved choice.
@@ -325,6 +327,8 @@ type SessionAgentOptions struct {
 	// NewChatModel is the model a chat that has none starts on (the last
 	// pick); it is saved with the chat.
 	NewChatModel func() (config.SelectedModel, bool)
+	// ToolsForDir builds the agent's tools rooted in a chat's branch folder copy.
+	ToolsForDir func(ctx context.Context, workingDir string) ([]fantasy.AgentTool, error)
 	// titles is shared by a coordinator's agents so one drain covers all.
 	titles *titleTracker
 	// modelsGen is the coordinator's credential generation: when it moves,
@@ -355,6 +359,7 @@ func NewSessionAgent(
 		titles:               cmp.Or(opts.titles, new(titleTracker)),
 		chatModels:           chatModelCache{build: opts.ModelFor, byKey: map[string]Model{}, gen: opts.modelsGen},
 		newChatModel:         opts.NewChatModel,
+		toolsForDir:          opts.ToolsForDir,
 	}
 	if opts.modelsGen != nil {
 		a.chatModels.seen = opts.modelsGen.Load()
@@ -786,6 +791,69 @@ func (a *sessionAgent) SetTools(tools []fantasy.AgentTool) {
 
 func (a *sessionAgent) SetSystemPrompt(systemPrompt string) {
 	a.systemPrompt.Set(systemPrompt)
+}
+
+// sessionWorkingDir returns the folder a chat runs in (its own branch folder
+// copy when set, recreating it if it was cleaned up on close, or the main
+// project folder) and the main folder's branch before the turn when the chat
+// is running directly in the main folder.
+func (a *sessionAgent) sessionWorkingDir(ctx context.Context, sessionID string) (string, string) {
+	if a.cfg == nil {
+		return "", ""
+	}
+	mainDir := a.cfg.WorkingDir()
+	dataDir := ""
+	if a.cfg.Config() != nil && a.cfg.Config().Options != nil {
+		dataDir = a.cfg.Config().Options.DataDirectory
+	}
+	if a.sessions == nil || sessionID == "" {
+		return mainDir, gitutil.CurrentBranch(mainDir)
+	}
+	curID := sessionID
+	for range 8 {
+		chat, err := a.sessions.Get(ctx, curID)
+		if err != nil {
+			break
+		}
+		if chat.Branch != "" && dataDir != "" {
+			wtDir, actual := gitutil.EnsureChatWorktree(mainDir, dataDir, curID, chat.Branch, chat.WorkDir)
+			if wtDir != "" && wtDir != mainDir {
+				if wtDir != chat.WorkDir || (actual != "" && actual != chat.Branch) {
+					_, _ = a.sessions.SetBranch(ctx, curID, cmp.Or(actual, chat.Branch), wtDir)
+				}
+				return wtDir, ""
+			}
+			break
+		}
+		if chat.ParentSessionID == "" {
+			break
+		}
+		curID = chat.ParentSessionID
+	}
+	return mainDir, gitutil.CurrentBranch(mainDir)
+}
+
+// isolateBranchSwitch moves a branch switch that an agent performed in the
+// main folder into sessionID's own folder copy and restores the main folder's
+// previous branch so other chats in the folder do not change branch.
+func (a *sessionAgent) isolateBranchSwitch(ctx context.Context, sessionID, mainBranchBefore string) (string, bool) {
+	if a.cfg == nil || a.sessions == nil || sessionID == "" || mainBranchBefore == "" {
+		return "", false
+	}
+	mainDir := a.cfg.WorkingDir()
+	dataDir := ""
+	if a.cfg.Config() != nil && a.cfg.Config().Options != nil {
+		dataDir = a.cfg.Config().Options.DataDirectory
+	}
+	if dataDir == "" {
+		return "", false
+	}
+	newBranch, wtDir, moved := gitutil.IsolateMainBranchSwitch(mainDir, dataDir, sessionID, mainBranchBefore)
+	if !moved {
+		return "", false
+	}
+	_, _ = a.sessions.SetBranch(ctx, sessionID, newBranch, wtDir)
+	return wtDir, true
 }
 
 func providerRetryLogFields(err *fantasy.ProviderError, delay time.Duration) []any {

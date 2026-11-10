@@ -55,6 +55,9 @@ func (c *coordinator) buildAgent(ctx context.Context, ready *readyGroup, prompt 
 		NewChatModel: func() (config.SelectedModel, bool) {
 			return config.NewChatModel(c.cfg.Config())
 		},
+		ToolsForDir: func(ctx context.Context, workingDir string) ([]fantasy.AgentTool, error) {
+			return c.buildToolsInDir(ctx, agent, isSubAgent, workingDir)
+		},
 		titles:    &c.titles,
 		modelsGen: &c.modelsGen,
 	})

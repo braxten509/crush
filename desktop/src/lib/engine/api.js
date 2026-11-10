@@ -119,6 +119,7 @@ export const api = {
   authState: () => get("auth/state"),
   agentInfo: () => get("agent"),
   gitBranch: () => get("git/branch"),
+  gitBranches: (sid = "") => commands.api("GET", "git/branches", undefined, undefined, undefined, folderOf(sid)),
   // Use the chat's folder when a chat is shown (rpc.ProviderUsable).
   providerAvailability: (sid) => commands.api("GET", "providers/availability", undefined, undefined, undefined, folderOf(sid)),
   lsps: () => get("lsps"),
@@ -138,6 +139,9 @@ export const api = {
   // model picked in a chat never reaches another chat, and it is also the
   // last pick a new chat starts on.
   setSessionModel: (sid, model) => commands.api("POST", `${chat(sid)}/model`, undefined, { model }, undefined, folderOf(sid)),
+  setSessionBranch: (sid, { branch, create = false }) =>
+    commands.api("POST", `${chat(sid)}/git/branch`, undefined, { branch, ...(create ? { create: true } : {}) }, undefined, folderOf(sid)),
+  closeSessionBranch: (sid) => commands.api("DELETE", `${chat(sid)}/git/branch`, undefined, undefined, undefined, folderOf(sid)),
   // Locked chats (owner, 2026-11-03; rpc.LockSession, rpc.UnlockSession):
   // both answer at once with the chat marked locking or unlocking; the rest
   // arrives as session events. Unlock with stop turns the chat into a

@@ -59,6 +59,8 @@ func (b *Backend) GetAgentSession(ctx context.Context, workspaceID, sessionID st
 			Title:             se.Title,
 			HasUnfinishedWork: agent.SessionHasUnfinishedWork(se.ID),
 			PendingPrompt:     b.PendingPrompt(ctx, workspaceID, se.ID),
+			Branch:            se.Branch,
+			WorkDir:           se.WorkDir,
 		},
 		IsBusy: o.IsSessionBusy(sessionID),
 	}, nil
@@ -120,6 +122,36 @@ func (b *Backend) SetSessionModel(ctx context.Context, workspaceID, sessionID st
 		return session.Session{}, err
 	}
 	return o.SetSessionModel(ctx, sessionID, model)
+}
+
+// GitBranches returns the current Git branch and all local branch names of
+// the workspace's working directory.
+func (b *Backend) GitBranches(workspaceID string) (proto.GitBranchesResponse, error) {
+	o, err := b.ops(workspaceID)
+	if err != nil {
+		return proto.GitBranchesResponse{}, err
+	}
+	return o.GitBranches(), nil
+}
+
+// SetSessionBranch switches a single chat to branch (creating it when
+// create is true) inside its own folder copy when branch differs from the
+// main project folder's branch.
+func (b *Backend) SetSessionBranch(ctx context.Context, workspaceID, sessionID, branch string, create bool) (session.Session, error) {
+	o, err := b.ops(workspaceID)
+	if err != nil {
+		return session.Session{}, err
+	}
+	return o.SetSessionBranch(ctx, sessionID, branch, create)
+}
+
+// CloseSessionBranch cleans up a closed chat's extra folder copy if clean.
+func (b *Backend) CloseSessionBranch(ctx context.Context, workspaceID, sessionID string) (session.Session, error) {
+	o, err := b.ops(workspaceID)
+	if err != nil {
+		return session.Session{}, err
+	}
+	return o.CloseSessionBranch(ctx, sessionID)
 }
 
 // LastPick is the model a new chat in the workspace's folder starts on.

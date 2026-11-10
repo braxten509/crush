@@ -352,6 +352,14 @@ type QueueSummaries interface {
 	AgentQueuedPromptSummaries(sessionID string) []message.QueuedPromptSummary
 }
 
+// SessionBranchWorkspace switches a single chat's Git branch and cleans up
+// its extra folder copy when closed.
+type SessionBranchWorkspace interface {
+	GitBranches(ctx context.Context) (proto.GitBranchesResponse, error)
+	SetSessionBranch(ctx context.Context, sessionID, branch string, create bool) (session.Session, error)
+	CloseSessionBranch(ctx context.Context, sessionID string) (session.Session, error)
+}
+
 var (
 	_ Workspace = (*AppWorkspace)(nil)
 	_ Workspace = (*ClientWorkspace)(nil)
@@ -364,6 +372,8 @@ var (
 	_ session.EmptySessionWorkspace = (*ClientWorkspace)(nil)
 	_ QueueSummaries                = (*AppWorkspace)(nil)
 	_ QueueSummaries                = (*ClientWorkspace)(nil)
+	_ SessionBranchWorkspace        = (*AppWorkspace)(nil)
+	_ SessionBranchWorkspace        = (*ClientWorkspace)(nil)
 
 	// Session trees and file restore need a local agent, so only the
 	// in-process workspace offers them.

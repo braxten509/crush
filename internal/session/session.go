@@ -14,6 +14,7 @@ import (
 
 	"github.com/charmbracelet/crush/internal/db"
 	"github.com/charmbracelet/crush/internal/event"
+	"github.com/charmbracelet/crush/internal/gitutil"
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/google/uuid"
 	"github.com/zeebo/xxh3"
@@ -71,6 +72,10 @@ type Session struct {
 	KeptSkills []KeptSkill
 	// Model is the model this chat runs on; zero means the workspace's.
 	Model ModelChoice
+	// Branch is the Git branch this chat runs on; empty follows the main folder.
+	Branch string `json:",omitempty"`
+	// WorkDir is the chat's separate folder copy when on another branch.
+	WorkDir string `json:",omitempty"`
 	// LockState is the chat's place in locking (owner, 2026-11-03): ""
 	// for a normal chat, or one of the LockState constants.
 	LockState string
@@ -147,6 +152,9 @@ type Service interface {
 	// SetModel saves the model this chat runs on; nil clears it, so the chat
 	// follows the workspace again.
 	SetModel(ctx context.Context, sessionID string, model ModelChoice) (Session, error)
+	// SetBranch saves the Git branch and folder copy this chat runs in; empty
+	// branch clears it so the chat follows the main folder again.
+	SetBranch(ctx context.Context, sessionID, branch, workDir string) (Session, error)
 	// SetNewChatModel sets where a new chat's model comes from (the last
 	// pick); Create saves it with the chat.
 	SetNewChatModel(fn func(context.Context) ModelChoice)
@@ -337,7 +345,11 @@ func (s *service) Delete(ctx context.Context, id string) error {
 		return fmt.Errorf("listing child sessions: %w", err)
 	}
 	removed := make([]db.Session, 0, len(ids))
+	var workDirs []string
 	for _, sessionID := range ids {
+		if _, wtDir, err := s.readBranch(sessionID); err == nil && wtDir != "" {
+			workDirs = append(workDirs, wtDir)
+		}
 		row := dbSession
 		if sessionID != dbSession.ID {
 			if row, err = qtx.GetSessionByID(ctx, sessionID); err != nil {
@@ -363,6 +375,9 @@ func (s *service) Delete(ctx context.Context, id string) error {
 		session := s.fromDBItem(row)
 		s.clearEstimatedUsageState(row.ID)
 		s.Publish(pubsub.DeletedEvent, session)
+	}
+	for _, wtDir := range workDirs {
+		_ = gitutil.CleanupChatWorktree("", wtDir)
 	}
 	event.SessionDeleted()
 	for _, cleanup := range s.fileHistoryCleanup {
@@ -617,6 +632,15 @@ func (s *service) fromDBItem(item db.Session) Session {
 	if errModel != nil && errModel != sql.ErrNoRows {
 		slog.Error("Failed to read the chat's model", "error", errModel, "session_id", item.ID)
 	}
+	branch, workDir, errBranch := s.readBranch(item.ID)
+	if errBranch != nil && errBranch != sql.ErrNoRows {
+		slog.Error("Failed to read the chat's branch", "error", errBranch, "session_id", item.ID)
+	}
+	if workDir != "" {
+		if live := gitutil.CurrentBranch(workDir); live != "" {
+			branch = live
+		}
+	}
 	kept, errKept := s.keptSkills(item.ID)
 	if errKept != nil {
 		slog.Error("Failed to read kept skills", "error", errKept, "session_id", item.ID)
@@ -628,6 +652,8 @@ func (s *service) fromDBItem(item db.Session) Session {
 	return Session{
 		ContextBudget:    budget,
 		Model:            model,
+		Branch:           branch,
+		WorkDir:          workDir,
 		ID:               item.ID,
 		ParentSessionID:  item.ParentSessionID.String,
 		Title:            item.Title,
@@ -666,6 +692,38 @@ func (s *service) SetModel(ctx context.Context, sessionID string, model ModelCho
 	} else if _, err := s.db.ExecContext(ctx, `INSERT INTO session_models (session_id, choice)
 		VALUES (?, ?) ON CONFLICT(session_id) DO UPDATE SET choice=excluded.choice`,
 		sessionID, string(model)); err != nil {
+		return Session{}, err
+	}
+	current, err := s.Get(ctx, sessionID)
+	if err != nil {
+		return Session{}, err
+	}
+	s.Publish(pubsub.UpdatedEvent, current)
+	return current, nil
+}
+
+// readBranch reads the branch and folder copy the chat runs in; sql.ErrNoRows
+// means the chat follows the main folder.
+func (s *service) readBranch(sessionID string) (string, string, error) {
+	var branch, workDir string
+	err := s.db.QueryRow(`SELECT branch, work_dir FROM session_branches WHERE session_id = ?`, sessionID).Scan(&branch, &workDir)
+	if err != nil {
+		return "", "", err
+	}
+	return branch, workDir, nil
+}
+
+// SetBranch saves the Git branch and folder copy this chat runs in. An empty
+// branch clears it so the chat follows the main folder again.
+func (s *service) SetBranch(ctx context.Context, sessionID, branch, workDir string) (Session, error) {
+	branch = strings.TrimSpace(branch)
+	if branch == "" {
+		if _, err := s.db.ExecContext(ctx, `DELETE FROM session_branches WHERE session_id = ?`, sessionID); err != nil {
+			return Session{}, err
+		}
+	} else if _, err := s.db.ExecContext(ctx, `INSERT INTO session_branches (session_id, branch, work_dir)
+		VALUES (?, ?, ?) ON CONFLICT(session_id) DO UPDATE SET branch=excluded.branch, work_dir=excluded.work_dir`,
+		sessionID, branch, workDir); err != nil {
 		return Session{}, err
 	}
 	current, err := s.Get(ctx, sessionID)

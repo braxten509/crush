@@ -2,10 +2,12 @@ package sessionhost
 
 import (
 	"log/slog"
+	"path/filepath"
 	"slices"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/crush/internal/gitutil"
 	"github.com/charmbracelet/crush/internal/openchats"
 )
 
@@ -160,5 +162,9 @@ func (h *Host) unlistExited(s *session) {
 	}
 	if err := h.chats.Remove(s.chatID); err != nil {
 		slog.Warn("Could not update the open chats", "error", err)
+	}
+	if s.chatDir != "" {
+		wtDir := gitutil.ChatWorktreeDir(filepath.Join(s.chatDir, ".crush"), s.chatID)
+		_ = gitutil.CleanupChatWorktree(s.chatDir, wtDir)
 	}
 }

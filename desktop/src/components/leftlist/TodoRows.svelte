@@ -205,8 +205,12 @@
     height: calc(38 * var(--px));
     padding: 0 calc(16 * var(--px)) 0 calc(23 * var(--px));
   }
+  /* Centered on the words' capitals, not their line box: 1 px up
+     (measured, owner 2026-11-09). */
   .tick {
     flex: none;
+    position: relative;
+    top: calc(-1.5 * var(--px));
     width: calc(16 * var(--px));
     height: calc(16 * var(--px));
     padding: 0;

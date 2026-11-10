@@ -86,6 +86,9 @@ func SwitchChatBranch(mainDir, dataDir, sessionID, branch string, create bool) (
 		args := []string{"checkout", branch}
 		if create {
 			args = []string{"checkout", "-b", branch}
+			if base := newBranchBase(mainAbs); base != "" {
+				args = append(args, base)
+			}
 		}
 		if _, err := execGit(wtDir, args...); err != nil {
 			return "", "", err
@@ -105,6 +108,9 @@ func SwitchChatBranch(mainDir, dataDir, sessionID, branch string, create bool) (
 	var args []string
 	if create {
 		args = []string{"worktree", "add", "-b", branch, wtDir}
+		if base := newBranchBase(mainAbs); base != "" {
+			args = append(args, base)
+		}
 	} else {
 		args = []string{"worktree", "add", wtDir, branch}
 	}
@@ -200,6 +206,18 @@ func CleanupChatWorktree(mainDir, workDir string) error {
 		_ = os.RemoveAll(adminDir)
 	}
 	return nil
+}
+
+// newBranchBase names the branch every new chat branch starts from: "main",
+// or "master" when the project has no "main". It returns "" when neither
+// exists, and the new branch then starts from the chat's current branch.
+func newBranchBase(mainDir string) string {
+	for _, name := range []string{"main", "master"} {
+		if _, err := execGit(mainDir, "rev-parse", "--verify", "--quiet", "refs/heads/"+name); err == nil {
+			return name
+		}
+	}
+	return ""
 }
 
 func hasWorktree(dir string) bool {

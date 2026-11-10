@@ -164,7 +164,7 @@ func (h *hub) stateLocked(items []Item) map[string][]byte {
 		perm = permissionOf(p, h.src.WorkingDir())
 	}
 	var q *question.Request
-	if r, ok := h.src.PendingQuestion(); ok && r.SessionID == cur && cur != "" {
+	if r, ok := pendingQuestionFor(h.src, cur); ok {
 		q = &r
 	}
 	busy := cur != "" && h.src.AgentIsSessionBusy(cur)
@@ -239,7 +239,7 @@ func (h *hub) shareLocked() Share {
 		if p, ok := h.src.PendingPermission(); ok && p.SessionID == cur {
 			s.NeedsYou = true
 		}
-		if q, ok := h.src.PendingQuestion(); ok && q.SessionID == cur {
+		if _, ok := pendingQuestionFor(h.src, cur); ok {
 			s.NeedsYou = true
 		}
 	}

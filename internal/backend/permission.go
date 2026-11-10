@@ -80,24 +80,25 @@ func (b *Backend) GetPermissionsSkip(workspaceID string) (bool, error) {
 	return mode.SkipsPrompts(), nil
 }
 
-// AnswerQuestion submits answers for a question. The returned bool
-// reports whether this call resolved the pending request (true) or
-// found it already resolved by a previous caller (false).
+// AnswerQuestion submits answers for the batch req names (the only waiting
+// one when it names none). The returned bool reports whether this call
+// resolved the request (true) or found it already resolved by a previous
+// caller (false).
 func (b *Backend) AnswerQuestion(workspaceID string, req proto.QuestionAnswer) (bool, error) {
 	o, err := b.ops(workspaceID)
 	if err != nil {
 		return false, err
 	}
-	return o.App.Questions.Answer(proto.QuestionAnswerToDomain(req)), nil
+	return o.App.Questions.AnswerBatch(req.BatchRequestID, proto.QuestionAnswerToDomain(req)), nil
 }
 
-// CancelQuestion cancels the pending question for a workspace.
-// Returns true if a question was cancelled, false if none was
-// pending.
-func (b *Backend) CancelQuestion(workspaceID string) (bool, error) {
+// CancelQuestion cancels the batch with the given ID (the only waiting one
+// when batchID is empty). Returns true if a question was cancelled, false
+// if none was pending.
+func (b *Backend) CancelQuestion(workspaceID, batchID string) (bool, error) {
 	o, err := b.ops(workspaceID)
 	if err != nil {
 		return false, err
 	}
-	return o.App.Questions.Cancel(), nil
+	return o.App.Questions.CancelBatch(batchID), nil
 }

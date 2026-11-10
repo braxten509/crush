@@ -18,18 +18,9 @@ func (b *Backend) PendingQuestion(ctx context.Context, workspaceID, sessionID st
 	if err != nil {
 		return proto.QuestionRequest{}, err
 	}
-	if ws.App == nil || ws.Questions == nil {
-		return proto.QuestionRequest{}, ErrNoPendingQuestion
-	}
-	req, ok := ws.Questions.Pending()
+	req, ok := b.pendingQuestionFor(ctx, ws, sessionID)
 	if !ok {
 		return proto.QuestionRequest{}, ErrNoPendingQuestion
-	}
-	if req.SessionID != sessionID {
-		root, err := b.RootSessionID(ctx, workspaceID, req.SessionID)
-		if err != nil || root != sessionID {
-			return proto.QuestionRequest{}, ErrNoPendingQuestion
-		}
 	}
 	return proto.QuestionRequestFromDomain(req), nil
 }

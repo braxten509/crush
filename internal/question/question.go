@@ -231,8 +231,9 @@ type Notification struct {
 	SessionID string `json:"session_id"`
 }
 
-// Service manages the lifecycle of question requests. Only one
-// question can be pending at a time.
+// Service manages the lifecycle of question requests. Several batches can
+// wait at once (one per chat, as the ask handler allows); answers and
+// cancels name the batch they resolve.
 type Service interface {
 	pubsub.Subscriber[Request]
 
@@ -244,32 +245,49 @@ type Service interface {
 	// or the context is cancelled.
 	Ask(ctx context.Context, req Request) ([]Answer, error)
 
-	// Answer resolves the pending question with the given answers.
+	// Answer resolves the only waiting batch; it does nothing when
+	// several wait.
 	Answer(answers []Answer) bool
+
+	// AnswerBatch resolves the batch with the given ID. An empty ID
+	// acts as Answer.
+	AnswerBatch(id string, answers []Answer) bool
 
 	// AnswerRequest resolves only the matching request and session.
 	AnswerRequest(id, sessionID string, answers []Answer) bool
 
-	// Cancel cancels the pending question. Returns false if no
-	// question is pending.
+	// Cancel cancels the only waiting batch, under the same rule as
+	// Answer. Returns false if none was cancelled.
 	Cancel() bool
+
+	// CancelBatch cancels the batch with the given ID. An empty ID acts
+	// as Cancel.
+	CancelBatch(id string) bool
 
 	// CancelRequest cancels only the matching request and session.
 	CancelRequest(id, sessionID string) bool
 
-	// Pending returns the request that is currently awaiting an
-	// answer, or false when no question is pending.
+	// Pending returns the oldest batch awaiting an answer, or false when
+	// none waits.
 	Pending() (Request, bool)
+
+	// PendingAll returns every waiting batch, oldest first.
+	PendingAll() []Request
+}
+
+// waiting is one batch Ask is blocked on.
+type waiting struct {
+	req       Request
+	answers   chan []Answer
+	cancelled chan struct{}
 }
 
 type questionService struct {
 	broker             *pubsub.Broker[Request]
 	notificationBroker *pubsub.Broker[Notification]
 	mu                 sync.Mutex
-	pending            chan []Answer
-	cancelled          chan struct{}
-	pendingID          string
-	pendingReq         Request
+	// pending holds the waiting batches, oldest first.
+	pending []*waiting
 }
 
 // NewService creates a new question service.
@@ -304,33 +322,22 @@ func (s *questionService) Ask(ctx context.Context, req Request) ([]Answer, error
 		return nil, err
 	}
 
-	pending := make(chan []Answer, 1)
-	cancelled := make(chan struct{})
+	w := &waiting{req: req, answers: make(chan []Answer, 1), cancelled: make(chan struct{})}
 	s.mu.Lock()
-	s.pending = pending
-	s.cancelled = cancelled
-	s.pendingID = req.ID
-	s.pendingReq = req
+	s.pending = append(s.pending, w)
 	s.mu.Unlock()
 
 	defer func() {
 		s.mu.Lock()
-		owned := s.pending == pending
-		batchID, batchSession := s.pendingID, s.pendingReq.SessionID
-		if owned {
-			s.pending = nil
-			s.cancelled = nil
-			s.pendingID = ""
-			s.pendingReq = Request{}
-		}
+		owned := s.remove(w)
 		s.mu.Unlock()
 		// A wait that ends without an answer (its run finished or was
 		// cancelled) leaves clients showing a form nothing can answer:
 		// tell them to close it.
-		if owned && batchID != "" {
+		if owned {
 			s.notificationBroker.Publish(pubsub.CreatedEvent, Notification{
-				BatchID:   batchID,
-				SessionID: batchSession,
+				BatchID:   req.ID,
+				SessionID: req.SessionID,
 			})
 		}
 	}()
@@ -340,73 +347,120 @@ func (s *questionService) Ask(ctx context.Context, req Request) ([]Answer, error
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
-	case <-cancelled:
+	case <-w.cancelled:
 		return nil, ErrCancelled
-	case answers := <-pending:
+	case answers := <-w.answers:
 		return answers, nil
 	}
 }
 
-// Pending returns the questions that are waiting for answers, if any.
+// remove drops w from the waiting list and reports whether it was there.
+// The caller holds s.mu.
+func (s *questionService) remove(w *waiting) bool {
+	for i, p := range s.pending {
+		if p == w {
+			s.pending = append(s.pending[:i:i], s.pending[i+1:]...)
+			return true
+		}
+	}
+	return false
+}
+
+// Pending returns the oldest batch waiting for answers, if any.
 func (s *questionService) Pending() (Request, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.pending == nil {
+	if len(s.pending) == 0 {
 		return Request{}, false
 	}
-	return s.pendingReq, true
+	return s.pending[0].req, true
 }
 
-// Answer resolves the pending question. Returns false if no
-// question is pending (already answered or cancelled).
+// PendingAll returns every waiting batch, oldest first.
+func (s *questionService) PendingAll() []Request {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]Request, len(s.pending))
+	for i, w := range s.pending {
+		out[i] = w.req
+	}
+	return out
+}
+
+// Answer resolves the only waiting batch. Returns false if none (or
+// several) wait.
 func (s *questionService) Answer(answers []Answer) bool {
 	return s.resolve("", "", false, answers, false)
+}
+
+// AnswerBatch resolves the batch with the given ID (or the only one when id
+// is empty). Returns false if no such batch waits (already answered or
+// cancelled).
+func (s *questionService) AnswerBatch(id string, answers []Answer) bool {
+	return s.resolve(id, "", false, answers, false)
 }
 
 func (s *questionService) AnswerRequest(id, sessionID string, answers []Answer) bool {
 	return s.resolve(id, sessionID, true, answers, false)
 }
 
-// Cancel cancels the pending question. Returns false if no
-// question is pending.
+// Cancel cancels the only waiting batch. Returns false if none (or
+// several) wait.
 func (s *questionService) Cancel() bool {
 	return s.resolve("", "", false, nil, true)
+}
+
+// CancelBatch cancels the batch with the given ID (or the only one when id
+// is empty). Returns false if no such batch waits.
+func (s *questionService) CancelBatch(id string) bool {
+	return s.resolve(id, "", false, nil, true)
 }
 
 func (s *questionService) CancelRequest(id, sessionID string) bool {
 	return s.resolve(id, sessionID, true, nil, true)
 }
 
-// resolve takes the pending request under the lock so only one caller wins.
+// find returns the batch a resolve names, or nil. The caller holds s.mu.
+func (s *questionService) find(id, sessionID string, scoped bool) *waiting {
+	if scoped && (id == "" || sessionID == "") {
+		return nil
+	}
+	if id == "" {
+		if len(s.pending) == 1 {
+			return s.pending[0]
+		}
+		return nil
+	}
+	for _, w := range s.pending {
+		if w.req.ID == id && (!scoped || w.req.SessionID == sessionID) {
+			return w
+		}
+	}
+	return nil
+}
+
+// resolve takes the named batch under the lock so only one caller wins.
 func (s *questionService) resolve(id, sessionID string, scoped bool, answers []Answer, cancel bool) bool {
 	s.mu.Lock()
-	if s.pending == nil || (scoped && (id == "" || sessionID == "" || s.pendingID != id || s.pendingReq.SessionID != sessionID)) {
+	w := s.find(id, sessionID, scoped)
+	if w == nil {
 		s.mu.Unlock()
 		return false
 	}
-	batchID := s.pendingID
-	batchSession := s.pendingReq.SessionID
-	ch := s.pending
-	cancelCh := s.cancelled
-	s.pending = nil
-	s.cancelled = nil
-	s.pendingID = ""
-	s.pendingReq = Request{}
+	s.remove(w)
 	s.mu.Unlock()
 
 	if cancel {
-		close(cancelCh)
+		close(w.cancelled)
 	} else {
-		ch <- answers
+		w.answers <- answers
 	}
 
 	// Publish a notification so non-answering clients can dismiss
 	// their open question forms.
-	if batchID != "" {
-		s.notificationBroker.Publish(pubsub.CreatedEvent, Notification{
-			BatchID:   batchID,
-			SessionID: batchSession,
-		})
-	}
+	s.notificationBroker.Publish(pubsub.CreatedEvent, Notification{
+		BatchID:   w.req.ID,
+		SessionID: w.req.SessionID,
+	})
 	return true
 }

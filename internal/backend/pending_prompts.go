@@ -51,11 +51,8 @@ func (b *Backend) promptPending(ctx context.Context, ws *Workspace, sessionID, k
 		req, ok := ws.Permissions.ActiveRequest()
 		return ok && b.sessionMatches(ctx, ws, req.SessionID, sessionID)
 	case promptKindQuestion:
-		if ws.Questions == nil {
-			return false
-		}
-		req, ok := ws.Questions.Pending()
-		return ok && b.sessionMatches(ctx, ws, req.SessionID, sessionID)
+		_, ok := b.pendingQuestionFor(ctx, ws, sessionID)
+		return ok
 	}
 	return false
 }

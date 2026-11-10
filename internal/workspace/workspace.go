@@ -269,10 +269,10 @@ type InteractionService interface {
 
 	// Questions
 	//
-	// QuestionAnswer resolves the pending question with responses.
-	QuestionAnswer(responses []question.Answer) bool
-	// QuestionCancel cancels the pending question.
-	QuestionCancel() bool
+	// QuestionAnswer resolves the batch batchID with responses.
+	QuestionAnswer(batchID string, responses []question.Answer) bool
+	// QuestionCancel cancels the batch batchID.
+	QuestionCancel(batchID string) bool
 }
 
 // LSPService manages the workspace's language servers.

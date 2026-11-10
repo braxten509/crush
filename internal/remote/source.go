@@ -82,6 +82,39 @@ func (a appSource) PendingQuestion() (question.Request, bool) {
 	return question.Request{}, false
 }
 
+// PendingQuestions returns every waiting question batch, oldest first:
+// chats in one folder can each have a form open.
+func (a appSource) PendingQuestions() []question.Request {
+	if q, ok := a.App().Questions.(interface{ PendingAll() []question.Request }); ok {
+		return q.PendingAll()
+	}
+	if r, ok := a.PendingQuestion(); ok {
+		return []question.Request{r}
+	}
+	return nil
+}
+
+// pendingQuestionFor returns the batch waiting in sessionID, if any. A
+// source that lists every batch is searched; one that knows only a single
+// batch is asked for that.
+func pendingQuestionFor(src Source, sessionID string) (question.Request, bool) {
+	if sessionID == "" {
+		return question.Request{}, false
+	}
+	if all, ok := src.(interface{ PendingQuestions() []question.Request }); ok {
+		for _, r := range all.PendingQuestions() {
+			if r.SessionID == sessionID {
+				return r, true
+			}
+		}
+		return question.Request{}, false
+	}
+	if r, ok := src.PendingQuestion(); ok && r.SessionID == sessionID {
+		return r, true
+	}
+	return question.Request{}, false
+}
+
 func (a appSource) QuestionAnswerRequest(id, sessionID string, answers []question.Answer) bool {
 	return a.App().Questions.AnswerRequest(id, sessionID, answers)
 }

@@ -107,14 +107,27 @@ func (b *Backend) republishPendingPrompts(ctx context.Context, ws *Workspace, se
 			})
 		}
 	}
-	if ws.Questions != nil {
-		if req, ok := ws.Questions.Pending(); ok && b.sessionMatches(ctx, ws, req.SessionID, sessionID) {
-			ws.SendEvent(pubsub.Event[question.Request]{
-				Type:    pubsub.CreatedEvent,
-				Payload: req,
-			})
+	if req, ok := b.pendingQuestionFor(ctx, ws, sessionID); ok {
+		ws.SendEvent(pubsub.Event[question.Request]{
+			Type:    pubsub.CreatedEvent,
+			Payload: req,
+		})
+	}
+}
+
+// pendingQuestionFor returns the oldest waiting question batch of
+// sessionID, raised by the chat itself or one of its helpers. Chats in one
+// workspace can each have a batch waiting.
+func (b *Backend) pendingQuestionFor(ctx context.Context, ws *Workspace, sessionID string) (question.Request, bool) {
+	if ws.App == nil || ws.Questions == nil || sessionID == "" {
+		return question.Request{}, false
+	}
+	for _, req := range ws.Questions.PendingAll() {
+		if b.sessionMatches(ctx, ws, req.SessionID, sessionID) {
+			return req, true
 		}
 	}
+	return question.Request{}, false
 }
 
 // sessionMatches reports whether an event scoped to eventSessionID

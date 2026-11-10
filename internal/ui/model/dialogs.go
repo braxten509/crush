@@ -294,10 +294,10 @@ func (m *UI) openBatchFormDialog(batch question.Request) tea.Cmd {
 	form := questionform.NewQuestionForm(m.com.Styles, batch)
 	form.SetImageCapabilities(&m.caps)
 	form.OnAnswer = func(responses []question.Answer) {
-		m.com.Workspace.QuestionAnswer(responses)
+		m.com.Workspace.QuestionAnswer(batch.ID, responses)
 	}
 	form.OnCancel = func() {
-		m.com.Workspace.QuestionCancel()
+		m.com.Workspace.QuestionCancel(batch.ID)
 	}
 	m.openInline(form)
 	m.updateLayoutAndSize()

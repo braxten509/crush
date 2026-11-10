@@ -100,7 +100,7 @@ var (
 	SetPermissionsSkip = Op[proto.PermissionSkipRequest, Empty]{Method: post, Path: "/v1/workspaces/{id}/permissions/skip"}
 	GrantPermission    = Op[proto.PermissionGrant, proto.PermissionGrantResponse]{Method: post, Path: "/v1/workspaces/{id}/permissions/grant"}
 	AnswerQuestion     = Op[proto.QuestionAnswer, proto.QuestionAnswerResponse]{Method: post, Path: "/v1/workspaces/{id}/questions/answer"}
-	CancelQuestion     = Op[Empty, proto.QuestionAnswerResponse]{Method: post, Path: "/v1/workspaces/{id}/questions/cancel"}
+	CancelQuestion     = Op[proto.QuestionCancel, proto.QuestionAnswerResponse]{Method: post, Path: "/v1/workspaces/{id}/questions/cancel"}
 )
 
 // Agent endpoints.

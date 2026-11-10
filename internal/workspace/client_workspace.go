@@ -441,8 +441,10 @@ func (w *ClientWorkspace) HostContext(ctx context.Context) (proto.HostContext, e
 // -- Questions --
 
 // QuestionAnswer submits answers for a question via the client SDK.
-func (w *ClientWorkspace) QuestionAnswer(responses []question.Answer) bool {
-	resolved, err := w.client.AnswerQuestionBatch(context.Background(), w.workspaceID(), proto.QuestionAnswerFromDomain(responses))
+func (w *ClientWorkspace) QuestionAnswer(batchID string, responses []question.Answer) bool {
+	body := proto.QuestionAnswerFromDomain(responses)
+	body.BatchRequestID = batchID
+	resolved, err := w.client.AnswerQuestionBatch(context.Background(), w.workspaceID(), body)
 	if err != nil {
 		slog.Error("Failed to answer question", "error", err)
 		return false
@@ -451,8 +453,8 @@ func (w *ClientWorkspace) QuestionAnswer(responses []question.Answer) bool {
 }
 
 // QuestionCancel cancels the pending question via the client SDK.
-func (w *ClientWorkspace) QuestionCancel() bool {
-	cancelled, err := w.client.CancelQuestionBatch(context.Background(), w.workspaceID())
+func (w *ClientWorkspace) QuestionCancel(batchID string) bool {
+	cancelled, err := w.client.CancelQuestionBatchID(context.Background(), w.workspaceID(), batchID)
 	if err != nil {
 		slog.Error("Failed to cancel question", "error", err)
 		return false

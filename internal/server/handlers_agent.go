@@ -150,15 +150,15 @@ func (c *controllerV1) grantPermission(r *http.Request, req proto.PermissionGran
 	return proto.PermissionGrantResponse{Resolved: resolved}, err
 }
 
-// answerQuestion submits answers for the pending question batch.
+// answerQuestion submits answers for the named question batch.
 func (c *controllerV1) answerQuestion(r *http.Request, req proto.QuestionAnswer) (proto.QuestionAnswerResponse, error) {
 	resolved, err := c.backend.AnswerQuestion(r.PathValue("id"), req)
 	return proto.QuestionAnswerResponse{Resolved: resolved}, err
 }
 
-// cancelQuestion cancels the pending question batch.
-func (c *controllerV1) cancelQuestion(r *http.Request, _ rpc.Empty) (proto.QuestionAnswerResponse, error) {
-	cancelled, err := c.backend.CancelQuestion(r.PathValue("id"))
+// cancelQuestion cancels the named question batch.
+func (c *controllerV1) cancelQuestion(r *http.Request, req proto.QuestionCancel) (proto.QuestionAnswerResponse, error) {
+	cancelled, err := c.backend.CancelQuestion(r.PathValue("id"), req.BatchRequestID)
 	return proto.QuestionAnswerResponse{Resolved: cancelled}, err
 }
 

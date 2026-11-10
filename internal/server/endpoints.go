@@ -405,7 +405,7 @@ func (c *controllerV1) interactionEndpoints() []apigen.Endpoint {
 			Fails(400, 404, 500).
 			Build(),
 
-		route(c, rpc.CancelQuestion, c.cancelQuestion).
+		route(c, rpc.CancelQuestion, c.cancelQuestion, optionalBody()).
 			Summary("Cancel question batch").
 			Tags("questions").
 			PathParam("id", "Workspace ID").

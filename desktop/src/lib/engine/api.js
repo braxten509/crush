@@ -296,7 +296,7 @@ export const api = {
   changeSavedSession: (change) => post("saved-sessions", change),
 
   answerQuestions: (answer) => post("questions/answer", answer),
-  cancelQuestions: () => post("questions/cancel"),
+  cancelQuestions: (batchId) => post("questions/cancel", { batch_request_id: batchId }),
   pendingQuestion: (sid) => get("questions/pending", { session_id: sid }),
   secureForms: () => get("secure-forms"),
   cancelSecureForm: (form_id) => post(`secure-forms/${seg(form_id)}/cancel`),

@@ -187,11 +187,18 @@ func (c *Client) AnswerQuestionBatch(ctx context.Context, id string, req proto.Q
 	return resp.Resolved, err
 }
 
-// CancelQuestionBatch cancels the pending question batch on a
+// CancelQuestionBatch cancels the only waiting question batch on a
+// workspace. Returns true if a question was cancelled, false if
+// none (or several) waited.
+func (c *Client) CancelQuestionBatch(ctx context.Context, id string) (bool, error) {
+	return c.CancelQuestionBatchID(ctx, id, "")
+}
+
+// CancelQuestionBatchID cancels the question batch batchID on a
 // workspace. Returns true if a question was cancelled, false if
 // none was pending.
-func (c *Client) CancelQuestionBatch(ctx context.Context, id string) (bool, error) {
+func (c *Client) CancelQuestionBatchID(ctx context.Context, id, batchID string) (bool, error) {
 	resp, err := newCall(c, rpc.CancelQuestion, "cancel question batch", "cancel question batch response").
-		at(id).get(ctx)
+		at(id).do(ctx, proto.QuestionCancel{BatchRequestID: batchID})
 	return resp.Resolved, err
 }

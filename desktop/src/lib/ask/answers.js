@@ -32,9 +32,10 @@ export async function submitAnswers(request, answers) {
   }
 }
 
+// Only this request's batch closes: other chats' forms stay open.
 export async function cancelQuestions(request) {
   try {
-    await api.cancelQuestions();
+    await api.cancelQuestions(request.id);
   } catch (error) {
     notify("error", error?.message ?? String(error));
   }

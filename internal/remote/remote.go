@@ -568,8 +568,8 @@ func (s *Server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	q, pending := s.src.PendingQuestion()
-	if !pending || req.Session == "" || q.ID != req.ID || q.SessionID != req.Session {
+	q, pending := pendingQuestionFor(s.src, req.Session)
+	if !pending || q.ID != req.ID {
 		writeError(w, http.StatusConflict, errors.New("those questions were already answered"))
 		return
 	}

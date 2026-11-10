@@ -149,11 +149,13 @@ type taskHub struct {
 	tasks   map[string]*Task
 	// userStopped marks tasks the user stopped, whose parent is told.
 	userStopped map[string]bool
-	// asking is set while questions from `crush ask` are open.
-	asking bool
-	// askSession is the session whose questions are open or whose answers
-	// have not been handed to it yet; it holds back completion alerts.
-	askSession string
+	// asking marks the sessions whose questions from `crush ask` are
+	// open: one form per chat, so chats in one folder can each ask.
+	asking map[string]bool
+	// askSessions marks the sessions whose questions are open or whose
+	// answers have not been handed to them yet; it holds back completion
+	// alerts.
+	askSessions map[string]bool
 	// closing is set once Crush shuts down; tasks it cuts off stay saved.
 	closing bool
 	// saveMu covers a starting task's save (startRun) and StopAllWork's
@@ -531,7 +533,7 @@ func HasRunningWork(c Coordinator) bool {
 func (h *taskHub) hasAnyWork() bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if h.asking || h.askSession != "" {
+	if len(h.asking) > 0 || len(h.askSessions) > 0 {
 		return true
 	}
 	for _, t := range h.tasks {
@@ -560,7 +562,7 @@ func (h *taskHub) hasBackgroundWork(sessionID string, includeDelivery bool) bool
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if h.askSession != "" && h.askSession == sessionID {
+	if sessionID != "" && h.askSessions[sessionID] {
 		return true
 	}
 	for _, t := range h.tasks {
@@ -711,7 +713,7 @@ Crush has a question form for questions with short, fixed answers: a choice betw
   {"questions":[{"type":"single_choice","label":"<tab label, 3 words max>","question":"<one line>","description":"<why it matters, required>","choices":[{"id":"a","label":"<choice>"},{"id":"b","label":"<choice>"}]}]}
   EOF
 
-Types: single_choice and multi_choice (2-5 choices, each with an id and label, optional short description and optional "image": an absolute path to a PNG sketch the form shows for the choice under the cursor, as the design-preview skill makes; the form adds a type-your-own answer and notes on its own, so never add an "Other" choice), yes_no (only for accept/reject), free_text, secure_entry (a masked secret field; see crush_secure_entry). Every question needs a description. Ask up to %[4]d at once; several show as tabs with a review step before submitting. Then end your turn with at most one short line saying the questions are open: the answers arrive as a <%[3]s> message named %[5]q. Only one set of questions can be open at a time. Sub-agents can't ask the user. When you hand one work that needs the user's input, ask the user first and put the answers in its task. When a sub-agent's result comes back with questions, answer them yourself when you can, and ask the user only what you can't settle.
+Types: single_choice and multi_choice (2-5 choices, each with an id and label, optional short description and optional "image": an absolute path to a PNG sketch the form shows for the choice under the cursor, as the design-preview skill makes; the form adds a type-your-own answer and notes on its own, so never add an "Other" choice), yes_no (only for accept/reject), free_text, secure_entry (a masked secret field; see crush_secure_entry). Every question needs a description. Ask up to %[4]d at once; several show as tabs with a review step before submitting. Then end your turn with at most one short line saying the questions are open: the answers arrive as a <%[3]s> message named %[5]q. Each chat can have one set of questions open at a time. Sub-agents can't ask the user. When you hand one work that needs the user's input, ask the user first and put the answers in its task. When a sub-agent's result comes back with questions, answer them yourself when you can, and ask the user only what you can't settle.
 </crush_questions>
 
 <crush_chat_skills>

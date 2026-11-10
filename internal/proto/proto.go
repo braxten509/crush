@@ -324,6 +324,12 @@ type QuestionAnswer struct {
 	Responses      []QuestionResponse `json:"responses"`
 }
 
+// QuestionCancel names the batch a cancel closes. An empty ID (or no
+// body) closes the only waiting batch.
+type QuestionCancel struct {
+	BatchRequestID string `json:"batch_request_id,omitempty"`
+}
+
 // QuestionResponse is a single answer within a batch response.
 type QuestionResponse struct {
 	QuestionID  string            `json:"request_id"`

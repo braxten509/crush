@@ -64,8 +64,8 @@ func (h *taskHub) ask(req TaskRequest) error {
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if h.asking {
-		return errors.New("other questions are still open; wait for their answers first")
+	if h.asking[req.Session] {
+		return errors.New("this chat's other questions are still open; wait for their answers first")
 	}
 	// Forms with secure fields go only to the local terminal, never the
 	// question service that phones and servers see.
@@ -75,8 +75,14 @@ func (h *taskHub) ask(req TaskRequest) error {
 			return err
 		}
 	}
-	h.asking = true
-	h.askSession = req.Session
+	if h.asking == nil {
+		h.asking = map[string]bool{}
+	}
+	if h.askSessions == nil {
+		h.askSessions = map[string]bool{}
+	}
+	h.asking[req.Session] = true
+	h.askSessions[req.Session] = true
 	started = true
 	go func() {
 		defer release()
@@ -97,7 +103,7 @@ func (h *taskHub) ask(req TaskRequest) error {
 			err = question.ErrCancelled
 		}
 		h.mu.Lock()
-		h.asking = false
+		delete(h.asking, req.Session)
 		h.mu.Unlock()
 		status, out := AskAnswered, ""
 		switch {
@@ -116,9 +122,7 @@ func (h *taskHub) ask(req TaskRequest) error {
 		}
 		msg := taskResult{Name: AskName, Status: status, Body: out}.String()
 		accept := h.acceptHandoff(req.Session, func() {
-			if h.askSession == req.Session {
-				h.askSession = ""
-			}
+			delete(h.askSessions, req.Session)
 		})
 		defer accept.Close()
 		// The chat must hear the outcome even when the turn that opened the

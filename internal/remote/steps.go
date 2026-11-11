@@ -127,6 +127,7 @@ func toolStep(tc message.ToolCall, res *resultAt, m message.Message, st chatStat
 	switch {
 	case res != nil:
 		s.Ended = res.at
+		s.Image = res.image()
 		switch {
 		case res.IsError:
 			s.State = "error"

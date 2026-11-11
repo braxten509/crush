@@ -3,11 +3,15 @@ package remote
 import (
 	"bufio"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -342,6 +346,73 @@ func TestPromptsAreAnsweredDirectly(t *testing.T) {
 	code, _ = env.post("/v1/rename", map[string]any{"session": "s1", "title": "  Better name "})
 	require.Equal(t, http.StatusOK, code)
 	require.Equal(t, "Better name", env.src.sessions["s1"].Title)
+}
+
+// TestStepsNameTheirPicture: a step whose tool read a picture carries its
+// media id, which /v1/media serves.
+func TestStepsNameTheirPicture(t *testing.T) {
+	t.Parallel()
+
+	env := newTestEnv(t, phoneAddr)
+	png := []byte("\x89PNG fake")
+	env.src.setChat("s1", "Chat",
+		assistantMsg("a1",
+			message.ToolCall{ID: "tc1", Name: "bash", Input: `{"command":"ls"}`, Finished: true},
+			message.ToolCall{ID: "tc2", Name: "view", Input: `{"file_path":"/work/shot.png"}`, Finished: true},
+		),
+		toolMsg("t1",
+			message.ToolResult{ToolCallID: "tc1", Content: "a"},
+			message.ToolResult{ToolCallID: "tc2", Content: "image", Data: base64.StdEncoding.EncodeToString(png), MIMEType: "image/png"},
+		),
+	)
+	env.srv.SetPresence(Presence{SessionID: "s1"})
+
+	snap := env.stream().next(t)
+	var items []Item
+	require.NoError(t, json.Unmarshal(snap["items"], &items))
+	require.Len(t, items, 1)
+	require.Empty(t, items[0].Steps[0].Image)
+	require.Equal(t, "t1/r1", items[0].Steps[1].Image)
+
+	resp, err := http.Get(env.url + "/v1/media/" + items[0].Steps[1].Image)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	body, _ := io.ReadAll(resp.Body)
+	require.Equal(t, png, body)
+}
+
+// TestQuestionChoicePictures: the sketch of a choice in the pending questions
+// is served; anything else is not found.
+func TestQuestionChoicePictures(t *testing.T) {
+	t.Parallel()
+
+	env := newTestEnv(t, phoneAddr)
+	env.src.setChat("s1", "Chat")
+	env.srv.SetPresence(Presence{SessionID: "s1"})
+	img := filepath.Join(t.TempDir(), "a.png")
+	require.NoError(t, os.WriteFile(img, []byte("\x89PNG sketch"), 0o600))
+	env.src.setQuestion(&question.Request{ID: "r1", SessionID: "s1", Questions: []question.Question{{
+		ID: "look", Type: question.TypeSingleChoice, Text: "Which?",
+		Choices: []question.Choice{{ID: "a", Label: "A", Image: img}, {ID: "b", Label: "B"}},
+	}}})
+
+	get := func(path string) (int, string, string) {
+		resp, err := http.Get(env.url + path)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		return resp.StatusCode, resp.Header.Get("Content-Type"), string(body)
+	}
+	code, typ, body := get("/v1/question-image/r1/look/a")
+	require.Equal(t, http.StatusOK, code)
+	require.Equal(t, "image/png", typ)
+	require.Equal(t, "\x89PNG sketch", body)
+
+	for _, path := range []string{"/v1/question-image/r1/look/b", "/v1/question-image/r1/look/zz", "/v1/question-image/r9/look/a"} {
+		code, _, _ = get(path)
+		require.Equal(t, http.StatusNotFound, code, path)
+	}
 }
 
 // testEnv runs a share whose requests all seem to come from one address.

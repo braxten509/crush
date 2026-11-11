@@ -227,6 +227,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /v1/events", s.handleEvents)
 	mux.HandleFunc("GET /v1/steps/{id}", s.handleStep)
 	mux.HandleFunc("GET /v1/media/{msg}/{idx}", s.handleMedia)
+	mux.HandleFunc("GET /v1/question-image/{request}/{question}/{choice}", s.handleQuestionImage)
 	mux.HandleFunc("POST /v1/send", s.handleSend)
 	mux.HandleFunc("POST /v1/cancel", s.simple(ActCancel))
 	mux.HandleFunc("POST /v1/interrupt", s.simple(ActInterrupt))
@@ -351,6 +352,60 @@ func (s *Server) handleMedia(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", mime)
 	w.Header().Set("Cache-Control", "private, max-age=86400")
+	_, _ = w.Write(data)
+}
+
+const maxQuestionImage = 8 << 20
+
+// handleQuestionImage serves the sketch of a choice in the questions the
+// shared chat waits on. The path comes from the pending request only, never
+// from the phone.
+func (s *Server) handleQuestionImage(w http.ResponseWriter, r *http.Request) {
+	notFound := func() { writeError(w, http.StatusNotFound, errors.New("no such picture")) }
+	q, ok := pendingQuestionFor(s.src, s.hub.currentSession())
+	if !ok || q.ID != r.PathValue("request") {
+		notFound()
+		return
+	}
+	var path string
+	for _, qq := range q.Questions {
+		if qq.ID != r.PathValue("question") {
+			continue
+		}
+		for _, c := range qq.Choices {
+			if c.ID == r.PathValue("choice") {
+				path = c.Image
+			}
+		}
+	}
+	var typ string
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".png":
+		typ = "image/png"
+	case ".jpg", ".jpeg":
+		typ = "image/jpeg"
+	}
+	if typ == "" || !filepath.IsAbs(path) {
+		notFound()
+		return
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		notFound()
+		return
+	}
+	defer f.Close()
+	if info, err := f.Stat(); err != nil || !info.Mode().IsRegular() || info.Size() > maxQuestionImage {
+		notFound()
+		return
+	}
+	data, err := io.ReadAll(io.LimitReader(f, maxQuestionImage+1))
+	if err != nil || len(data) > maxQuestionImage {
+		notFound()
+		return
+	}
+	w.Header().Set("Content-Type", typ)
+	w.Header().Set("Cache-Control", "private, max-age=3600")
 	_, _ = w.Write(data)
 }
 

@@ -67,6 +67,9 @@ type Step struct {
 	Meta    string `json:"meta,omitempty"`
 	Started int64  `json:"started,omitempty"`
 	Ended   int64  `json:"ended,omitempty"`
+	// Image is the media id of a picture the step's tool read, as in
+	// StepDetail.Image.
+	Image string `json:"image,omitempty"`
 }
 
 // chatState is what the item builder needs besides the messages.
@@ -117,8 +120,8 @@ func buildItems(msgs []message.Message, st chatState) []Item {
 		if m.Role != message.Tool {
 			continue
 		}
-		for _, r := range m.ToolResults() {
-			results[r.ToolCallID] = resultAt{r, m.UpdatedAt}
+		for i, r := range m.ToolResults() {
+			results[r.ToolCallID] = resultAt{r, m.UpdatedAt, m.ID, i}
 		}
 	}
 
@@ -149,6 +152,17 @@ func buildItems(msgs []message.Message, st chatState) []Item {
 type resultAt struct {
 	message.ToolResult
 	at int64
+	// msgID and index place the result in its message, for its media id.
+	msgID string
+	index int
+}
+
+// image is the media id of the picture the result holds, if any.
+func (r resultAt) image() string {
+	if r.IsError || r.Data == "" || !strings.HasPrefix(r.MIMEType, "image/") {
+		return ""
+	}
+	return r.msgID + "/r" + strconv.Itoa(r.index)
 }
 
 func userEntry(m message.Message) (entry, bool) {

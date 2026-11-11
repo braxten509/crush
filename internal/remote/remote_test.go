@@ -409,10 +409,18 @@ func TestQuestionChoicePictures(t *testing.T) {
 	require.Equal(t, "image/png", typ)
 	require.Equal(t, "\x89PNG sketch", body)
 
-	for _, path := range []string{"/v1/question-image/r1/look/b", "/v1/question-image/r1/look/zz", "/v1/question-image/r9/look/a"} {
+	for _, path := range []string{"/v1/question-image/r1/look/b", "/v1/question-image/r1/look/zz", "/v1/question-image/r1/zz/a", "/v1/question-image/r9/look/a"} {
 		code, _, _ = get(path)
 		require.Equal(t, http.StatusNotFound, code, path)
 	}
+
+	// A form that waits in another chat is not the shared chat's: its picture stays on the PC.
+	env.src.setQuestion(&question.Request{ID: "r2", SessionID: "s2", Questions: []question.Question{{
+		ID: "look", Type: question.TypeSingleChoice, Text: "Which?",
+		Choices: []question.Choice{{ID: "a", Label: "A", Image: img}, {ID: "b", Label: "B"}},
+	}}})
+	code, _, _ = get("/v1/question-image/r2/look/a")
+	require.Equal(t, http.StatusNotFound, code)
 }
 
 // testEnv runs a share whose requests all seem to come from one address.

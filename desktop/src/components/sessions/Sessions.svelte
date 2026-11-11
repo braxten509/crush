@@ -20,7 +20,6 @@
   import Field from "../kit/Field.svelte";
   import FilterList from "../kit/FilterList.svelte";
   import Sheet from "../kit/Sheet.svelte";
-  import { windowBusy } from "../../lib/busy.js";
   import { closeDialog } from "../../lib/dialogs.js";
   import { api } from "../../lib/engine/api.js";
   import { file_info } from "../../lib/engine/commands.js";
@@ -109,10 +108,8 @@
       await openChat(row.ID);
       return;
     }
-    if (windowBusy()) {
-      notify("warn", "Agent is busy, please wait before switching folders...");
-      return;
-    }
+    // Another folder's chat opens while this one works: switching folders
+    // keeps the running work going (the left list does the same).
     let isFolder = false;
     try {
       const info = await file_info(row.Directory, "/");

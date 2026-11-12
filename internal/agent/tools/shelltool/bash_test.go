@@ -446,7 +446,7 @@ func TestBashTool_ApprovedDangerousCommandRuns(t *testing.T) {
 	require.Equal(t, 1, perms.requestCount, "a dangerous command must be prompted for")
 	require.Equal(t, "ifconfig", perms.lastDanger,
 		"the prompt must name what tripped the check")
-	require.False(t, resp.IsError, "an approved command must not be re-blocked at exec time: %s", resp.Content)
+	require.NotContains(t, resp.Content, shell.BlockedPrefix, "an approved command must not be re-blocked at exec time")
 }
 
 // TestBashTool_UnflaggedCommandKeepsBlockList is the other side of that rule.
@@ -472,7 +472,7 @@ func TestBashTool_UnflaggedCommandKeepsBlockList(t *testing.T) {
 	})
 
 	require.Empty(t, perms.lastDanger, "the static check cannot see through a glob")
-	require.True(t, resp.IsError, "the block list stops it at exec time: %s", resp.Content)
+	require.Contains(t, resp.Content, shell.BlockedPrefix, "the block list stops it at exec time")
 }
 
 // TestBashTool_SysadminModeSkipsBlockList pins sysadmin mode as the deliberate
@@ -495,7 +495,7 @@ func TestBashTool_SysadminModeSkipsBlockList(t *testing.T) {
 		Command:     "ifconf?g --help",
 	})
 
-	require.False(t, resp.IsError, "sysadmin mode blocks nothing: %s", resp.Content)
+	require.NotContains(t, resp.Content, shell.BlockedPrefix, "sysadmin mode blocks nothing")
 }
 
 // TestBashTool_DeniedDangerousCommandDoesNotRun is the other half: denial at
@@ -578,7 +578,7 @@ func TestBashTool_YoloModeDoesNotPromptForDangerousCommands(t *testing.T) {
 		t.Fatal("yolo mode blocked waiting for a permission prompt that should never have been raised")
 	}
 
-	require.False(t, got.IsError, "a dangerous command must not be blocked in yolo mode: %s", got.Content)
+	require.NotContains(t, got.Content, shell.BlockedPrefix, "a dangerous command must not be blocked in yolo mode")
 
 	select {
 	case p := <-prompts:
@@ -631,7 +631,7 @@ func TestBlockedCommandErrorNamesTheCommand(t *testing.T) {
 		Command:     "ifconf?g --help",
 	})
 
-	require.True(t, resp.IsError, resp.Content)
+	require.Contains(t, resp.Content, shell.BlockedPrefix)
 	require.Contains(t, resp.Content, "ifconfig", "the error must name the command")
 	require.NotContains(t, resp.Content, "ifconf?g", "not the spelling that reached it")
 }

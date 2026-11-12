@@ -20,6 +20,10 @@ import (
 	"mvdan.cc/sh/v3/syntax"
 )
 
+// BlockedPrefix starts the error of a command the block list stopped; it is
+// how a caller (and a test) tells "stopped" from "ran and failed".
+const BlockedPrefix = "blocked: "
+
 // probeWindow is how many bytes we read from the head of a file to decide
 // how to dispatch it. 128 is plenty for a shebang line and for magic-byte
 // inspection, while small enough to make the probe cheap for users whose
@@ -208,7 +212,7 @@ func dispatchShebang(ctx context.Context, next interp.ExecHandlerFunc, scriptPat
 	for _, blockFunc := range blockFuncs {
 		if blockFunc(cmdArgs) {
 			return fmt.Errorf(
-				"blocked: %s is a dangerous command, named by the shebang in %s",
+				BlockedPrefix+"%s is a dangerous command, named by the shebang in %s",
 				normalizeCommand(interpreter), filepath.Base(scriptPath),
 			)
 		}

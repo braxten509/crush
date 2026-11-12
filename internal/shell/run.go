@@ -393,7 +393,7 @@ func blockHandler(blockFuncs []BlockFunc) execMiddleware {
 					// Name the command that was recognised, not the wrapper
 					// in front of it, so this agrees with the warning the
 					// static check would have shown for the same command.
-					return fmt.Errorf("blocked: %s is a dangerous command", normalizeCommand(ResolveArgv(args)[0]))
+					return fmt.Errorf(BlockedPrefix+"%s is a dangerous command", normalizeCommand(ResolveArgv(args)[0]))
 				}
 			}
 			return next(ctx, args)

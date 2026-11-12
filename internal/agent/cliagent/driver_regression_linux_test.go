@@ -233,16 +233,20 @@ cat >/dev/null
 	}
 }
 
-func TestAGYCredentialLookupUsesFetchDeadline(t *testing.T) {
+// An agy that hangs on its usage report is ended at the read's deadline,
+// with whatever it started.
+func TestAGYUsageReportUsesFetchDeadline(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "secret-tool"), []byte("#!/bin/sh\nsleep 30 &\nwait\n"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "agy"), []byte("#!/bin/sh\nexit 1\n"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "agy"), []byte("#!/bin/sh\nsleep 30 &\nwait\n"), 0o755))
+	saved := agyUsageTimeout
+	agyUsageTimeout = 300 * time.Millisecond
+	t.Cleanup(func() { agyUsageTimeout = saved })
 	started := time.Now()
 	_, err := fetchAGYLimits(context.Background())
 	require.ErrorIs(t, err, context.DeadlineExceeded)
-	require.Less(t, time.Since(started), 17*time.Second)
+	require.Less(t, time.Since(started), 5*time.Second)
 }
 
 func TestRefreshLimitsCoalescesPendingFetch(t *testing.T) {

@@ -19,10 +19,14 @@ const engine = vi.fn(async (dir = "") => {
 });
 vi.mock("./engine/api.js", () => ({ api: { engine } }));
 vi.mock("./stores/connection.svelte.js", () => ({ conn: { folders: { "/shown": {}, "/b": {} } }, inFolder: (dir) => dir === "/shown" }));
-// The close sheet: its props, to answer it.
+// The close sheet: its props, to answer it. The last window's close always
+// asks (owner, 2026-11-09), so the sheet answers "Close window only" by
+// itself unless a test takes the answer (answerSheet = null).
 let sheet = null;
+let answerSheet = "window";
 const openDialog = vi.fn((id, props) => {
   sheet = { id, ...props };
+  if (answerSheet) props.answer(answerSheet);
   return true;
 });
 vi.mock("./dialogs.js", () => ({ dialogRegistered: () => true, openDialog }));
@@ -47,6 +51,7 @@ beforeEach(async () => {
   openDialog.mockClear();
   work = {};
   sheet = null;
+  answerSheet = "window";
   requested = null;
   closing = await import("./closing.js");
 });
@@ -116,6 +121,7 @@ describe("closing the window (desktop-design-5-6 2.23, 6.4)", () => {
     // sub-agent on a joined folder's: the sheet asks, and holds Rust's
     // fallback off while it waits.
     vi.resetModules();
+    answerSheet = null;
     closing = await import("./closing.js");
     closing.registerCloseStep({ id: "step", order: 1, run: async () => calls.push("step") });
     calls.length = 0;

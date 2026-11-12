@@ -363,6 +363,24 @@ describe("limitWindows (cliagent.Limits and Limit.Left)", () => {
     // The Usage sheet lists the same windows, not the raw model's name.
     expect(usageWindows(agy.windows, "gemini-3.8-flash-high").map((w) => w.name)).toEqual(["5h"]);
   });
+
+  it("a limit named after a model family shows on that family's chats, the closest family first (owner, 2026-11-12)", () => {
+    const items = ["context", "limit_5h", "limit_weekly", "limit_other"];
+    const labels = (r, model) => meterModel({ items, limits: limitWindows(r, model, now) }).meters.map((m) => [m.label, m.text]);
+    const claude = reading({ windows: [
+      { name: "5h", used: 26 }, { name: "Weekly", used: 58 }, { name: "Weekly Fable", used: 43, model: "Fable" },
+    ] });
+    expect(labels(claude, "fable")).toEqual([["CONTEXT", "–"], ["5-HOUR", "74% left"], ["WEEK", "42% left"], ["WEEKLY FABLE", "57% left"]]);
+    expect(labels(claude, "opus")).toEqual([["CONTEXT", "–"], ["5-HOUR", "74% left"], ["WEEK", "42% left"]]);
+    const agy = reading({ kind: "agy-cli", windows: [
+      { name: "Weekly", used: 10, model: "gemini" }, { name: "5h", used: 0, model: "gemini" },
+      { name: "Weekly", used: 30, model: "Claude Opus" }, { name: "Weekly", used: 40, model: "Gemini 4 Argon" },
+    ] });
+    expect(labels(agy, "gemini-4-argon-high")).toEqual([["CONTEXT", "–"], ["WEEK", "60% left"]]);
+    expect(labels(agy, "gemini-4-hydrogen-xhigh")).toEqual([["CONTEXT", "–"], ["WEEK", "90% left"], ["5-HOUR", "100% left"]]);
+    expect(labels(agy, "claude-opus-5-5-low")).toEqual([["CONTEXT", "–"], ["WEEK", "70% left"]]);
+    expect(labels(agy, "gpt-oss-120b-medium")).toEqual([["CONTEXT", "–"]]);
+  });
 });
 
 describe("Moonshot AI's usage windows", () => {

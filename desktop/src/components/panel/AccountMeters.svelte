@@ -4,7 +4,9 @@
   // Month; owner, 2026-10-25), then one line per account of every tool that
   // reports usage: its name (Claude, Claude 2, Codex, ...; a dot on the one
   // in use), each span's part left as a small bar and a percent, amber under
-  // 30 % and rose under 10 % as the meters above. Shown
+  // 30 % and rose under 10 % as the meters above. A model family with a
+  // limit of its own gets a line under its account, set in (Fable under
+  // Claude, Gemini 4 Argon under Agy; owner, 2026-11-12). Shown
   // only while Settings > Appearance > "Show every account's usage" is on;
   // lib/stores/accountmeters.svelte.js reads them.
   import { limitKind } from "../../lib/footer.js";
@@ -28,6 +30,17 @@
   const NOTE = { checking: "checking…", "signed-out": "signed out", error: "can't read" };
 </script>
 
+{#snippet amount(part)}
+  <span class="part">
+    {#if part}
+      <span class="bar"><span class="fill {part.level}" style:width="{part.left}%"></span></span>
+      <span class="pct {part.level}"><span class="room" aria-hidden="true">100%</span><span>{part.left}%</span></span>
+    {:else}
+      <span class="pct none">–</span>
+    {/if}
+  </span>
+{/snippet}
+
 {#if groups.length > 0}
   <section class="panel-section accounts" data-section="accounts" aria-label="Accounts" style:--spans={SPANS.length}>
     <h2 class="head">
@@ -44,18 +57,15 @@
             {#if NOTE[row.state]}
               <span class="wide">{NOTE[row.state]}</span>
             {:else}
-              {#each row.parts as part, at (at)}
-                <span class="part">
-                  {#if part}
-                    <span class="bar"><span class="fill {part.level}" style:width="{part.left}%"></span></span>
-                    <span class="pct {part.level}"><span class="room" aria-hidden="true">100%</span><span>{part.left}%</span></span>
-                  {:else}
-                    <span class="pct none">–</span>
-                  {/if}
-                </span>
-              {/each}
+              {#each row.parts as part, at (at)}{@render amount(part)}{/each}
             {/if}
           </div>
+          {#each row.families as family (family.name)}
+            <div class="row family" class:idle={row.state === "idle"} data-family={family.name}>
+              <span class="name"><span class="text">{family.name}</span></span>
+              {#each family.parts as part, at (at)}{@render amount(part)}{/each}
+            </div>
+          {/each}
         {/each}
       </div>
     {/each}
@@ -110,6 +120,11 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  /* A model family's own limit, a line under its account, set in. */
+  .family .name {
+    padding-left: calc(16 * var(--px));
+    color: var(--slate);
   }
   .dot {
     flex: none;

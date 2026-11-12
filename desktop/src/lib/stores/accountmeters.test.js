@@ -71,6 +71,28 @@ describe("account meters", () => {
     expect([agy.rows[0].name, agy.rows[0].inUse, agy.rows[0].parts]).toEqual(["Agy", true, [{ left: 90, level: "" }, null, null]]);
   });
 
+  it("gives a model family with a limit of its own a line under its account (owner, 2026-11-12)", () => {
+    const byKind = {
+      "claude-code": { kind: "claude-code", state: "ready", read_at: "2026-10-21T11:59:00Z", windows: [
+        { name: "5h", used: 26 }, { name: "Weekly", used: 58 }, { name: "Weekly Fable", used: 43, model: "Fable" },
+      ] },
+      "agy-cli": { kind: "agy-cli", state: "ready", read_at: "2026-10-21T11:59:00Z", windows: [
+        { name: "Weekly", used: 10, model: "gemini" }, { name: "5h", used: 0, model: "gemini" },
+        { name: "Weekly", used: 30, model: "Claude Opus" }, { name: "5h", used: 99, model: "Claude Opus" },
+        { name: "Weekly", used: 40, model: "Gemini 4 Argon" },
+      ] },
+    };
+    const lefts = (parts) => parts.map((p) => p?.left ?? null);
+    const lines = accountGroups({ accounts: accounts.slice(0, 1), byKind, now }).map((g) => {
+      const row = g.rows[0];
+      return [row.name, lefts(row.parts), row.families.map((f) => [f.name, lefts(f.parts)])];
+    });
+    expect(lines).toEqual([
+      ["Claude", [74, 42, null], [["Fable", [null, 57, null]]]],
+      ["Agy", [100, 90, null], [["Gemini 4 Argon", [null, 60, null]]]],
+    ]);
+  });
+
   it("numbers a tool's sign-ins after the first, with each one's part left, level, and in-use mark", () => {
     const byKind = { "claude-code": reading("claude-code", "", 0, 31), "claude-code#c2": reading("claude-code", "c2", 88, 95) };
     const [group] = accountGroups({ accounts, byKind, inUse: { kind: "claude-code", account: "" }, now });

@@ -89,7 +89,8 @@ func (r *claudeRun) handleLine(line claudeLine, raw []byte) (done bool, err erro
 	case "system":
 		err = r.handleSystem(line)
 	case "rate_limit_event":
-		setLimits(limitKey{config.TypeClaudeCode, r.m.Account}, claudeRateLimit(raw), -1)
+		key := limitKey{config.TypeClaudeCode, r.m.Account}
+		setLimits(key, withModelLimits(key, claudeRateLimit(raw)), -1)
 	case "stream_event":
 		err = r.handleStreamEvent(line)
 	case "assistant":

@@ -12,7 +12,7 @@
 import { api } from "../engine/api.js";
 import { ACCOUNT_KINDS, CLAUDE, CODEX } from "../fallback/blocks.js";
 import { fallback, loadFallback } from "../fallback/store.svelte.js";
-import { meterLevel } from "../footer.js";
+import { meterLevel, nameWords } from "../footer.js";
 import { leftPercent, limits, limitsKey, readTime } from "./limits.svelte.js";
 
 const KEY = "crush-desktop.account-meters";
@@ -85,30 +85,49 @@ export function checkingKinds(accounts = [], byKind = {}) {
   );
 }
 
-// Antigravity counts each model apart: only its Gemini models are shown
-// (owner, 2026-10-25). Gemini quotas reset every five hours, and one not yet
-// used has no reset time, so its "Limit" window goes in the 5h column.
+// Antigravity counts its model groups apart: only its Gemini ones are
+// shown (owner, 2026-10-25).
 function windowsOf(kind, reading) {
   const windows = reading?.windows ?? [];
   if (kind !== "agy-cli") return windows;
   const gemini = windows.filter((w) => /gemini/i.test(w.model ?? ""));
-  return (gemini.length > 0 ? gemini : windows).map((w) => (w.name === "Limit" ? { ...w, name: "5h" } : w));
+  return gemini.length > 0 ? gemini : windows;
+}
+
+// A reading's windows as the list shows them (owner, 2026-11-12): the row's
+// own, and under it one line per model family with a limit of its own (Fable
+// under Claude, Gemini 4 Argon under Agy). A family has a limit of its own
+// when the reading also holds a wider one that covers it: the whole
+// account's windows, or a family named by only some of its words (Gemini
+// for Gemini 4 Argon).
+function splitWindows(kind, reading) {
+  const windows = windowsOf(kind, reading);
+  const words = new Map(windows.map((w) => [w.model ?? "", nameWords(w.model)]));
+  const covers = (wide, family) => words.get(wide).length < words.get(family).length && words.get(wide).every((word) => words.get(family).includes(word));
+  const apart = [...words.keys()].filter((family) => [...words.keys()].some((wide) => covers(wide, family)));
+  return {
+    own: windows.filter((w) => !apart.includes(w.model ?? "")),
+    families: apart.map((family) => ({ family, windows: windows.filter((w) => (w.model ?? "") === family) })),
+  };
 }
 
 // One span's part left: the window for the whole account, else the lowest
-// of the per-model ones.
-function partOf(kind, reading, name, now) {
-  const windows = windowsOf(kind, reading).filter((w) => w.name === name);
-  const whole = windows.filter((w) => !w.model);
-  const pick = whole.length > 0 ? whole : windows;
+// of the per-model ones. A family's own window carries the family's name
+// after the span's ("Weekly Fable").
+function partOf(windows, name, now) {
+  const named = windows.filter((w) => w.name === name || String(w.name).startsWith(`${name} `));
+  const whole = named.filter((w) => !w.model);
+  const pick = whole.length > 0 ? whole : named;
   if (pick.length === 0) return null;
   const left = Math.round(Math.min(...pick.map((w) => leftPercent(w, now))));
   return { left, level: meterLevel(left) };
 }
 
 // The panel's groups: [{kind, rows: [{id, name, email, inUse, state,
-// parts}]}]. name is the row's label, email the email it signed in with, or
-// "" when none is known (shown on hover). parts line up with SPANS, each {left, level} or null. state is "ready", "checking" (no reading yet), "error" (the first
+// parts, families}]}]. name is the row's label, email the email it signed in with, or
+// "" when none is known (shown on hover). parts line up with SPANS, each {left, level} or null.
+// families are the lines under the row, [{name, parts}], one per model
+// family with a limit of its own. state is "ready", "checking" (no reading yet), "error" (the first
 // read failed), "idle" (the last read failed, so the numbers are old: an
 // unused Claude login expires until Claude Code runs on it again) or
 // "signed-out".
@@ -123,6 +142,7 @@ export function accountGroups({ accounts = [], byKind = {}, inUse = { kind: "", 
       rows: logins.map((a, at) => {
         const reading = byKind[limitsKey(kind, a.id)] ?? null;
         const read = Boolean(readTime(reading?.read_at));
+        const split = splitWindows(kind, reading);
         let state = "ready";
         if (!a.signed_in) state = "signed-out";
         else if (!read) state = reading?.state === "error" ? "error" : "checking";
@@ -133,7 +153,8 @@ export function accountGroups({ accounts = [], byKind = {}, inUse = { kind: "", 
           email: a.email || ([a.name, a.label].find((n) => String(n ?? "").includes("@")) ?? ""),
           inUse: inUse.kind === kind && (inUse.account ?? "") === a.id,
           state,
-          parts: SPAN_WINDOWS.map((name) => (read ? partOf(kind, reading, name, now) : null)),
+          parts: SPAN_WINDOWS.map((name) => (read ? partOf(split.own, name, now) : null)),
+          families: !read || !a.signed_in ? [] : split.families.map((f) => ({ name: f.family, parts: SPAN_WINDOWS.map((name) => partOf(f.windows, name, now)) })),
         };
       }),
     };

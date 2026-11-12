@@ -14,7 +14,9 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
+	"unicode"
 
 	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/config"
@@ -253,8 +255,8 @@ var effortWords = []string{"minimal", "low", "medium", "high", "xhigh", "max"}
 
 // usageModel is the per-model name model's usage is stored under: its own,
 // else its name without the effort word, else that name's effort-tiered
-// entry (AGY lists gemini-3.8-flash-high's usage as
-// gemini-3.8-flash-tiered; owner, 2026-10-22). "" when none is stored.
+// entry (gemini-3.8-flash-high read gemini-3.8-flash-tiered; owner,
+// 2026-10-22), else the model family it belongs to. "" when none is stored.
 func usageModel(limits []Limit, model string) string {
 	has := func(name string) bool {
 		return name != "" && slices.ContainsFunc(limits, func(l Limit) bool { return l.Model == name })
@@ -273,7 +275,31 @@ func usageModel(limits []Limit, model string) string {
 			}
 		}
 	}
-	return ""
+	// A limit named after a model family ("Fable", "Gemini 4 Argon")
+	// applies to the models whose name has all its words; the family with
+	// the most words wins (Argon's own limit over Gemini's).
+	words := nameWords(model)
+	best, most := "", 0
+	for _, l := range limits {
+		family := nameWords(l.Model)
+		if len(family) > most && !slices.ContainsFunc(family, func(w string) bool { return !slices.Contains(words, w) }) {
+			best, most = l.Model, len(family)
+		}
+	}
+	return best
+}
+
+// nameWords are a model name's words in lower case: "gemini-4-argon-high"
+// and "Gemini 4 Argon" share gemini, 4 and argon. A version stays whole
+// (3.8 is no 3).
+func nameWords(name string) []string {
+	var words []string
+	for _, word := range strings.FieldsFunc(strings.ToLower(name), func(r rune) bool { return r != '.' && !unicode.IsLetter(r) && !unicode.IsDigit(r) }) {
+		if word = strings.Trim(word, "."); word != "" {
+			words = append(words, word)
+		}
+	}
+	return words
 }
 
 // Refills is how many free refills an account has left, as last read.
@@ -527,116 +553,119 @@ func grokBilling(raw json.RawMessage) ([]Limit, error) {
 	return []Limit{{Name: name, Used: used, ResetsAt: c.Period.End}}, nil
 }
 
-// fetchAGYLimits reads each model's quota from the Cloud Code endpoint the
-// Antigravity app uses. AGY keeps its login in the Secret Service keyring
-// and refreshes it on any network command, so an expired token is renewed
-// by running `agy models`.
+// agyUsageTimeout bounds one run of AGY's usage report.
+var agyUsageTimeout = 15 * time.Second
+
+// agyUsageMissing is set once this agy answered /usage with a model turn:
+// an agy too old for the command would spend a request on every read.
+var agyUsageMissing atomic.Bool
+
+// fetchAGYLimits reads AGY's own usage report, `agy -p /usage`: every
+// limit group with its five-hour and weekly parts, Gemini 4 Argon's own
+// weekly limit among them (owner, 2026-11-12; the Cloud Code address read
+// before lists neither Argon nor the weekly parts). The report costs no
+// model request and, with its log sent nowhere, leaves no file behind. AGY
+// renews its own login as it runs.
 func fetchAGYLimits(ctx context.Context) ([]Limit, error) {
-	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	if agyUsageMissing.Load() {
+		return nil, errors.New("this agy has no usage report; update it")
+	}
+	ctx, cancel := context.WithTimeout(ctx, agyUsageTimeout)
 	defer cancel()
-	token, err := agyToken(ctx)
+	cmd := exec.CommandContext(ctx, agyBin(), "-p", "/usage", "--output-format", "json", "--log-file", os.DevNull)
+	cmd.Dir = os.TempDir()
+	ownGroup(cmd)
+	cmd.Cancel = func() error {
+		(&proc{cmd: cmd}).kill()
+		return nil
+	}
+	cmd.WaitDelay = time.Second // A helper may inherit stdout past cancellation.
+	out, err := cmd.Output()
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("agy usage: %w", err)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels", strings.NewReader("{}"))
-	if err != nil {
-		return nil, err
+	limits, turns, err := agyUsage(out)
+	if turns > 0 {
+		agyUsageMissing.Store(true)
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
-	// ponytail: the endpoint rejects requests without an AGY user agent;
-	// the version isn't checked.
-	req.Header.Set("User-Agent", "Antigravity CLI (agy)/1.2.11")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("agy quota: %s", resp.Status)
-	}
+	return limits, err
+}
+
+// agyWindows names a usage part's window as the other tools' are named.
+var agyWindows = map[string]string{"5h": "5h", "weekly": "Weekly"}
+
+// agyUsage reads the usage report's answer into limits, each tied to the
+// model families of its group, and the model turns the answer took (none,
+// unless agy took /usage for a prompt).
+func agyUsage(out []byte) (limits []Limit, turns int, err error) {
 	var res struct {
-		Models map[string]struct {
-			Quota *struct {
-				Remaining float64 `json:"remainingFraction"`
-				ResetTime string  `json:"resetTime"`
-			} `json:"quotaInfo"`
-		} `json:"models"`
+		Turns   int `json:"num_turns"`
+		Command struct {
+			Data struct {
+				Groups []struct {
+					Name        string `json:"name"`
+					Description string `json:"description"`
+					Buckets     []struct {
+						Window    string   `json:"window"`
+						Remaining *float64 `json:"remaining_fraction"`
+						ResetTime string   `json:"reset_time"`
+					} `json:"buckets"`
+				} `json:"groups"`
+			} `json:"data"`
+		} `json:"command"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
-		return nil, err
+	if err := json.Unmarshal(out, &res); err != nil {
+		return nil, 0, fmt.Errorf("agy usage: %w", err)
 	}
-	var limits []Limit
-	now := time.Now()
-	for id, m := range res.Models {
-		if m.Quota == nil {
-			continue
+	for _, g := range res.Command.Data.Groups {
+		families := agyFamilies(g.Name, g.Description)
+		for _, b := range g.Buckets {
+			if b.Remaining == nil {
+				continue
+			}
+			reset, _ := time.Parse(time.RFC3339, b.ResetTime)
+			for _, family := range families {
+				limits = append(limits, Limit{Name: cmp.Or(agyWindows[b.Window], b.Window, "Limit"), Used: (1 - *b.Remaining) * 100, ResetsAt: reset, Model: family})
+			}
 		}
-		reset, _ := time.Parse(time.RFC3339, m.Quota.ResetTime)
-		limits = append(limits, Limit{Name: agyWindowName(now, reset), Used: (1 - m.Quota.Remaining) * 100, ResetsAt: reset, Model: id})
 	}
-	return limits, nil
+	if len(limits) == 0 {
+		return nil, res.Turns, errors.New("agy usage: no limits in the answer")
+	}
+	return limits, res.Turns, nil
 }
 
-// agyWindowName names a quota window by what it has left. Antigravity
-// reports no window length: its Gemini quotas reset every five hours and
-// its Claude and GPT-OSS quotas every week, so the time to the reset says
-// which window it is. A weekly window in its last hours reads as the
-// five-hour one.
-func agyWindowName(now, reset time.Time) string {
-	if reset.IsZero() {
-		return "Limit"
-	}
-	left := reset.Sub(now)
-	switch {
-	case left <= 5*time.Hour+30*time.Minute:
-		return "5h"
-	case left <= 8*24*time.Hour:
-		return "Weekly"
-	}
-	return fmt.Sprintf("%dd", max(int(left.Round(24*time.Hour)/(24*time.Hour)), 1))
-}
-
-func agyToken(ctx context.Context) (string, error) {
-	command := func(name string, args ...string) *exec.Cmd {
-		cmd := exec.CommandContext(ctx, name, args...)
-		ownGroup(cmd)
-		cmd.Cancel = func() error {
-			(&proc{cmd: cmd}).kill()
-			return nil
+// agyFamilies names the model families a usage group covers, for
+// usageModel to match a chat's model against. A group lists its families
+// ("Models within this group: Gemini Flash, Gemini Pro"); one that lists
+// none is its own name ("Gemini 4 Argon"). Families that share words stand
+// for every model with those words ("Gemini": the general Gemini limit,
+// which Gemini 4 Hydrogen counts against too; owner, 2026-11-12), and the
+// rest are named one by one (Claude Opus, Claude Sonnet, GPT-OSS).
+func agyFamilies(name, description string) []string {
+	_, list, _ := strings.Cut(description, "Models within this group:")
+	var families []string
+	for family := range strings.SplitSeq(list, ",") {
+		if family = strings.Trim(family, " ."); family != "" {
+			families = append(families, family)
 		}
-		cmd.WaitDelay = time.Second // A helper may inherit stdout past cancellation.
-		return cmd
 	}
-	read := func() (string, time.Time) {
-		out, err := command("secret-tool", "lookup", "service", "gemini", "username", "antigravity").Output()
-		if err != nil {
-			return "", time.Time{}
+	if len(families) == 0 {
+		return []string{name}
+	}
+	var shared []string
+	for _, word := range nameWords(families[0]) {
+		if !slices.ContainsFunc(families[1:], func(f string) bool { return !slices.Contains(nameWords(f), word) }) {
+			shared = append(shared, word)
 		}
-		var v struct {
-			Token struct {
-				AccessToken string    `json:"access_token"`
-				Expiry      time.Time `json:"expiry"`
-			} `json:"token"`
-		}
-		_ = json.Unmarshal(out, &v)
-		return v.Token.AccessToken, v.Token.Expiry
 	}
-	token, expiry := read()
-	if ctx.Err() != nil {
-		return "", ctx.Err()
+	if len(families) > 1 && len(shared) > 0 {
+		return []string{strings.Join(shared, " ")}
 	}
-	if token == "" || time.Until(expiry) < time.Minute {
-		_ = command(agyBin(), "models").Run()
-		token, expiry = read()
-	}
-	if ctx.Err() != nil {
-		return "", ctx.Err()
-	}
-	if token == "" || time.Until(expiry) < 0 {
-		return "", errors.New("no AGY login in the keyring")
-	}
-	return token, nil
+	return families
 }
 
 // windowName names a usage window by its length.
@@ -779,7 +808,62 @@ func fetchClaudeLimits(ctx context.Context) ([]Limit, error) {
 			limits = append(limits, Limit{Name: w.name, Used: v.Utilization, ResetsAt: reset})
 		}
 	}
+	for _, l := range claudeModelLimits(usage["limits"]) {
+		if !slices.ContainsFunc(limits, func(have Limit) bool { return have.Name == l.Name }) {
+			limits = append(limits, l)
+		}
+	}
 	return limits, nil
+}
+
+// claudeGroups names a per-model limit's window as the account's own
+// windows are named.
+var claudeGroups = map[string]string{"session": "5h", "weekly": "Weekly"}
+
+// claudeModelLimits reads the usage answer's limits that belong to one
+// model family (a weekly one for Fable; owner, 2026-11-12). Each is tied
+// to its family's name, so it shows on that family's chats only.
+func claudeModelLimits(raw json.RawMessage) []Limit {
+	var entries []struct {
+		Group    string  `json:"group"`
+		Percent  float64 `json:"percent"`
+		ResetsAt string  `json:"resets_at"`
+		Scope    *struct {
+			Model *struct {
+				Name string `json:"display_name"`
+			} `json:"model"`
+		} `json:"scope"`
+	}
+	if json.Unmarshal(raw, &entries) != nil {
+		return nil
+	}
+	var limits []Limit
+	for _, e := range entries {
+		window, ok := claudeGroups[e.Group]
+		if !ok || e.Scope == nil || e.Scope.Model == nil || e.Scope.Model.Name == "" {
+			continue
+		}
+		reset, _ := time.Parse(time.RFC3339Nano, e.ResetsAt)
+		limits = append(limits, Limit{Name: window + " " + e.Scope.Model.Name, Used: e.Percent, ResetsAt: reset, Model: e.Scope.Model.Name})
+	}
+	return limits
+}
+
+// withModelLimits adds the stored per-model limits a turn's own update
+// does not carry (they come from the usage address only), so a turn never
+// takes a model's meter away.
+func withModelLimits(k limitKey, limits []Limit) []Limit {
+	if len(limits) == 0 {
+		return nil
+	}
+	limitStore.Lock()
+	defer limitStore.Unlock()
+	for _, old := range limitStore.byKind[k] {
+		if old.Model != "" && !slices.ContainsFunc(limits, func(l Limit) bool { return l.Name == old.Name }) {
+			limits = append(limits, old)
+		}
+	}
+	return limits
 }
 
 // codexSnapshot is Codex's RateLimitSnapshot.

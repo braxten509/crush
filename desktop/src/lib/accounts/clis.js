@@ -10,8 +10,8 @@ export const AGENT_CLIS = [
   // gone (owner, 2026-10-24).
   { kind: "grok-cli", name: "Grok", login: ["grok", "login"], accounts: true },
   // AGY has no login subcommand; `agy models` is what fetches a token when
-  // none is stored (internal/agent/cliagent/limits.go, agyToken). OpenCode's
-  // `auth login` asks its questions in a terminal, so both run in a tab.
+  // none is stored. OpenCode's `auth login` asks its questions in a terminal,
+  // so both run in a tab.
   { kind: "agy-cli", name: "Antigravity", login: ["agy", "models"], accounts: false, terminal: true },
   { kind: "opencode-cli", name: "OpenCode Go", login: ["opencode", "auth", "login"], accounts: false, terminal: true },
   { kind: "opencode-zen-cli", name: "OpenCode Zen", login: ["opencode", "auth", "login"], accounts: false, terminal: true },

@@ -76,7 +76,7 @@ func openCodeAuthHas(key string) bool {
 }
 
 // agySignedIn reports whether AGY's login is in the Secret Service keyring,
-// where it keeps it (agyToken). A test never asks the real keyring, which
+// where it keeps it. A test never asks the real keyring, which
 // may prompt to be unlocked.
 func agySignedIn() bool {
 	if testing.Testing() {

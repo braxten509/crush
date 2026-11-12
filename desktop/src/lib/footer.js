@@ -326,10 +326,24 @@ function goTime(value) {
 // reports no limits at all.
 const EFFORT_WORDS = ["minimal", "low", "medium", "high", "xhigh", "max"];
 
+// A model name's words in lower case (cliagent.nameWords):
+// "gemini-4-argon-high" and "Gemini 4 Argon" share gemini, 4 and argon. A
+// version stays whole (3.8 is no 3).
+export function nameWords(name) {
+  return String(name ?? "")
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}.]+/u)
+    .map((word) => word.replace(/^\.+|\.+$/gu, ""))
+    .filter(Boolean);
+}
+
 // The per-model name a model's usage is stored under (cliagent.usageModel):
 // its own, else its name without the effort word, else that name's
-// effort-tiered entry (AGY: gemini-3.8-flash-high reads
-// gemini-3.8-flash-tiered; owner, 2026-10-22). "" when none is.
+// effort-tiered entry (gemini-3.8-flash-high read gemini-3.8-flash-tiered;
+// owner, 2026-10-22), else the model family it belongs to: a limit named
+// after a family ("Fable", "Gemini 4 Argon") applies to the models whose
+// name has all its words, and the family with the most words wins (Argon's
+// own limit over Gemini's; owner, 2026-11-12). "" when none is.
 function usageModel(windows, model) {
   const has = (name) => Boolean(name) && windows.some((w) => w.model === name);
   if (has(model)) return model;
@@ -338,7 +352,17 @@ function usageModel(windows, model) {
     const base = model.slice(0, -word.length - 1);
     for (const name of [base, `${base}-tiered`]) if (has(name)) return name;
   }
-  return "";
+  const words = nameWords(model);
+  let best = "";
+  let most = 0;
+  for (const w of windows) {
+    const family = nameWords(w.model);
+    if (family.length > most && family.every((word) => words.includes(word))) {
+      best = w.model;
+      most = family.length;
+    }
+  }
+  return best;
 }
 
 // The windows that apply to a model: those for every model and those for

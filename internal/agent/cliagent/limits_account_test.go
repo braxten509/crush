@@ -2,6 +2,8 @@ package cliagent
 
 import (
 	"context"
+	"fmt"
+	"math"
 	"testing"
 	"time"
 
@@ -101,33 +103,47 @@ func TestAGYModelsReadTheirEffortTieredUsage(t *testing.T) {
 	require.Empty(t, used("gemini-3.7-flash-high"), "a model AGY doesn't list reads nothing")
 }
 
-// AGY reports no window length, so each quota is named by the time to its
-// reset: its Gemini quotas reset within five hours and its Claude and
-// GPT-OSS quotas within a week or more (owner, 2026-10-22: the meters show
-// only the 5-hour and weekly windows).
-func TestAGYWindowsAreNamedByTheirLength(t *testing.T) {
-	now := time.Date(2026, 10, 22, 13, 55, 0, 0, time.UTC)
-	require.Equal(t, "5h", agyWindowName(now, now.Add(4*time.Hour)))
-	require.Equal(t, "5h", agyWindowName(now, now.Add(5*time.Hour+20*time.Minute)))
-	require.Equal(t, "Weekly", agyWindowName(now, now.Add(4*24*time.Hour)))
-	require.Equal(t, "Weekly", agyWindowName(now, now.Add(7*24*time.Hour)))
-	require.Equal(t, "12d", agyWindowName(now, now.Add(12*24*time.Hour+3*time.Hour)))
-	require.Equal(t, "Limit", agyWindowName(now, time.Time{}))
+// agyUsageAnswer is the answer of `agy -p /usage --output-format json` as
+// read on 2026-11-12, shortened; %[1]s is every part's reset time.
+const agyUsageAnswer = `{"status":"SUCCESS","num_turns":0,"command":{"name":"usage","data":{"groups":[
+{"name":"Gemini Models","description":"Models within this group: Gemini Flash, Gemini Pro","buckets":[
+ {"id":"gemini-weekly","window":"weekly","remaining_fraction":0.9,"reset_time":"%[1]s"},
+ {"id":"gemini-5h","window":"5h","remaining_fraction":1,"reset_time":"%[1]s"}]},
+{"name":"Claude and GPT models","description":"Models within this group: Claude Opus, Claude Sonnet, GPT-OSS","buckets":[
+ {"id":"3p-weekly","window":"weekly","remaining_fraction":0.7,"reset_time":"%[1]s"},
+ {"id":"3p-5h","window":"5h","remaining_fraction":0.8,"reset_time":"%[1]s"}]},
+{"name":"Gemini 4 Argon","description":"For paid Pro plans, Argon quota is separate.","buckets":[
+ {"id":"gemini-argon-wtu-weekly","window":"weekly","remaining_fraction":0.6,"reset_time":"%[1]s"}]}]}}}`
+
+// AGY's usage report names limit groups, not models: each chat model reads
+// the group it belongs to. Argon has its own weekly limit, every other
+// Gemini model (Hydrogen too) the general Gemini one, and Claude and GPT
+// theirs (owner, 2026-11-12).
+func TestAGYUsageGroupsReachTheirModelsMeters(t *testing.T) {
+	limits, turns, err := agyUsage(fmt.Appendf(nil, agyUsageAnswer, time.Now().Add(time.Hour).UTC().Format(time.RFC3339)))
+	require.NoError(t, err)
+	require.Zero(t, turns)
+	require.True(t, StoreAccountLimits(config.TypeAGYCLI, "", limits, -1))
+	left := func(model string) map[string]int {
+		out := map[string]int{}
+		for _, l := range AccountLimits(config.TypeAGYCLI, "", model) {
+			out[l.Name] = int(math.Round(l.Left()))
+		}
+		return out
+	}
+	require.Equal(t, map[string]int{"Weekly": 60}, left("gemini-4-argon-high"))
+	require.Equal(t, map[string]int{"Weekly": 90, "5h": 100}, left("gemini-4-hydrogen-xhigh"))
+	require.Equal(t, map[string]int{"Weekly": 90, "5h": 100}, left("gemini-3.8-flash-low"))
+	require.Equal(t, map[string]int{"Weekly": 70, "5h": 80}, left("claude-opus-5-5-low"))
+	require.Equal(t, map[string]int{"Weekly": 70, "5h": 80}, left("gpt-oss-120b-medium"))
+	require.Empty(t, left("some-other-model"), "a model of no group reads nothing")
 }
 
-// A whole AGY reading reaches the selected Gemini model's meter: the
-// tiered quota, named for the five-hour window the meters show. The resets
-// count from now: Left() reports a window that has already reset as full
-// again, so a fixed clock passed with the day it names.
-func TestAGYGeminiQuotaReachesItsMeter(t *testing.T) {
-	now := time.Now()
-	geminiReset, weeklyReset := now.Add(4*time.Hour), now.Add(5*24*time.Hour)
-	require.True(t, StoreAccountLimits(config.TypeAGYCLI, "", []Limit{
-		{Name: agyWindowName(now, geminiReset), Used: 12, ResetsAt: geminiReset, Model: "gemini-3.8-flash-tiered"},
-		{Name: agyWindowName(now, weeklyReset), Used: 87, ResetsAt: weeklyReset, Model: "claude-opus-4-6-thinking"},
-	}, -1))
-	limits := AccountLimits(config.TypeAGYCLI, "", "gemini-3.8-flash-high")
-	require.Len(t, limits, 1)
-	require.Equal(t, "5h", limits[0].Name)
-	require.InDelta(t, 88, limits[0].Left(), 0.01)
+// An agy too old for the usage command answers /usage with a model turn:
+// the read fails and says so, so it is never asked again.
+func TestAGYUsageAnsweredByAModelIsNoReading(t *testing.T) {
+	limits, turns, err := agyUsage([]byte(`{"status":"SUCCESS","response":"I can't show usage.","num_turns":1}`))
+	require.Error(t, err)
+	require.Empty(t, limits)
+	require.Equal(t, 1, turns)
 }

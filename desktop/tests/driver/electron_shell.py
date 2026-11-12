@@ -6,7 +6,8 @@ following the page, the taskbar marks of a blocked chat (the app must live
 through them), the navigation guard, and a page reload after a crash.
 
 Usage: CHECK_ARGS="-s 7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f01" \\
-       tests/check.sh --fixture tests/fixtures/model-menu.json electron_shell.py
+       tests/check.sh --fixture tests/fixtures/viewer-notes.json electron_shell.py
+(viewer-notes.json: its models take pictures, so a dropped picture attaches)
 """
 import json, os, subprocess, sys, time
 
@@ -115,6 +116,7 @@ screen_w, screen_h = (int(v) for v in subprocess.run(["xdotool", "getdisplaygeom
 sx, sy = screen_w - 130, screen_h - 130
 source = subprocess.Popen([sys.executable, "-I", "-c", SOURCE, PICTURE, str(sx), str(sy)], stdout=subprocess.PIPE, text=True)
 source.stdout.readline()
+page('window.__dragSeen = 0; window.addEventListener("dragover", () => { window.__dragSeen += 1; }); return 1;')
 time.sleep(0.5)
 tx, ty = geo[0] + geo[2] // 2, geo[1] + geo[3] // 2
 subprocess.run(["xdotool", "mousemove", str(sx + 60), str(sy + 60)])
@@ -122,11 +124,20 @@ subprocess.run(["xdotool", "mousedown", "1"])
 for i in range(1, 21):
     subprocess.run(["xdotool", "mousemove", str(round(sx + 60 + (tx - sx - 60) * i / 20)), str(round(sy + 60 + (ty - sy - 60) * i / 20))])
     time.sleep(0.12)
-# A few small moves over the window, then a pause: the drop is only offered
-# once Electron has answered the drag's position messages.
-for d in range(10):
+# Small moves over the window until the page has seen the drag over it: the
+# drop is only offered once Electron has answered the drag's position
+# messages, which the page's dragover events show.
+end = time.time() + 10
+d = 0
+while time.time() < end:
     subprocess.run(["xdotool", "mousemove", str(tx + d % 3), str(ty + d % 2)])
+    d += 1
     time.sleep(0.15)
+    if (probe_eval(probe_path, "window.__probeEval = window.__dragSeen || 0;") or 0) >= 3:
+        break
+# The page's answer (it takes the drop) goes back to the dragging program
+# through Electron; a last move and a short pause let it arrive.
+subprocess.run(["xdotool", "mousemove", str(tx), str(ty)])
 time.sleep(0.5)
 subprocess.run(["xdotool", "mouseup", "1"])
 p = wait_for(probe_path, lambda p: any(a.get("name") == "dropped-picture.png" for a in (p.get("composer") or {}).get("attachments") or []), 10)

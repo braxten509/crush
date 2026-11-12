@@ -1,13 +1,17 @@
 package cliagent
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
+	"time"
 
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/stretchr/testify/require"
 )
@@ -102,4 +106,21 @@ func TestClaudeModelLimitShowsOnItsModelAndOutlastsATurn(t *testing.T) {
 	turn := claudeRateLimit([]byte(`{"type":"rate_limit_event","rate_limit_info":{"unifiedWindows":{"five_hour":{"utilization":0.2,"resetsAt":4102444800},"seven_day":{"utilization":0.4,"resetsAt":4102444800}}}}`))
 	setLimits(key, withModelLimits(key, turn), -1)
 	require.Equal(t, []string{"5h 20", "Weekly 40", "Weekly Fable 43"}, names("fable"))
+}
+
+// A working Claude chat asks for its whole usage reading itself, since the
+// apps' timers wait while it works, but only once every few minutes.
+func TestClaudeTurnAsksForUsageOnlyOnceInAWhile(t *testing.T) {
+	var asked atomic.Int32
+	defer SetLimitFetchersForTest(map[catwalk.Type]func(context.Context) ([]Limit, error){
+		config.TypeClaudeCode: func(context.Context) ([]Limit, error) {
+			asked.Add(1)
+			return []Limit{{Name: "Weekly Fable", Used: 43, Model: "Fable"}}, nil
+		},
+	})()
+	key := limitKey{config.TypeClaudeCode, "turn-usage-test"}
+	refreshUsageDuringTurn(t.Context(), key)
+	require.Eventually(t, func() bool { return len(AccountLimits(key.kind, key.account, "fable")) == 1 }, time.Second, 5*time.Millisecond)
+	refreshUsageDuringTurn(t.Context(), key)
+	require.Never(t, func() bool { return asked.Load() > 1 }, 200*time.Millisecond, 20*time.Millisecond)
 }

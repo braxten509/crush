@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"testing"
 	"time"
 	"unicode"
 
@@ -72,6 +73,9 @@ var limitStore struct {
 	lastErr map[limitKey]string
 	// refills is how many free refills an account has (Codex), when read.
 	refills map[limitKey]int
+	// asked is when an account's usage was last asked for (refreshLimits),
+	// which a turn's own update never is.
+	asked map[limitKey]time.Time
 	// hook is told about every new reading and every failed refresh.
 	hook func(kind catwalk.Type, account string)
 	// replaced is set while a test's fetchers stand in for the real ones.
@@ -194,6 +198,7 @@ func forgetKind(kind catwalk.Type) {
 	maps.DeleteFunc(limitStore.readAt, func(k limitKey, _ time.Time) bool { return of(k) })
 	maps.DeleteFunc(limitStore.lastErr, func(k limitKey, _ string) bool { return of(k) })
 	maps.DeleteFunc(limitStore.refills, func(k limitKey, _ int) bool { return of(k) })
+	maps.DeleteFunc(limitStore.asked, func(k limitKey, _ time.Time) bool { return of(k) })
 }
 
 // SetLimitFetchersForTest makes fetchers the only usage fetchers, with an
@@ -329,6 +334,12 @@ func StoreAccountLimits(kind catwalk.Type, account string, limits []Limit, refil
 // setLimits stores a reading; refills < 0 keeps the known refill count
 // (a turn's own updates carry none).
 func setLimits(k limitKey, limits []Limit, refills int) {
+	setLimitsAt(k, limits, refills, time.Now())
+}
+
+// setLimitsAt is setLimits for a reading taken at a known time (another
+// engine's, limits_shared.go).
+func setLimitsAt(k limitKey, limits []Limit, refills int, at time.Time) {
 	if len(limits) == 0 {
 		return
 	}
@@ -345,10 +356,9 @@ func setLimits(k limitKey, limits []Limit, refills int) {
 	if limitStore.refills == nil {
 		limitStore.refills = map[limitKey]int{}
 	}
-	now := time.Now()
 	limitStore.byKind[k] = limits
-	limitStore.fetched[k] = now
-	limitStore.readAt[k] = now
+	limitStore.fetched[k] = time.Now()
+	limitStore.readAt[k] = at
 	if refills >= 0 {
 		limitStore.refills[k] = refills
 	}
@@ -404,10 +414,38 @@ func RefreshAccountLimits(ctx context.Context, kind catwalk.Type, account string
 // was asked for, so the idle refresh interval does not apply. Overlapping
 // reads are still shared by the pending guard.
 func RefreshLimitsDuringTurn(ctx context.Context, kind catwalk.Type, account string) {
-	ctx = context.WithoutCancel(ctx)
+	if realLimitsOffInTests() {
+		return
+	}
+	// The turn's own usage: no other engine's reading has it.
+	ctx = freshLimits(context.WithoutCancel(ctx))
 	go func() {
 		_, _ = RefreshAccountLimits(ctx, kind, account, true)
 	}()
+}
+
+// realLimitsOffInTests reports a test that left the real fetchers in
+// place: its turns never ask a real tool's account (the engine's start
+// does the same, backend.startLimits).
+func realLimitsOffInTests() bool {
+	return testing.Testing() && !LimitFetchersReplaced()
+}
+
+// refreshUsageDuringTurn asks for k's whole usage reading while a turn of
+// it runs, at most every limitRefresh. A turn's own update carries the
+// account's windows only: a model family's limit (Claude's weekly Fable
+// one) comes from the usage address, which the apps' timers do not ask
+// while a chat works (owner, 2026-11-12: the chat in use lacked its Fable
+// limit). The reading is shared between engines like any other.
+func refreshUsageDuringTurn(ctx context.Context, k limitKey) {
+	limitStore.Lock()
+	recent := time.Since(limitStore.asked[k]) < limitRefresh
+	limitStore.Unlock()
+	if recent || realLimitsOffInTests() {
+		return
+	}
+	ctx = context.WithoutCancel(ctx)
+	go func() { _, _ = refreshLimits(ctx, k, true) }()
 }
 
 // ReadAccountLimitsNow reads one account's usage limits fresh into the
@@ -446,6 +484,10 @@ func refreshLimits(ctx context.Context, k limitKey, force bool) (bool, error) {
 		limitStore.pending = map[limitKey]bool{}
 	}
 	limitStore.pending[k] = true
+	if limitStore.asked == nil {
+		limitStore.asked = map[limitKey]time.Time{}
+	}
+	limitStore.asked[k] = time.Now()
 	limitStore.Unlock()
 	defer func() {
 		limitStore.Lock()
@@ -454,7 +496,7 @@ func refreshLimits(ctx context.Context, k limitKey, force bool) (bool, error) {
 	}()
 	refills := -1
 	ctx = context.WithValue(context.WithValue(ctx, limitAccountKey{}, k.account), refillSinkKey{}, &refills)
-	limits, err := fetch(ctx)
+	limits, at, err := readLimits(ctx, k, fetch, &refills)
 	if err == nil && force && len(limits) == 0 {
 		err = errors.New("No usage windows were returned by this CLI")
 	}
@@ -473,7 +515,7 @@ func refreshLimits(ctx context.Context, k limitKey, force bool) (bool, error) {
 		limitsChanged(k)
 		return false, err
 	}
-	setLimits(k, limits, refills)
+	setLimitsAt(k, limits, refills, at)
 	return true, nil
 }
 
@@ -946,7 +988,8 @@ func fetchCodexLimits(ctx context.Context) ([]Limit, error) {
 func ConsumeRefill(ctx context.Context, account string) (string, error) {
 	outcome, err := consumeRefill(ctx, account)
 	if err == nil {
-		_, _ = RefreshAccountLimits(ctx, config.TypeCodexCLI, account, true)
+		// The numbers after the refill: an earlier shared reading is old.
+		_, _ = RefreshAccountLimits(freshLimits(ctx), config.TypeCodexCLI, account, true)
 	}
 	return outcome, err
 }

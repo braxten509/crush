@@ -347,7 +347,10 @@ func (s *service) Delete(ctx context.Context, id string) error {
 	removed := make([]db.Session, 0, len(ids))
 	var workDirs []string
 	for _, sessionID := range ids {
-		if _, wtDir, err := s.readBranch(sessionID); err == nil && wtDir != "" {
+		// Read inside the transaction: it holds the only connection, so
+		// a read outside it would wait forever.
+		var wtDir string
+		if err := tx.QueryRowContext(ctx, `SELECT work_dir FROM session_branches WHERE session_id = ?`, sessionID).Scan(&wtDir); err == nil && wtDir != "" {
 			workDirs = append(workDirs, wtDir)
 		}
 		row := dbSession

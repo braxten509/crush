@@ -21,8 +21,12 @@ func ReadOnly(dir string, writable []string, name string, args []string) (string
 		return "", "", nil, errors.New("read-only commands run inside Codex's sandbox, and codex isn't installed")
 	}
 	tmp := os.TempDir()
-	if Within(dir, tmp) {
-		return "", "", nil, fmt.Errorf("can't keep %s read-only: the sandbox always lets programs write in %s", dir, tmp)
+	// Codex's workspace-write sandbox always lets programs write in /tmp
+	// and in $TMPDIR, so a folder in either can't be kept read-only.
+	for _, open := range []string{tmp, "/tmp"} {
+		if Within(dir, open) {
+			return "", "", nil, fmt.Errorf("can't keep %s read-only: the sandbox always lets programs write in %s", dir, open)
+		}
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {

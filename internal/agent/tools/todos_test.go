@@ -64,6 +64,10 @@ func (m *mockSessionService) SetModel(ctx context.Context, sessionID string, mod
 	return session.Session{}, nil
 }
 
+func (m *mockSessionService) SetBranch(ctx context.Context, sessionID, branch, workDir string) (session.Session, error) {
+	return session.Session{}, nil
+}
+
 func (m *mockSessionService) SetNewChatModel(fn func(context.Context) session.ModelChoice) {}
 
 func (m *mockSessionService) AdoptModels(ctx context.Context, pick func(context.Context, session.Session) session.ModelChoice) (int, error) {

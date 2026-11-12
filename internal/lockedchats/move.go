@@ -47,6 +47,7 @@ var chatTables = []chatTable{
 	{name: "session_context_budgets", where: inSet},
 	{name: "session_kept_skills", where: inSet},
 	{name: "session_models", where: inSet},
+	{name: "session_branches", where: inSet},
 	{name: "file_history_changes", where: inSet},
 	{name: "file_history_undo", where: inSet},
 	{name: "file_history_points", where: inSet},

@@ -4,7 +4,10 @@ restarts it"). In the real window on the hidden screen, with a fixture whose
 updater has a newer build (app_update):
 - the foot sits at the bottom of the right panel; the app's quiet check at
   connect lights the one button as Update, with "old → new" beside it;
-- pressing it: Updating…, disabled, its sync mark turning in place;
+- pressing it asks first whether the engines restart too (owner,
+  2026-11-12), with the work still running and "Keep engines running"
+  selected; Esc cancels and updates nothing;
+- answered: Updating…, disabled, its sync mark turning in place;
 - when the run ends: Restarting…, and the open chats are held for the
   restart (open-chats.restart); a fixture run is not really restarted.
 
@@ -58,7 +61,39 @@ check(ready.get("text") == "aaaaaaa → bbbbbbb", f"with the old and new builds 
 check(ready.get("inPanel") and abs(ready.get("bottom", 99)) <= 1 and ready.get("right", 99) <= 20, f"at the bottom of the right panel ({ready})")
 shot(out_dir, "ready")
 
+SHEET = """
+  const sheet = document.querySelector('[data-sheet="update-engines"]');
+  if (!sheet) return { gone: true };
+  return { line: sheet.querySelector('[data-kit-body] .line').textContent.trim(),
+           buttons: [...sheet.querySelectorAll('[data-button]')].map((b) => b.textContent.trim()),
+           selected: sheet.querySelector('[data-button].selected')?.dataset.button ?? '' };
+"""
+
+
+def sheet(want, timeout=5):
+    end = time.time() + timeout
+    got = None
+    while time.time() < end:
+        got = run(SHEET)
+        if want(got):
+            return got
+        time.sleep(0.15)
+    return got
+
+
 run("document.querySelector('[data-update-button]').click(); return true;")
+asked = sheet(lambda s: bool(s) and "line" in s) or {}
+check(asked.get("line", "").startswith("1 chat is still working.") and "Restart the engines" in asked.get("line", ""), f"pressing it asks about the engines, with the work still running ({asked.get('line')!r})")
+check(asked.get("buttons") == ["Cancel", "Restart engines", "Keep engines running"] and asked.get("selected") == "keep", f"Keep engines running is selected ({asked.get('buttons')}, {asked.get('selected')!r})")
+shot(out_dir, "asked")
+H.key("Escape")
+gone = sheet(lambda s: bool(s) and s.get("gone")) or {}
+still = foot(lambda f: f.get("phase") == "ready", 2)
+check(gone.get("gone") is True and still.get("phase") == "ready", f"Esc cancels: nothing updates ({still.get('phase')}, sheet {gone})")
+
+run("document.querySelector('[data-update-button]').click(); return true;")
+sheet(lambda s: bool(s) and "line" in s)
+H.key("Return")
 busy = foot(lambda f: f.get("phase") == "updating", 3)
 check(busy.get("label") == "Updating…" and busy.get("disabled"), f"pressing it updates, the button waiting ({busy})")
 turns = run("""

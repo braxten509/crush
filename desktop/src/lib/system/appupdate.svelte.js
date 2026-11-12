@@ -5,8 +5,19 @@
 // builds and installs the app and the terminal crush (update.sh) and starts
 // the app again with its chats still open. Each window checks quietly once
 // when it first connects (a quick look at the branch's newest commit).
+//
+// Update asks first whether the engines restart too (owner, 2026-11-12:
+// "when updating crush it should ask me if I want to restart the engine or
+// not"; asked when Update is pressed, before the build). An engine keeps
+// running the build it started on, so without a restart the update reaches
+// only the app. Restart engines stops every engine this window keeps
+// joined, with the work still running on it, once the build is installed;
+// the app that starts next starts them again. Keep engines running is what
+// an update did before. Cancel updates nothing.
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { appRestartHold, appUpdateCheck, appUpdateRun } from "../engine/commands.js";
+import { runningWork } from "../closeask.js";
+import { dialogRegistered, openDialog } from "../dialogs.js";
+import { appRestartHold, appUpdateCheck, appUpdateRun, enginesStop } from "../engine/commands.js";
 import { onEvent } from "../engine/events.js";
 import { conn } from "../stores/connection.svelte.js";
 import { sessions } from "../stores/sessions.svelte.js";
@@ -50,8 +61,30 @@ export async function checkApp({ quiet = false } = {}) {
   }, CURRENT_MS);
 }
 
+export const UPDATE_SHEET = "update-engines";
+let asking = false;
+
+// The update's question: "restart" | "keep" | "cancel". With no engine
+// answering there is nothing to restart, and nothing is asked.
+async function askEngines() {
+  if (!dialogRegistered(UPDATE_SHEET)) return "keep";
+  const work = await runningWork();
+  if (work.dirs.length === 0) return "keep";
+  return new Promise((done) => {
+    if (!openDialog(UPDATE_SHEET, { chats: work.chats, helpers: work.helpers, waiting: work.waiting, answer: done })) done("keep");
+  });
+}
+
 export async function updateApp() {
-  if (appUpdate.phase === "updating" || appUpdate.phase === "restarting") return;
+  if (asking || appUpdate.phase === "updating" || appUpdate.phase === "restarting") return;
+  asking = true;
+  let engines;
+  try {
+    engines = await askEngines();
+  } finally {
+    asking = false;
+  }
+  if (engines === "cancel") return;
   appUpdate.phase = "updating";
   notify("update", `Updating Crush Desktop and the terminal crush to ${short(appUpdate.latest)}: building…`, 3_600_000);
   let result;
@@ -71,6 +104,14 @@ export async function updateApp() {
     await appRestartHold();
   } catch (error) {
     console.error("holding the open chats failed", error?.message ?? error);
+  }
+  if (engines === "restart") {
+    // The engines as they are now: the build took a while.
+    try {
+      await enginesStop((await runningWork()).dirs);
+    } catch (error) {
+      console.error("stopping the engines failed", error?.message ?? error);
+    }
   }
   // The app starts again on this window's folder and chat (owner,
   // 2026-10-21: it came back in the folder it was first started in).

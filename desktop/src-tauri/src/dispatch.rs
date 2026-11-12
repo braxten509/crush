@@ -70,6 +70,7 @@ pub async fn call(app: AppHandle, label: String, cmd: String, args: Value) -> Re
         .await),
         "api_secret" => res(commands::api_secret(app.clone(), w, app.state(), arg(&args, "path")?, arg(&args, "body")?).await),
         "window_close" => res(commands::window_close(app.clone(), w, arg(&args, "stop")?).await),
+        "engines_stop" => res(commands::engines_stop(app.clone(), w, arg(&args, "dirs")?).await),
         "project_switch" => res(commands::project_switch(app.clone(), w, arg(&args, "projectDir")?).await),
         "project_enter" => res(commands::project_enter(app.clone(), w, arg(&args, "projectDir")?).await),
         // No engines in fixture runs: a list with nothing in it.

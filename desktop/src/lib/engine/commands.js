@@ -310,6 +310,13 @@ export async function appUpdateRun() {
   return invoke("app_update_run");
 }
 
+// The update's "Restart engines": the engines of the folders dirs ("" the
+// shown one) stop their work and exit, as the close question's Stop engine
+// has them; the app that starts next starts them again on the new build.
+export async function enginesStop(dirs = []) {
+  return invoke("engines_stop", { dirs });
+}
+
 // The restart after an update keeps the open chats.
 export async function appRestartHold() {
   return invoke("app_restart_hold");

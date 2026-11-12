@@ -507,6 +507,19 @@ pub async fn window_close(app: AppHandle, window: Window, stop: Option<Vec<Strin
     Ok(())
 }
 
+/// The update's "Restart engines" (lib/system/appupdate.svelte.js): the
+/// engines of the folders `dirs` ("" the shown one) stop their work and
+/// exit, as the close question's "Stop engine" has them; the app that
+/// starts next starts them again, on the new build. A fixture run has no
+/// engines.
+pub async fn engines_stop(app: AppHandle, window: Window, dirs: Option<Vec<String>>) -> AppResult<()> {
+    let dirs = dirs.unwrap_or_default();
+    if !dirs.is_empty() && app.try_state::<crate::fixture::Fixture>().is_none() {
+        crate::connection::stop_engines(&app, window.label(), &dirs).await;
+    }
+    Ok(())
+}
+
 /// lib/closeask.js holds the close fallback off while it decides (`asking`)
 /// and answers how many other windows stay open; done, it lets go, and a
 /// window that goes on closing (`closing`) gets a fresh fallback.

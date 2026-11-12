@@ -406,7 +406,14 @@
   },
   "lsps": {},
   "mcp/states": {},
-  "skills": []
+  "skills": [],
+  "/v1/engine": {
+   "pid": 4242,
+   "data_dir": "/tmp/home/proj/.crush",
+   "busy_chats": 1,
+   "running_helpers": 0,
+   "waiting_chats": 0
+  }
  },
  "events": [],
  "app_update": {

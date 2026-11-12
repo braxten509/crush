@@ -1,18 +1,21 @@
 // SYS's registrations (desktop-design-5-6 2.18, 2.19, 2.28; loaded by
-// lib/plugins.js): the dialogs `logs`, `about`, `crash` and `close` (the
-// close question, lib/closeask.js); the actions `updates.clis`,
+// lib/plugins.js): the dialogs `logs`, `about`, `crash`, `close` (the
+// close question, lib/closeask.js) and `update-engines` (the update's
+// question, lib/system/appupdate.svelte.js); the actions `updates.clis`,
 // `updates.crush` and `usage.report`; the alert service, the taskbar state,
 // the window title, the update checks and the crash notice.
 import About from "../../components/system/About.svelte";
 import CloseCrush from "../../components/system/CloseCrush.svelte";
 import CrashNotice from "../../components/system/CrashNotice.svelte";
 import Logs from "../../components/system/Logs.svelte";
+import UpdateEngines from "../../components/system/UpdateEngines.svelte";
 import { registerAction } from "../actions.js";
 import { CLOSE_SHEET } from "../closeask.js";
 import { openDialog, registerDialog } from "../dialogs.js";
 import { crashPending, crushStats } from "../engine/commands.js";
 import { notify } from "../stores/ui.svelte.js";
 import { startAlerts } from "../system/alerts.js";
+import { UPDATE_SHEET } from "../system/appupdate.svelte.js";
 import { focusChanged, startBadge } from "../system/badge.svelte.js";
 import { startFocus } from "../system/focus.js";
 import { startTitle } from "../system/title.svelte.js";
@@ -22,6 +25,7 @@ registerDialog("logs", Logs);
 registerDialog("about", About);
 registerDialog("crash", CrashNotice);
 registerDialog(CLOSE_SHEET, CloseCrush);
+registerDialog(UPDATE_SHEET, UpdateEngines);
 
 registerAction({ id: "updates.clis", title: "Update agent CLIs", run: () => checkClis(true) });
 registerAction({ id: "updates.crush", title: "Update Crush", run: () => checkCrush(true) });

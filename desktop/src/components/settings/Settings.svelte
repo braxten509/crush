@@ -18,6 +18,7 @@
   import { refreshModels } from "../../lib/models/store.svelte.js";
   import {
     DEFAULT_AUTOCOMPACT,
+    autoBackgroundSeconds,
     DEFAULT_CHECK_IN,
     DEFAULT_INTERRUPT_AFTER_TOOL_CALLS,
     DEFAULT_STALL_RETRY,
@@ -195,6 +196,11 @@
       <span class="name">Compaction limit for API chats</span>
       <span class="value">{(Number(options().auto_compact_token_limit) || DEFAULT_AUTOCOMPACT).toLocaleString("en-US")} tokens</span>
       <button type="button" class="act" onclick={() => openDialog("autocompact")}>Change…</button>
+    </div>
+    <div class="row">
+      <span class="name">Move commands to the background after</span>
+      <span class="value">{autoBackgroundSeconds(options())} seconds</span>
+      <button type="button" class="act" onclick={() => openDialog("auto_background")}>Change…</button>
     </div>
     <div class="row">
       <span class="name">Codex API compacts before the price goes up</span>

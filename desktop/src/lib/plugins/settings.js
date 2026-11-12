@@ -1,8 +1,9 @@
 // SET's registrations (desktop-design-5-6 2.12, 2.13; loaded by
-// lib/plugins.js): the dialogs `settings`, `autocompact`, `memory_limit`,
+// lib/plugins.js): the dialogs `settings`, `autocompact`, `auto_background`, `memory_limit`,
 // `subagent_instructions` and `notifications`; the actions `sidebar.toggle`,
 // `composer.focusOnly`, `thoughtline.toggle` and `cpus.toggle` (the
 // palette's entries and the Settings switches).
+import AutoBackground from "../../components/settings/AutoBackground.svelte";
 import AutoCompact from "../../components/settings/AutoCompact.svelte";
 import MemoryLimit from "../../components/settings/MemoryLimit.svelte";
 import NotificationStyle from "../../components/settings/NotificationStyle.svelte";
@@ -17,6 +18,7 @@ import { toggleAgentCpus, toggleComposerFocusOnly, toggleSidebar, toggleThoughtL
 setSettingsPage(Settings);
 registerDialog("settings", Settings, { open: (props) => openSettings(props?.section ?? null) });
 registerDialog("autocompact", AutoCompact);
+registerDialog("auto_background", AutoBackground);
 registerDialog("memory_limit", MemoryLimit);
 registerDialog("subagent_instructions", SubagentInstructions);
 registerDialog("notifications", NotificationStyle);

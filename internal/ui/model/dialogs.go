@@ -57,6 +57,8 @@ func (m *UI) openDialog(id string) tea.Cmd {
 		return m.openUsageDialog()
 	case dialog.AutocompactID:
 		return m.openAutocompactDialog()
+	case dialog.AutoBackgroundID:
+		return m.openAutoBackgroundDialog()
 	case dialog.MemoryLimitID:
 		return m.openMemoryLimitDialog()
 	case dialog.SubAgentInstructionsID:

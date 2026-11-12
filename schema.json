@@ -653,6 +653,13 @@
     },
     "Options": {
       "properties": {
+        "auto_background_seconds": {
+          "type": "integer",
+          "maximum": 3600,
+          "minimum": 11,
+          "description": "Whole seconds a command an agent runs may hold the turn before Crush moves it to the background.",
+          "default": 120
+        },
         "auto_compact_token_limit": {
           "type": "integer",
           "minimum": 1000,

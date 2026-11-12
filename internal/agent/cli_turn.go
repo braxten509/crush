@@ -159,6 +159,7 @@ func (a *sessionAgent) cliStream(m *cliagent.Model, call SessionAgentCall, histo
 		turn := cliagent.Turn{SessionID: call.SessionID, Prompt: text, Continue: call.CLIContinue, Attachments: call.Attachments, Resume: resume, Effort: effort, Emit: s.handle, Steer: s.steer, SteerInput: s.steerWithImages, SteerReady: s.steerReady, Env: env, Instructions: instructions}
 		if a.cfg != nil {
 			turn.StallRetry = a.cfg.Config().Options.GetStallRetry()
+			turn.AutoBackground = a.cfg.Config().Options.GetAutoBackground()
 		}
 		if fork != nil {
 			// The fork starts from the source's session; that session itself

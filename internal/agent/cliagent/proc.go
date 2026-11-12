@@ -3,6 +3,7 @@ package cliagent
 import (
 	"bufio"
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -141,6 +142,9 @@ func (p *proc) finish() {
 type openCalls struct {
 	mu    sync.Mutex
 	calls map[string]openCall
+	// after is the turn's time before a command is moved to the
+	// background; zero means autoBackgroundAfter.
+	after time.Duration
 }
 
 // openCall is a shell command and when the CLI reported it.
@@ -155,8 +159,9 @@ type openCallsKey struct{}
 
 // autoBackgroundAfter is how long a command may hold a turn before Crush
 // moves it to the background itself, as Ctrl+B would (owner, 2026-10-21: a
-// command running 2 minutes or more is forced to the background). The
-// native bash tool caps its own wait the same way.
+// command running 2 minutes or more is forced to the background), when the
+// turn names no time of its own ([Turn.AutoBackground], the user's
+// setting). The native bash tool caps its own wait the same way.
 var autoBackgroundAfter = time.Duration(tools.MaxAutoBackgroundAfter) * time.Second
 
 // autoBackgroundCheck is how often the watcher looks for commands past the
@@ -185,14 +190,14 @@ func (o *openCalls) autoBackground(sessionID string) (stop func()) {
 	return func() { close(done) }
 }
 
-// due marks the calls that have held the turn for autoBackgroundAfter and
+// due marks the calls that have held the turn for the turn's time and
 // reports whether one of them still needs asking about.
 func (o *openCalls) due(now time.Time) bool {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	found := false
 	for id, c := range o.calls {
-		if c.asked || now.Sub(c.at) < autoBackgroundAfter {
+		if c.asked || now.Sub(c.at) < cmp.Or(o.after, autoBackgroundAfter) {
 			continue
 		}
 		c.asked = true

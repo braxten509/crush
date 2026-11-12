@@ -150,6 +150,10 @@ type Turn struct {
 	// may stop arriving before it is asked again on a fresh request. Zero
 	// leaves each CLI's own, much longer, limit.
 	StallRetry time.Duration
+	// AutoBackground is options.auto_background_seconds: how long a
+	// command may hold the turn before Crush moves it to the background.
+	// Zero means the default.
+	AutoBackground time.Duration
 }
 
 // Model is a CLI-backed model. It implements [fantasy.LanguageModel] for
@@ -231,12 +235,13 @@ func (m *Model) Run(ctx context.Context, t Turn) error {
 			return fmt.Errorf("preparing %s: %w", m.Account, err)
 		}
 	}
-	calls := &openCalls{calls: map[string]openCall{}}
+	calls := &openCalls{calls: map[string]openCall{}, after: t.AutoBackground}
 	if t.Emit != nil {
 		t.Emit = calls.track(t.Emit)
 	}
-	// A command the CLI waits on for 2 minutes is moved to the background,
-	// never holding the turn past the cap Crush's own bash tool keeps.
+	// A command the CLI waits on for the user's time (2 minutes unless
+	// changed) is moved to the background, never holding the turn past
+	// the cap Crush's own bash tool keeps.
 	if t.SessionID != "" && CanBackground(m.Kind) {
 		defer calls.autoBackground(t.SessionID)()
 	}

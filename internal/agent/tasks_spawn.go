@@ -288,7 +288,7 @@ func apiSubAgentConfig(agents map[string]config.Agent, readOnly bool) config.Age
 // every command inside the read-only sandbox, as read-only agent CLIs do.
 func (h *taskHub) lockCommands(agentTools []fantasy.AgentTool) []fantasy.AgentTool {
 	options := h.c.cfg.Config().Options
-	locked := guardTools([]fantasy.AgentTool{shelltool.NewReadOnlyBashTool(h.c.permissions, h.c.cfg.WorkingDir(), options.DataDirectory, options.Attribution, options.GetMaxBackgroundJobs(), h.c.cfg.Config().Permissions, reportStartedJob)})[0]
+	locked := guardTools([]fantasy.AgentTool{shelltool.NewReadOnlyBashTool(h.c.permissions, h.c.cfg.WorkingDir(), options.DataDirectory, options.Attribution, options.GetMaxBackgroundJobs(), h.c.cfg.Config().Permissions, reportStartedJob, shelltool.WithAutoBackground(h.c.autoBackground))})[0]
 	for i, tool := range agentTools {
 		if tool.Info().Name == tools.BashToolName {
 			agentTools[i] = locked

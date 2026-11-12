@@ -110,9 +110,12 @@ func TestLeadingSleep(t *testing.T) {
 
 // No command stays in the foreground past 2 minutes, whatever the model
 // asks (owner, 2026-10-21).
-func TestAutoBackgroundWaitIsAtMostTwoMinutes(t *testing.T) {
-	require.Equal(t, 60*time.Second, autoBackgroundWait(0))
-	require.Equal(t, 90*time.Second, autoBackgroundWait(90))
-	require.Equal(t, 120*time.Second, autoBackgroundWait(600))
-	require.Equal(t, ForegroundWaitLimit+time.Second, autoBackgroundWait(1))
+// The user's time is the wait and its upper end; a command may ask for
+// less, but never less than the protected foreground wait.
+func TestAutoBackgroundWaitFollowsTheUsersTime(t *testing.T) {
+	limit := 5 * time.Minute
+	require.Equal(t, limit, autoBackgroundWait(0, limit))
+	require.Equal(t, 90*time.Second, autoBackgroundWait(90, limit))
+	require.Equal(t, limit, autoBackgroundWait(600, limit))
+	require.Greater(t, autoBackgroundWait(1, limit), ForegroundWaitLimit)
 }

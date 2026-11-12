@@ -121,15 +121,16 @@ export function draftRow(rows, dir, now) {
 }
 
 // Sub-agent chat rows ({parent}, helperchats.svelte.js) among the list's
-// rows: each after its parent's row and the helper rows already there, or at
-// the end when its parent is not listed.
+// rows: each after its parent's row and the helper rows already there, one
+// step in from it, so it is drawn as one of its parent's branches (owner,
+// 2026-11-12); or at the end, not set in, when its parent is not listed.
 export function placeHelperRows(rows, helpers) {
   const out = [...rows];
   for (const row of helpers) {
-    let at = out.findIndex((r) => r.id === row.parent);
-    if (at < 0) at = out.length - 1;
+    const parent = out.findIndex((r) => r.id === row.parent);
+    let at = parent < 0 ? out.length - 1 : parent;
     while (at + 1 < out.length && out[at + 1].helper) at += 1;
-    out.splice(at + 1, 0, row);
+    out.splice(at + 1, 0, parent < 0 ? row : { ...row, depth: (out[parent].depth ?? 0) + 1 });
   }
   return out;
 }

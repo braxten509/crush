@@ -2,7 +2,7 @@
 - sub-1-open    the app's chat starts a sub-agent (crush spawn, scripts/
                 subagent.json, about 25 s); a click on its SUBAGENTS row opens
                 its chat with a typing box, and the left list has its row
-                under the folder, marked Subagent.
+                under its parent's, drawn as a branch and marked Subagent.
 - sub-2-running while it runs its typing box takes no typing, its model box
                 shows the sub-agent's own model and opens no picker, and the
                 parent is handed its result once it finishes.
@@ -92,6 +92,15 @@ def main():
         row = lambda: run(probe_path, f"const r = document.querySelector('nav.chats .chat[data-id=\"{got}\"]'); return {{mark: r?.querySelector('.helper-mark')?.textContent ?? '', selected: r?.classList.contains('selected') ?? false, box: !!document.querySelector('textarea.input')}};") or {}
         listed, state, _ = rc.poll(row, lambda r: r.get("mark") == "Subagent" and r.get("selected") and r.get("box"), 10)
         check(listed, f"its left-list row is marked Subagent and selected, with a typing box ({state})")
+        # Drawn as one of its parent's branches (owner, 2026-11-12): right
+        # under the parent's row, set in, with the branch line.
+        branch = run(probe_path, f"""const r = document.querySelector('nav.chats .chat[data-id="{got}"]');
+          const p = document.querySelector('nav.chats .chat[data-id="{parent}"]');
+          const left = (el) => Math.round(el?.querySelector('.title')?.getBoundingClientRect().left ?? 0);
+          return {{ branch: r?.classList.contains('branch') ?? false, under: Boolean(r) && r.previousElementSibling === p,
+                   line: r ? getComputedStyle(r, '::before').content !== 'none' : false, row: left(r), parent: left(p) }};""") or {}
+        check(branch.get("branch") and branch.get("under") and branch.get("line") and branch.get("row", 0) > branch.get("parent", 0),
+              f"its row is drawn as a branch under its parent's ({branch})")
         child = got
 
     with step("sub-2-running", out_dir):

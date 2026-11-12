@@ -106,6 +106,16 @@ describe("placeHelperRows", () => {
     expect(placeHelperRows(rows, helpers).map((r) => r.id)).toEqual(["a", "h1", "h2", "b", "h3"]);
     expect(rows.map((r) => r.id)).toEqual(["a", "b"]);
   });
+
+  it("sets a sub-agent's chat one step in from its parent, as a branch of it (owner, 2026-11-12)", () => {
+    const rows = [{ id: "a", depth: 0 }, { id: "a1", depth: 1 }, { id: "b", depth: 0 }];
+    const helpers = [
+      { id: "h1", parent: "a", depth: 0, helper: true },
+      { id: "h2", parent: "a1", depth: 0, helper: true },
+      { id: "h3", parent: "gone", depth: 0, helper: true },
+    ];
+    expect(placeHelperRows(rows, helpers).map((r) => [r.id, r.depth])).toEqual([["a", 0], ["h1", 1], ["a1", 1], ["h2", 2], ["b", 0], ["h3", 0]]);
+  });
 });
 
 describe("draftRow", () => {

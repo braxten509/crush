@@ -67,11 +67,17 @@ try:
       window.dispatchEvent(new StorageEvent("storage", { key: "crush.listFolders" }));
       for (let i = 0; i < 50; i++) {
         const button = document.querySelector(''' + json.dumps('section[data-folder="' + other + '"] .folder-new') + ''');
-        if (button) { button.click(); return true; }
+        if (button) { button.click(); break; }
+        await new Promise((r) => setTimeout(r, 20));
+      }
+      // The + opens the folder's menu (owner, 2026-11-09); New Chat starts there.
+      for (let i = 0; i < 50; i++) {
+        const item = document.querySelector('[data-plus-menu] [data-plus="session"]');
+        if (item) { item.click(); return true; }
         await new Promise((r) => setTimeout(r, 20));
       }
       return false;''')
-    check(seen is True, "folder + clicked on the new folder")
+    check(seen is True, "folder + > New Chat clicked on the new folder")
     p = app.wait_window(lambda p: layer(p).get("shown"), timeout=10)
     check(layer(p).get("shown") is True, "the layer shows while the folder opens")
     shot(output, "opening")

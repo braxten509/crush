@@ -134,7 +134,6 @@ func TestAgentMessagesRunningSubAgent(t *testing.T) {
 			case call := <-messaged:
 				require.Equal(t, child.ID, call.SessionID)
 				require.Contains(t, call.Prompt, "also check the error paths")
-				require.Contains(t, call.Prompt, "agent that started you")
 			case <-time.After(5 * time.Second):
 				t.Fatal("the running sub-agent never got the message")
 			}

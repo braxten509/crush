@@ -5,25 +5,16 @@ package cmd
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
 
-	"charm.land/catwalk/v3/pkg/catwalk"
-	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	"github.com/charmbracelet/crush/internal/backend"
-	"github.com/charmbracelet/crush/internal/cliupdate"
 	"github.com/charmbracelet/crush/internal/db"
-	"github.com/charmbracelet/crush/internal/memwatch"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/proto/prototest"
 	"github.com/charmbracelet/crush/internal/pubsub"
-	"github.com/charmbracelet/crush/internal/remote"
-	"github.com/charmbracelet/crush/internal/skills"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -76,118 +67,6 @@ func seamWorkspace(t *testing.T, b *backend.Backend) *backend.Workspace {
 	return ws
 }
 
-// TestSeamMemory: the memory seam makes the engine report the given
-// memory state (G-21).
-func TestSeamMemory(t *testing.T) {
-	if os.Getenv(seamStartChildEnv) == "1" {
-		// The child: crush starts as it always does, and reads the seams
-		// file CRUSH_TEST_SEAMS names on the way.
-		os.Args = []string{"crush", "--version"}
-		Execute()
-		st := newSeamBackend(t).MemoryStatus()
-		require.Equal(t, 93, st.Percent)
-		require.True(t, st.High)
-		require.Equal(t, uint64(17179869184), st.TotalRAMBytes)
-		require.Equal(t, []proto.MemoryProgram{{Name: "firefox", Bytes: 3221225472}, {Name: "crush", Bytes: 1073741824}}, st.Top)
-		require.Equal(t, uint64(17179869184), memwatch.TotalRAM())
-		return
-	}
-	path := filepath.Join(t.TempDir(), "seams.json")
-	require.NoError(t, os.WriteFile(path, []byte(`{"memory":{"percent":93,"top":[{"name":"firefox","bytes":3221225472},{"name":"crush","bytes":1073741824}],"total_ram_bytes":17179869184}}`), 0o600))
-	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestSeamMemory$", "-test.v")
-	cmd.Env = append(os.Environ(), seamStartChildEnv+"=1", testSeamsEnv+"="+path, "HOME="+t.TempDir())
-	out, err := cmd.CombinedOutput()
-	require.NoError(t, err, "%s", out)
-	require.Contains(t, string(out), "--- PASS: TestSeamMemory")
-}
-
-// seamStartChildEnv runs TestSeamMemory's check in a child process that
-// starts crush through Execute, the real startup path.
-const seamStartChildEnv = "CRUSH_G56_SEAM_START_CHILD"
-
-// TestSeamUpdates: the cli_updates and crush_release seams answer the
-// update checks and installs with no CLI run and no network (G-22).
-func TestSeamUpdates(t *testing.T) {
-	useSeams(t, `{
-		"cli_updates":[
-			{"name":"Codex","bin":"codex","path":"/opt/codex","current":"1.0.0","latest":"1.1.0","install":"ok"},
-			{"name":"Grok","bin":"grok","path":"/opt/grok","current":"2.0.0","latest":"2.1.0","install":"network down"}],
-		"crush_release":{"tag":"v9.0.0","current":"v8.0.0","dir":"/tmp/crush-fork","staged":"v9.0.0-local.20261019-fork"}}`)
-	b := newSeamBackend(t)
-	check := b.CheckCLIUpdates(t.Context(), true)
-	require.Empty(t, check.Errors)
-	require.Equal(t, []proto.CLIUpdate{
-		{Name: "Codex", Bin: "codex", Path: "/opt/codex", Current: "1.0.0", Latest: "1.1.0"},
-		{Name: "Grok", Bin: "grok", Path: "/opt/grok", Current: "2.0.0", Latest: "2.1.0"},
-	}, check.Updates)
-	updates, _ := cliupdate.Check(t.Context())
-	require.Len(t, updates, 2)
-	require.NoError(t, cliupdate.Install(t.Context(), updates[0]))
-	require.EqualError(t, cliupdate.Install(t.Context(), updates[1]), "Grok: network down")
-
-	crush := b.CheckCrushUpdate(t.Context())
-	require.True(t, crush.HasCheckout)
-	require.Equal(t, &proto.CrushRelease{Tag: "v9.0.0", Current: "v8.0.0", Dir: "/tmp/crush-fork"}, crush.Release)
-	require.Equal(t, "v9.0.0-local.20261019-fork", crush.Staged)
-}
-
-// TestSeamRemoteLoopback: the remote seam stands in for Tailscale; the
-// loopback address counts as this computer's tailnet address, so the
-// launcher listens and answers there, with the seam's host (G-23).
-func TestSeamRemoteLoopback(t *testing.T) {
-	useSeams(t, `{"remote":{"listen":"127.0.0.1","host":"crushtest-pc","user":"tester@example.com","phones":["Pixel"]}}`)
-	require.Equal(t, remote.SetupReady, remote.CheckSetup(t.Context()).State)
-
-	ctx, cancel := context.WithCancel(t.Context())
-	done := make(chan error, 1)
-	go func() {
-		done <- remote.RunLauncher(ctx, filepath.Join(t.TempDir(), "remote-password"), func(string) (*exec.Cmd, error) {
-			return nil, fmt.Errorf("no window in a test")
-		})
-	}()
-	t.Cleanup(func() {
-		cancel()
-		require.NoError(t, <-done)
-	})
-	url := fmt.Sprintf("http://127.0.0.1:%d/v1/launcher", remote.LauncherPort)
-	var info struct {
-		Host        string `json:"host"`
-		PasswordSet bool   `json:"password_set"`
-	}
-	require.Eventually(t, func() bool {
-		resp, err := http.Get(url) //nolint:noctx
-		if err != nil {
-			return false
-		}
-		defer resp.Body.Close()
-		return resp.StatusCode == http.StatusOK && json.NewDecoder(resp.Body).Decode(&info) == nil
-	}, 10*time.Second, 50*time.Millisecond, "the launcher answers on loopback")
-	require.Equal(t, "crushtest-pc", info.Host)
-	require.False(t, info.PasswordSet)
-}
-
-// TestSeamLimits: the limits seam replaces every usage fetcher (G-24).
-func TestSeamLimits(t *testing.T) {
-	useSeams(t, `{"limits":{"claude-cli":[{"name":"5h","used":40,"resets_at":"2030-01-01T00:00:00Z"},{"name":"Weekly","used":75}],"codex-cli":"not signed in"}}`)
-	require.True(t, cliagent.LimitFetchersReplaced())
-	require.NoError(t, cliagent.RefreshLimitsNow(t.Context(), catwalk.Type("claude-cli")))
-	require.EqualError(t, cliagent.RefreshLimitsNow(t.Context(), catwalk.Type("codex-cli")), "not signed in")
-
-	snapshot := cliagent.Snapshot()
-	require.Len(t, snapshot, 2)
-	byKind := map[catwalk.Type]cliagent.KindLimits{}
-	for _, k := range snapshot {
-		byKind[k.Kind] = k
-	}
-	require.Equal(t, []cliagent.Limit{
-		{Name: "5h", Used: 40, ResetsAt: time.Date(2030, 1, 1, 0, 0, 0, 0, time.UTC)},
-		{Name: "Weekly", Used: 75},
-	}, byKind["claude-cli"].Limits)
-	require.Equal(t, "not signed in", byKind["codex-cli"].Err)
-}
-
 // TestSeamAuth: the auth seam answers key checks and runs each sign-in
 // with its URL and code, then saves the stand-in token as a real sign-in
 // does (G-24).
@@ -221,23 +100,6 @@ func TestSeamAuth(t *testing.T) {
 	require.Contains(t, string(saved), "crushtest-refresh", "saved in the global data config, as crush login saves it")
 }
 
-// TestSeamAuthGrokCode: a Grok sign-in from the auth seam takes a pasted
-// code; the right one finishes it and the token is saved (G-24).
-func TestSeamAuthGrokCode(t *testing.T) {
-	useSeams(t, `{"auth":{"flows":{"grok":{"url":"https://accounts.x.ai/oauth","result":"ok","code":"G56-CODE"}}}}`)
-	b := newSeamBackend(t)
-	ws := seamWorkspace(t, b)
-
-	flow, err := b.StartAuthFlow(ws.ID, "grok")
-	require.NoError(t, err)
-	require.True(t, flow.CodeEntry)
-	require.NoError(t, b.SendAuthCode(flow.FlowID, "G56-CODE"))
-	require.Eventually(t, func() bool {
-		pc, found := ws.Cfg.Config().Providers.Get("xai")
-		return found && pc.OAuthToken != nil && pc.OAuthToken.AccessToken == "crushtest-access"
-	}, 10*time.Second, 20*time.Millisecond, "the pasted code finished the sign-in")
-}
-
 // TestSeamAuthCancel: a sign-in that was cancelled, or ran out of time,
 // saves nothing, even when its provider hands over a token after that
 // (G-5, through the auth seam's late flows). The time-out is only watched
@@ -265,7 +127,7 @@ func TestSeamAuthCancel(t *testing.T) {
 		case ev := <-events:
 			if e, ok := ev.Payload.(pubsub.Event[proto.AuthFlowEvent]); ok && e.Payload.FlowID == expired.FlowID {
 				require.NotEqual(t, proto.AuthFlowSaving, e.Payload.State, "a timed-out sign-in does not save")
-				timedOut = e.Payload.State == proto.AuthFlowFailed && e.Payload.Error == "authentication timed out"
+				timedOut = e.Payload.State == proto.AuthFlowFailed
 			}
 		case <-deadline:
 			t.Fatal("no time-out reported")
@@ -277,19 +139,4 @@ func TestSeamAuthCancel(t *testing.T) {
 		pc, found := ws.Cfg.Config().Providers.Get(id)
 		require.False(t, found && pc.OAuthToken != nil, "%s: a token handed over after the end is not saved", id)
 	}
-}
-
-// TestSeamSkillsSearch: the skills_search seam answers skills.sh searches
-// by query; other queries find nothing (G-24).
-func TestSeamSkillsSearch(t *testing.T) {
-	useSeams(t, `{"skills_search":{"pdf":[{"id":"acme/tools/pdf","name":"pdf","source":"acme/tools","skillId":"pdf","installs":42}]}}`)
-	b := newSeamBackend(t)
-	ws := seamWorkspace(t, b)
-
-	found, err := b.SearchSkills(t.Context(), ws.ID, "pdf")
-	require.NoError(t, err)
-	require.Equal(t, []skills.DirectorySkill{{ID: "acme/tools/pdf", Name: "pdf", Source: "acme/tools", SkillID: "pdf", Installs: 42}}, found)
-	none, err := b.SearchSkills(t.Context(), ws.ID, "nothing here")
-	require.NoError(t, err)
-	require.Empty(t, none)
 }

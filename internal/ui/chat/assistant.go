@@ -234,7 +234,7 @@ func (a *AssistantMessageItem) RawRender(width int) string {
 	var spinner string
 	if a.isSpinning() {
 		spinner = a.renderSpinning()
-		if a.activity.key == "Thinking" {
+		if a.activity.key == StatusThinking {
 			if line := renderThoughtLine(a.sty, thoughtLine(a.message)); line != "" {
 				spinner = ansi.Truncate(spinner+line, cappedWidth, "…")
 			}

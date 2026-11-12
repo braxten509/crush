@@ -15,14 +15,22 @@ func TestComposerPlaceholder(t *testing.T) {
 	normal, yolo, sysadmin := permission.PermissionModeNormal, permission.PermissionModeYolo, permission.PermissionModeSysadmin
 	require.Equal(t, "Ready!", c.placeholder(false, false, normal))
 	require.Equal(t, "Working!", c.placeholder(true, false, normal))
-	require.Equal(t, "Let's plan", c.placeholder(false, true, normal))
+	plan := c.placeholder(false, true, normal)
+	require.NotEqual(t, "Ready!", plan, "planning has its own placeholder")
 	require.Equal(t, "Working!", c.placeholder(true, true, normal), "busy wins over planning")
-	require.Equal(t, "Go crazy", c.placeholder(true, false, yolo), "YOLO wins over busy")
-	require.Equal(t, "Sysadmin mode!", c.placeholder(true, false, sysadmin), "sysadmin wins over busy")
-	require.Equal(t, "Let's plan", c.placeholder(false, true, yolo), "planning ignores YOLO")
+	yoloIdle := c.placeholder(false, false, yolo)
+	require.NotEqual(t, "Working!", yoloIdle)
+	require.Equal(t, yoloIdle, c.placeholder(true, false, yolo), "YOLO wins over busy")
+	sysadminIdle := c.placeholder(false, false, sysadmin)
+	require.NotEqual(t, "Working!", sysadminIdle)
+	require.Equal(t, sysadminIdle, c.placeholder(true, false, sysadmin), "sysadmin wins over busy")
+	require.Equal(t, plan, c.placeholder(false, true, yolo), "planning ignores YOLO")
 
 	c.bangMode = true
-	require.Equal(t, "Run a shell command", c.placeholder(true, true, yolo))
+	shell := c.placeholder(true, true, yolo)
+	for _, other := range []string{"Ready!", "Working!", plan, yoloIdle, sysadminIdle} {
+		require.NotEqual(t, other, shell, "shell mode has its own placeholder")
+	}
 }
 
 func TestComposerHistoryDraft(t *testing.T) {

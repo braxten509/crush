@@ -92,23 +92,19 @@ func TestTrimPreparedPromptShortensOldToolOutputsAndWritesSearchableTranscript(t
 	require.LessOrEqual(t, trimmedTokens, budget, "trimmed history must fit within the model budget")
 
 	// Verify the searchable transcript notice was inserted and points to an existing file on disk.
+	transcriptPath, idx, err := writeSearchableTranscript(sa.transcriptDataDir(), "long-switch-session", msgs)
+	require.NoError(t, err)
+	require.Greater(t, idx.totalLines, 100)
 	var noticeText string
 	for _, m := range trimmed {
 		for _, part := range m.Content {
-			if tp, ok := fantasy.AsMessagePart[fantasy.TextPart](part); ok && strings.Contains(tp.Text, "<conversation_history_notice>") {
+			if tp, ok := fantasy.AsMessagePart[fantasy.TextPart](part); ok && strings.Contains(tp.Text, transcriptPath) {
 				noticeText = tp.Text
 				break
 			}
 		}
 	}
 	require.NotEmpty(t, noticeText, "expected a searchable transcript notice in trimmed history")
-	require.Contains(t, noticeText, "grep")
-	require.Contains(t, noticeText, "view")
-
-	transcriptPath, idx, err := writeSearchableTranscript(sa.transcriptDataDir(), "long-switch-session", msgs)
-	require.NoError(t, err)
-	require.Contains(t, noticeText, transcriptPath)
-	require.Greater(t, idx.totalLines, 100)
 
 	fullTranscriptBytes, err := os.ReadFile(transcriptPath)
 	require.NoError(t, err)
@@ -260,7 +256,7 @@ func TestPreparePrompt_PreservesErrorFinish(t *testing.T) {
 	for _, m := range history {
 		if m.Role == fantasy.MessageRoleAssistant {
 			for _, part := range m.Content {
-				if tp, ok := fantasy.AsMessagePart[fantasy.TextPart](part); ok && strings.Contains(tp.Text, "[error: Payment Required]") {
+				if tp, ok := fantasy.AsMessagePart[fantasy.TextPart](part); ok && strings.Contains(tp.Text, "Payment Required") {
 					found = true
 					break
 				}

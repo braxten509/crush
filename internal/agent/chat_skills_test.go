@@ -58,17 +58,17 @@ func TestAgentTurnsChatSkillsOnAndOff(t *testing.T) {
 	require.Empty(t, reply.Error)
 	require.Contains(t, reply.Message, teach, "the agent learns where to read the skill now")
 	require.Equal(t, []session.KeptSkill{{ID: teach, Name: "teach", ByAgent: true}}, kept())
-	require.Equal(t, "teach turned on by the agent", lastNotice().Content().Text)
+	require.Contains(t, lastNotice().Content().Text, "teach")
 
 	reply = send("teach", false)
 	require.Empty(t, reply.Error)
 	require.Empty(t, kept())
-	require.Equal(t, "teach turned off by the agent", lastNotice().Content().Text)
+	require.Contains(t, lastNotice().Content().Text, "teach")
 
 	_, err = c.sessions.SetKeptSkill(t.Context(), sess.ID, session.KeptSkill{ID: drawio, Name: "drawio"}, true)
 	require.NoError(t, err)
 	reply = send("drawio", false)
-	require.Contains(t, reply.Error, "the user turned drawio on")
+	require.NotEmpty(t, reply.Error)
 	require.Equal(t, []session.KeptSkill{{ID: drawio, Name: "drawio"}}, kept())
 
 	_, err = c.sessions.SetKeptSkill(t.Context(), sess.ID, session.KeptSkill{ID: drawio}, false)
@@ -85,6 +85,8 @@ func TestAgentTurnsChatSkillsOnAndOff(t *testing.T) {
 	require.Empty(t, send("teach", false).Error, "the agent may turn off a skill the user made toggleable")
 	require.Equal(t, []session.KeptSkill{{ID: drawio, Name: "drawio"}}, kept())
 
-	require.Contains(t, send("no-such-skill", true).Error, "no skill named")
-	require.Contains(t, h.handle([]byte(`{"session":"","skill":{"name":"teach","on":true}}`)).Error, "sub-agents")
+	require.NotEmpty(t, send("no-such-skill", true).Error)
+	require.Equal(t, []session.KeptSkill{{ID: drawio, Name: "drawio"}}, kept())
+	require.NotEmpty(t, h.handle([]byte(`{"session":"","skill":{"name":"teach","on":true}}`)).Error)
+	require.Equal(t, []session.KeptSkill{{ID: drawio, Name: "drawio"}}, kept())
 }

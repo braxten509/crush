@@ -22,10 +22,28 @@ func TestAPIKeptSkillsTextHasEveryFullText(t *testing.T) {
 
 	require.Empty(t, apiKeptSkillsText(nil))
 	text := apiKeptSkillsText([]keptSkill{keptTestSkill("alpha"), keptTestSkill("beta")})
-	require.True(t, strings.HasPrefix(text, "<crush_kept_skills>\n"+keptSkillsIntro))
-	require.True(t, strings.HasSuffix(text, "</crush_kept_skills>"))
-	require.Contains(t, text, "<skill name=\"alpha\" location=\"/skills/alpha/SKILL.md\">\nFollow the alpha steps.\n</skill>")
-	require.Contains(t, text, "Follow the beta steps.")
+	for _, name := range []string{"alpha", "beta"} {
+		require.Contains(t, text, "Follow the "+name+" steps.")
+		require.Contains(t, text, "/skills/"+name+"/SKILL.md")
+	}
+}
+
+// keptSkillLine returns the one line of text that names want.
+func keptSkillLine(t *testing.T, text, want string) string {
+	t.Helper()
+	for line := range strings.SplitSeq(text, "\n") {
+		if strings.Contains(line, want) {
+			return line
+		}
+	}
+	require.Failf(t, "no line names "+want, "%s", text)
+	return ""
+}
+
+// requireSaysOff checks that a line naming the skill says it is off.
+func requireSaysOff(t *testing.T, text, name string) {
+	t.Helper()
+	require.Contains(t, keptSkillLine(t, text, name), "off")
 }
 
 // Toggleable skills are marked so the agent knows it may turn them off.
@@ -35,15 +53,15 @@ func TestKeptSkillsTextMarksToggleableSkills(t *testing.T) {
 	alpha, beta := keptTestSkill("alpha"), keptTestSkill("beta")
 	beta.Toggleable = true
 	text := apiKeptSkillsText([]keptSkill{alpha, beta})
-	require.Contains(t, text, "<skill name=\"alpha\" location=\"/skills/alpha/SKILL.md\">\n")
-	require.Contains(t, text, "<skill name=\"beta\" location=\"/skills/beta/SKILL.md\" toggleable=\"true\">\n")
+	require.NotContains(t, keptSkillLine(t, text, "/skills/alpha/SKILL.md"), "toggleable")
+	require.Contains(t, keptSkillLine(t, text, "/skills/beta/SKILL.md"), "toggleable")
 
 	sessionID := t.Name()
 	t.Cleanup(func() { forgetKeptSkillsSent(sessionID) })
 	cliKeptSkillsText(sessionID, "claude", []keptSkill{alpha, beta}, nil, false)
 	reminder := cliKeptSkillsText(sessionID, "claude", []keptSkill{alpha, beta}, nil, false)
-	require.Contains(t, reminder, "- alpha is on (/skills/alpha/SKILL.md)")
-	require.Contains(t, reminder, "- beta is on and toggleable (/skills/beta/SKILL.md)")
+	require.NotContains(t, keptSkillLine(t, reminder, "/skills/alpha/SKILL.md"), "toggleable")
+	require.Contains(t, keptSkillLine(t, reminder, "/skills/beta/SKILL.md"), "toggleable")
 }
 
 func TestCLIKeptSkillsTextSendsFullTextOnceThenReminds(t *testing.T) {
@@ -58,8 +76,7 @@ func TestCLIKeptSkillsTextSendsFullTextOnceThenReminds(t *testing.T) {
 
 	second := cliKeptSkillsText(sessionID, "claude", []keptSkill{alpha}, nil, false)
 	require.NotContains(t, second, "Follow the alpha steps.")
-	require.Contains(t, second, "- alpha is on (/skills/alpha/SKILL.md).")
-	require.Contains(t, second, keptSkillsIntro)
+	require.Contains(t, second, "/skills/alpha/SKILL.md")
 
 	// A skill turned on later gets its full text while the old one stays a
 	// reminder.
@@ -118,8 +135,8 @@ func TestCLIKeptSkillsTextSaysWhenASkillIsTurnedOff(t *testing.T) {
 
 	cliKeptSkillsText(sessionID, "claude", []keptSkill{alpha, beta}, nil, false)
 	text := cliKeptSkillsText(sessionID, "claude", []keptSkill{beta}, nil, false)
-	require.Contains(t, text, "- alpha is off for this chat now. Stop following it.")
-	require.Contains(t, text, "- beta is on")
+	requireSaysOff(t, text, "alpha")
+	require.NotContains(t, keptSkillLine(t, text, "beta"), "off")
 
 	// The off line is said once; with nothing on, nothing more is sent.
 	cliKeptSkillsText(sessionID, "claude", nil, nil, false)
@@ -135,7 +152,7 @@ func TestCLIKeptSkillsTextSaysOffAfterCompaction(t *testing.T) {
 	forgetKeptSkillsSent(sessionID)
 
 	text := cliKeptSkillsText(sessionID, "claude", nil, nil, false)
-	require.Contains(t, text, "alpha is off for this chat now")
+	requireSaysOff(t, text, "alpha")
 	require.NotContains(t, text, keptSkillsIntro)
 }
 
@@ -162,7 +179,7 @@ func TestCLIKeptSkillsTextTellsAResumedCLIAfterARestart(t *testing.T) {
 	}
 
 	text := cliKeptSkillsText(sessionID, "claude", nil, turnedOff, false)
-	require.Contains(t, text, "alpha is off for this chat now")
+	requireSaysOff(t, text, "alpha")
 	require.Empty(t, cliKeptSkillsText(sessionID, "claude", nil, turnedOff, false))
 	require.Equal(t, 1, calls, "the saved list is only read when there is no record")
 

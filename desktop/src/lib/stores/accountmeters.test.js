@@ -5,7 +5,7 @@ vi.mock("../engine/api.js", () => ({ api: { fallback: calls.fallback, refreshLim
 vi.mock("../engine/events.js", () => ({ onEvent: vi.fn(), onResync: vi.fn() }));
 vi.mock("../engine/commands.js", () => ({ sign_in_run: vi.fn() }));
 
-import { SPANS, accountGroups, accountMeters, accountPollConnected, checkingKinds, listedKinds } from "./accountmeters.svelte.js";
+import { accountGroups, accountMeters, accountPollConnected, checkingKinds, listedKinds } from "./accountmeters.svelte.js";
 import { fallback } from "../fallback/store.svelte.js";
 import { limits } from "./limits.svelte.js";
 
@@ -30,10 +30,10 @@ describe("account meters", () => {
     expect(listedKinds(accounts, read)).toEqual(["claude-code", "codex-cli", "agy-cli", "kimi-coding"]);
   });
 
-  it("names a tool with one sign-in after the tool", () => {
+  it("gives a tool with one sign-in one row with its parts left", () => {
     const byKind = { "codex-cli": reading("codex-cli", "", 29, 60) };
     const codex = accountGroups({ accounts, byKind, now }).find((g) => g.kind === "codex-cli");
-    expect(codex.rows.map((r) => [r.name, r.email, r.state, r.parts])).toEqual([["Codex", "", "ready", [{ left: 71, level: "" }, { left: 40, level: "" }, null]]]);
+    expect(codex.rows.map((r) => [r.id, r.email, r.state, r.parts])).toEqual([["", "", "ready", [{ left: 71, level: "" }, { left: 40, level: "" }, null]]]);
   });
 
   it("shows a login's email on hover, from its email or a name that is one", () => {
@@ -47,16 +47,15 @@ describe("account meters", () => {
   });
 
   it("puts every tool in the same 5h, Week, Month columns", () => {
-    expect(SPANS).toEqual(["5h", "Week", "Month"]);
     const grokAccounts = [...accounts, { id: "", kind: "grok-cli", name: "Grok 1", signed_in: true }];
     const byKind = {
       "grok-cli": { kind: "grok-cli", state: "ready", read_at: "2026-10-21T11:59:00Z", windows: [{ name: "Monthly", used: 42 }] },
       "opencode-cli": { kind: "opencode-cli", state: "ready", read_at: "2026-10-21T11:59:00Z", windows: [{ name: "Monthly", used: 40 }, { name: "5h", used: 5 }, { name: "Weekly", used: 23 }, { name: "3d", used: 1 }] },
     };
     const groups = accountGroups({ accounts: grokAccounts, byKind, now });
-    expect(groups.slice(2).map((g) => g.rows.map((r) => [r.name, r.parts.map((p) => p?.left ?? null)]))).toEqual([
-      [["Grok", [null, null, 58]]],
-      [["Opencode Go", [95, 77, 60]]],
+    expect(groups.slice(2).map((g) => [g.kind, g.rows.map((r) => r.parts.map((p) => p?.left ?? null))])).toEqual([
+      ["grok-cli", [[null, null, 58]]],
+      ["opencode-cli", [[95, 77, 60]]],
     ]);
   });
 
@@ -93,12 +92,12 @@ describe("account meters", () => {
     ]);
   });
 
-  it("numbers a tool's sign-ins after the first, with each one's part left, level, and in-use mark", () => {
+  it("lists a tool's sign-ins in order, with each one's part left, level, and in-use mark", () => {
     const byKind = { "claude-code": reading("claude-code", "", 0, 31), "claude-code#c2": reading("claude-code", "c2", 88, 95) };
     const [group] = accountGroups({ accounts, byKind, inUse: { kind: "claude-code", account: "" }, now });
-    expect(group.rows.map((r) => [r.name, r.email, r.inUse, r.state, r.parts])).toEqual([
-      ["Claude", "", true, "ready", [{ left: 100, level: "" }, { left: 69, level: "" }, null]],
-      ["Claude 2", "", false, "ready", [{ left: 12, level: "low" }, { left: 5, level: "out" }, null]],
+    expect(group.rows.map((r) => [r.id, r.email, r.inUse, r.state, r.parts])).toEqual([
+      ["", "", true, "ready", [{ left: 100, level: "" }, { left: 69, level: "" }, null]],
+      ["c2", "", false, "ready", [{ left: 12, level: "low" }, { left: 5, level: "out" }, null]],
     ]);
   });
 

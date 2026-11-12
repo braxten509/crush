@@ -72,7 +72,7 @@ describe("extractFigures", () => {
 
   test("the chips in the chat carry the same ids, in the same order", () => {
     const root = renderMarkdown(TEXT, { messageId: "m1", sessionId: "s1" });
-    const chips = [...root.querySelectorAll(".md-chip")].map((c) => [c.dataset.figure, c.dataset.kind]);
+    const chips = [...root.querySelectorAll("[data-kind]")].map((c) => [c.dataset.figure, c.dataset.kind]);
     expect(chips).toEqual(extractFigures("s1", "m1", TEXT).map((f) => [f.id, f.kind]));
   });
 
@@ -107,7 +107,7 @@ describe("extractFigures", () => {
       const prefix = text.slice(0, at);
       const ids = extractFigures("s", "m", prefix, { finished: false }).map((f) => f.id);
       const root = renderMarkdown(prefix, { messageId: "m", finished: false });
-      const chipIds = [...root.querySelectorAll(".md-chip[data-figure]")].map((c) => c.dataset.figure);
+      const chipIds = [...root.querySelectorAll("[data-kind][data-figure]")].map((c) => c.dataset.figure);
       expect(chipIds, JSON.stringify(prefix)).toEqual(ids);
     }
   });
@@ -179,7 +179,7 @@ describe("pictureOf", () => {
       expect(pictureOf(`file:///tmp/${bad}.png`)).toBeNull();
       expect(extractFigures("s", "m", text).map((f) => [f.id, f.kind])).toEqual([["m:0", "math"]]);
       const root = renderMarkdown(text, { messageId: "m", sessionId: "s" });
-      expect(root.querySelector(".md-chip[data-kind=picture]")).toBeNull();
+      expect(root.querySelector("[data-kind=picture]")).toBeNull();
       expect(root.textContent).toContain("Before bad shot after.");
     }
   });

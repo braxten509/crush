@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"github.com/charmbracelet/crush/internal/permission"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -139,15 +138,6 @@ func TestRemoteActsOnTheNewChat(t *testing.T) {
 	require.Equal(t, "s2", m.session.ID)
 }
 
-func TestRemoteBadge(t *testing.T) {
-	t.Parallel()
-
-	m := newBusyUI(&countingWorkspace{})
-	require.NotContains(t, m.status.modeBadge(), "REMOTE")
-	m.status.SetRemote(true)
-	require.Contains(t, m.status.modeBadge(), "REMOTE")
-}
-
 // TestEngineRemoteFollowsTheShownChat: on the shared engine, REMOTE shows
 // while the chat the window shows is shared, whichever app turned it on;
 // switching chats follows each chat's share; a share list read before a
@@ -158,7 +148,7 @@ func TestEngineRemoteFollowsTheShownChat(t *testing.T) {
 	on := func(chat string, phones ...string) proto.RemoteStatus {
 		return proto.RemoteStatus{State: "on", SessionID: chat, Phones: phones}
 	}
-	shows := func() bool { return strings.Contains(m.status.modeBadge(), "REMOTE") }
+	shows := func() bool { return m.status.remote }
 
 	require.Nil(t, m.handleRemoteEngineStatus(on("s2")))
 	require.False(t, shows(), "another chat's share")
@@ -167,7 +157,7 @@ func TestEngineRemoteFollowsTheShownChat(t *testing.T) {
 	require.True(t, m.remoteActive())
 	cmd := m.handleRemoteEngineStatus(on("s1", "Pixel"))
 	require.NotNil(t, cmd)
-	require.Equal(t, "Remote Control: Pixel connected", cmd().(util.InfoMsg).Msg)
+	require.Contains(t, cmd().(util.InfoMsg).Msg, "Pixel")
 
 	m.session = &session.Session{ID: "s2"}
 	m.syncRemotePresence()
@@ -237,8 +227,14 @@ func TestPresenceSenderSendsTheNewest(t *testing.T) {
 		defer mu.Unlock()
 		return len(sent) >= 2
 	}, 5*time.Second, time.Millisecond)
-	time.Sleep(50 * time.Millisecond)
+	// A last report shows nothing stale ran in between.
+	s.send(func() { record(5) })
+	require.Eventually(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return sent[len(sent)-1] == 5
+	}, 5*time.Second, time.Millisecond)
 	mu.Lock()
 	defer mu.Unlock()
-	require.Equal(t, []int{1, 4}, sent)
+	require.Equal(t, []int{1, 4, 5}, sent)
 }

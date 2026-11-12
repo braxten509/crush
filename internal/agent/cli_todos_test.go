@@ -88,8 +88,8 @@ func TestModelSwitchHandsOverTheToDoList(t *testing.T) {
 	require.Len(t, savedTodos(t, sa, sess.ID), 2)
 
 	note := sa.handOverTodos(t.Context(), sess.ID, "claude-code", "opus")
-	require.Contains(t, note, "- [completed] Fix the hang")
-	require.Contains(t, note, "- [pending] Check the phone")
+	require.Contains(t, note, "Fix the hang")
+	require.Contains(t, note, "Check the phone")
 	require.Empty(t, savedTodos(t, sa, sess.ID), "a different model starts with an empty list")
 	require.Empty(t, sa.handOverTodos(t.Context(), sess.ID, "claude-code", "opus"), "nothing left to hand over")
 }

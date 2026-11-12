@@ -8,6 +8,7 @@ import (
 
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/proto"
+	"github.com/charmbracelet/crush/internal/rpc"
 	"github.com/stretchr/testify/require"
 )
 
@@ -36,7 +37,7 @@ func TestRecallEndpointReturnsAttachmentsAndNullWhenUnavailable(t *testing.T) {
 		req.SetPathValue("id", id)
 		req.SetPathValue("sid", "s1")
 		rsp := httptest.NewRecorder()
-		c.handlePostWorkspaceAgentSessionPromptRecall(rsp, req)
+		c.endpointHandler(rpc.RecallQueued)(rsp, req)
 		return rsp
 	}
 	rsp := request("request_id=first")

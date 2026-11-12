@@ -17,6 +17,12 @@ import (
 // toolGroupShown is how many of the latest steps an expanded group shows.
 const toolGroupShown = 5
 
+// Live status words shared by tool groups and assistant steps.
+const (
+	StatusThinking   = "Thinking"
+	StatusCompacting = "Compacting conversation"
+)
+
 // ToolGroupItem folds a run of tool calls (and the thinking-only steps
 // between them) into one status line that says what it is doing.
 // The disclosure expands its steps; the action count opens any file changes.
@@ -299,7 +305,7 @@ func (g *ToolGroupItem) status() string {
 	switch last := g.children[len(g.children)-1].(type) {
 	case *AssistantMessageItem:
 		if last.message.IsCompacting {
-			return "Compacting conversation"
+			return StatusCompacting
 		}
 		if last.Canceled() {
 			return ""
@@ -311,7 +317,7 @@ func (g *ToolGroupItem) status() string {
 			if last.message.Activity == "writing" {
 				return "Writing command"
 			}
-			return "Thinking"
+			return StatusThinking
 		}
 	case ToolMessageItem:
 		st, ok := last.(interface{ computeStatus() ToolStatus })
@@ -329,11 +335,11 @@ func (g *ToolGroupItem) status() string {
 	}
 	if g.busy {
 		if g.compactingEarlier {
-			return "Compacting conversation"
+			return StatusCompacting
 		}
 		// The last step is done but the agent isn't: the model is
 		// working out what to do next.
-		return "Thinking"
+		return StatusThinking
 	}
 	return ""
 }

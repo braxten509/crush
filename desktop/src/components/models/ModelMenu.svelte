@@ -125,7 +125,8 @@
   const byProvider = $derived(availability.sessionId === sessions.currentId ? availability.byProvider : {});
   // Bug 8b: rows without a known reason say the folder is still being checked,
   // or could not be checked; they stay pickable (owner's D4a).
-  const checking = $derived(availability.sessionId !== sessions.currentId || availability.state === "loading" ? "Checking…" : availability.state === "failed" ? "Could not check" : "");
+  const checkState = $derived(availability.sessionId !== sessions.currentId || availability.state === "loading" ? "checking" : availability.state === "failed" ? "failed" : "");
+  const checking = $derived(checkState === "checking" ? "Checking…" : checkState === "failed" ? "Could not check" : "");
 
   const coder = $derived(coderModel(modelData));
   const barMode = $derived(ws.config?.options?.tui?.scrollbar ?? "default");
@@ -421,6 +422,8 @@
           class:blocked={Boolean(blocked)}
           role="option"
           data-stop
+          data-testid="model-row"
+          data-check={!blocked && checkState ? checkState : undefined}
           aria-selected={isCurrent(item, current)}
           aria-disabled={blocked ? "true" : undefined}
           disabled={Boolean(blocked)}
@@ -437,6 +440,7 @@
             type="button"
             class="local-action"
             data-stop
+            data-testid="local-action"
             aria-label={`${localHere && ["ready", "loading"].includes(local.state) ? "Unload" : "Load"} ${item.model.name || item.model.id}`}
             disabled={localAction || (local.state === "loading" && !localHere)}
             onclick={() => changeLocal(item)}
@@ -447,7 +451,7 @@
         <p class="empty">{searching ? "No models match." : shownGroup?.addTo ? "No models saved yet." : modelData.cfg ? "No models here." : "Reading models…"}</p>
       {/each}
       {#if shownGroup?.addTo && !searching}
-        <button type="button" class="model add" data-stop onclick={() => addModels(shownGroup)}>
+        <button type="button" class="model add" data-stop data-testid="add-model" onclick={() => addModels(shownGroup)}>
           <Icon name="plus" size={14} />
           <span class="name">Add model</span>
         </button>
@@ -455,7 +459,7 @@
     </div>
     <Scrollbar target={rowsBox} mode={barMode} />
     {#if hasLocal}
-      <p class="local-status" class:failed={Boolean(localError || local.error)} role="status">{localError || local.error || (local.state === "loading" ? "Loading model…" : local.state === "ready" ? "Model loaded" : "")}</p>
+      <p class="local-status" class:failed={Boolean(localError || local.error)} role="status" data-testid="local-status">{localError || local.error || (local.state === "loading" ? "Loading model…" : local.state === "ready" ? "Model loaded" : "")}</p>
     {/if}
     {#if routeTo}
       <div class="route" data-column="route">

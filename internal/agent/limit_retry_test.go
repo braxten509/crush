@@ -88,7 +88,7 @@ func TestLimitRetryTime(t *testing.T) {
 	_, ok = limitRetryTime(nil, now)
 	require.False(t, ok)
 
-	require.Contains(t, limitRetryNote(now), `Crush will send "continue" at `)
+	require.Contains(t, limitRetryNote(now), now.Local().Format("3:04 PM"))
 }
 
 // fakeClock is a wall clock tests move by hand.
@@ -244,7 +244,7 @@ while True:
 	require.NotNil(t, finish)
 	// A minute past the reset, shown in this computer's own time zone.
 	shown := reset.Add(time.Minute).Local().Format("3:04 PM")
-	require.Contains(t, finish.Details, `Crush will send "continue" at `+shown)
+	require.Contains(t, finish.Details, shown)
 	require.Len(t, c.limitRetries.pending, 1)
 
 	// Nothing is sent before the reset; past it, "continue" goes out.

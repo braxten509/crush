@@ -228,7 +228,7 @@
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-<div class="scrim" transition:scrim|global={{ to: 0.6 }} onclick={outside} oncontextmenu={(event) => event.preventDefault()}></div>
+<div class="scrim" data-scrim transition:scrim|global={{ to: 0.6 }} onclick={outside} oncontextmenu={(event) => event.preventDefault()}></div>
 <div class="panel" role="dialog" aria-modal="true" aria-label="Changes" tabindex="-1" bind:this={panel} transition:drawer|global>
   <span class="ruler" aria-hidden="true" {@attach size((rect) => (cell = rect.width / 10))}>0000000000</span>
   <header class="heading">

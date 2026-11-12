@@ -1,13 +1,12 @@
 package providers
 
 import (
-	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"charm.land/catwalk/v3/pkg/catwalk"
 	"charm.land/fantasy"
@@ -70,6 +69,11 @@ func TestTinfoilThinking(t *testing.T) {
 // A Tinfoil request goes only to a server that proves it is Tinfoil's
 // secure server; a plain server never sees the prompt.
 func TestTinfoilRefusesUnprovenServer(t *testing.T) {
+	verify := verifiedTinfoilTransport
+	verifiedTinfoilTransport = func(string) (http.RoundTripper, error) {
+		return nil, errors.New("no proof")
+	}
+	t.Cleanup(func() { verifiedTinfoilTransport = verify })
 	var hits atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/chat/completions" {
@@ -86,9 +90,7 @@ func TestTinfoilRefusesUnprovenServer(t *testing.T) {
 	require.NoError(t, err)
 	languageModel, err := built.LanguageModel(t.Context(), model.ID)
 	require.NoError(t, err)
-	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	defer cancel()
-	_, err = languageModel.Generate(ctx, fantasy.Call{Prompt: fantasy.Prompt{fantasy.NewUserMessage("secret")}})
+	_, err = languageModel.Generate(t.Context(), fantasy.Call{Prompt: fantasy.Prompt{fantasy.NewUserMessage("secret")}})
 	require.Error(t, err)
 	require.Zero(t, hits.Load())
 }

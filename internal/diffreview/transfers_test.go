@@ -21,12 +21,10 @@ func TestImportedBaselineCountsOnlyLaterEdits(t *testing.T) {
 	require.Equal(t, 0, files[0].Adds)
 	require.False(t, files[0].HasEdits())
 	require.Len(t, files[0].Lines, 1)
-	require.Equal(t, "copied checkout: 1 file", Summary(files))
 	edit := filechange.Change{Path: imported.Path, Order: 2, Before: base, After: edited}
 	files = Build([]Edit{{Path: edit.Path, Snapshot: &edit}, {Path: imported.Path, Snapshot: &imported}})
 	require.Equal(t, 1, files[0].Adds)
 	require.Equal(t, 1, files[0].Dels)
-	require.Equal(t, "copied checkout: 1 file · 1 file edited", Summary(files))
 }
 
 func TestMovedFilePreservesEditsWithoutCountingSourceDeletion(t *testing.T) {

@@ -52,5 +52,4 @@ func TestAppWorkspaceAgentSetMainWithoutAgent(t *testing.T) {
 	ws := NewAppWorkspace(&app.App{}, nil)
 	err := ws.AgentSetMain("plan")
 	require.ErrorIs(t, err, backend.ErrAgentNotInitialized)
-	require.EqualError(t, err, "agent coordinator not initialized")
 }

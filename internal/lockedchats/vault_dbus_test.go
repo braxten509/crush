@@ -105,7 +105,10 @@ func TestKDEVaultReleasesConnections(t *testing.T) {
 			before := busConnections(t, conn)
 			vault := KDEVault{}
 			if name == "open polling" {
-				ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+				previous := openPoll
+				openPoll = 10 * time.Millisecond
+				t.Cleanup(func() { openPoll = previous })
+				ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
 				defer cancel()
 				_, err := vault.Open(ctx)
 				require.ErrorIs(t, err, ErrVaultClosed)

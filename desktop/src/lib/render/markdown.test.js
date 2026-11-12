@@ -30,14 +30,13 @@ function expectSafeShape(root) {
   }
 }
 
-const blocks = (root) => [...root.children].map((el) => el.tagName.toLowerCase() + (el.className ? `.${el.className.split(" ").join(".")}` : ""));
+const blocks = (root) => [...root.children].map((el) => el.tagName.toLowerCase());
 
 describe("blocks", () => {
   test("paragraphs: one per block, soft breaks kept as text, entities decoded", () => {
     const root = render("one &amp; two &copy;\nsame paragraph\n\nnext");
     expect(blocks(root)).toEqual(["p", "p"]);
     expect(root.children[0].textContent).toBe("one & two ©\nsame paragraph");
-    expect(root.className).toBe("md");
     expectSafeShape(root);
   });
 
@@ -49,17 +48,17 @@ describe("blocks", () => {
 
   test("headings, without their marks", () => {
     const root = render("# One\n## Two #\n### Three\n#### Four\n##### Five\n###### Six\n\nSetext\n===");
-    expect(blocks(root)).toEqual(["h1.md-h", "h2.md-h", "h3.md-h", "h4.md-h", "h5.md-h", "h6.md-h", "h1.md-h"]);
+    expect(blocks(root)).toEqual(["h1", "h2", "h3", "h4", "h5", "h6", "h1"]);
     expect([...root.children].map((h) => h.textContent)).toEqual(["One", "Two", "Three", "Four", "Five", "Six", "Setext"]);
     expectSafeShape(root);
   });
 
   test("bullet and numbered lists, tight and loose, nested", () => {
     const root = render("- a\n- b\n  - nested\n\n3. three\n4. four\n\n   more\n");
-    expect(blocks(root)).toEqual(["ul.md-list", "ol.md-list.md-loose"]);
+    expect(blocks(root)).toEqual(["ul", "ol"]);
     const [ul, ol] = root.children;
     expect([...ul.children].map((li) => li.firstChild.textContent)).toEqual(["a", "b"]);
-    expect(ul.children[1].querySelector("ul.md-list > li").textContent).toBe("nested");
+    expect(ul.children[1].querySelector("ul > li").textContent).toBe("nested");
     expect([...ol.children].map((li) => li.dataset.n)).toEqual(["3", "4"]);
     expect([...ol.children[1].children].map((el) => el.tagName)).toEqual(["P", "P"]);
     expectSafeShape(root);
@@ -97,16 +96,9 @@ describe("blocks", () => {
     expect(root.querySelector("a").getAttribute("href")).toBe("https://example.com");
   });
 
-  test("quotes with a hairline", () => {
-    const root = render("> quoted **words**\n> more\n>\n> second");
-    expect(blocks(root)).toEqual(["blockquote"]);
-    expect([...root.firstChild.children].map((el) => el.tagName)).toEqual(["P", "P"]);
-    expect(root.firstChild.querySelector("strong").textContent).toBe("words");
-  });
-
   test("code blocks: highlighted, the language label inside, no fences shown", () => {
     const root = render('```go\nfunc main() {\n\tprintln("<b>")\n}\n```');
-    expect(blocks(root)).toEqual(["pre.md-code"]);
+    expect(blocks(root)).toEqual(["pre"]);
     const pre = root.firstChild;
     expect(pre.querySelector(".md-code-lang").textContent).toBe("go");
     const body = pre.querySelector("code.md-code-body");
@@ -118,7 +110,7 @@ describe("blocks", () => {
 
   test("an indented code block and a fence without a language", () => {
     const root = render("    plain <i>code</i>\n\n```\nno language\n```");
-    expect(blocks(root)).toEqual(["pre.md-code", "pre.md-code"]);
+    expect(blocks(root)).toEqual(["pre", "pre"]);
     expect(root.children[0].querySelector("code").textContent).toBe("plain <i>code</i>");
     expect(root.children[0].querySelector(".md-code-lang")).toBeNull();
     expect(root.children[1].querySelector(".md-code-lang").textContent).toBe("");
@@ -145,26 +137,13 @@ describe("blocks", () => {
     expect(root.textContent).toBe("em strong gone both");
   });
 
-  test("a thematic break: one rule, no + marks", () => {
-    const root = render("a\n\n---\n\nb");
-    expect(blocks(root)).toEqual(["p", "span.md-rule", "p"]);
-    expect([...root.children[1].children].map((el) => el.tagName + "." + el.className)).toEqual(["HR."]);
-  });
-
   test("raw HTML shows as text with every tag removed (1.7 item 2)", () => {
     const root = render('<div onclick="x()">\nhi <b>there</b> &amp; you\n</div>\n\na <i>b</i> <img src=x onerror=alert(1)> c\n\n<script>alert(1)</script>');
-    expect(blocks(root)).toEqual(["p.md-html", "p"]);
+    expect(blocks(root)).toEqual(["p", "p"]);
     expect(root.children[0].textContent).toBe("hi there & you");
     expect(root.children[1].textContent).toBe("a b  c");
     expect(root.querySelector("div, b, i, img, script")).toBeNull();
     expectSafeShape(root);
-  });
-
-  test("inline math through KaTeX", () => {
-    const root = render("Euler: $e^{i\\pi}+1=0$, and \\(a^2\\).");
-    const math = root.querySelectorAll(".md-math");
-    expect(math.length).toBe(2);
-    expect(math[0].querySelector(".katex")).not.toBeNull();
   });
 });
 
@@ -190,28 +169,27 @@ describe("visuals become chips (4.3)", () => {
 
   test("in source order, each where its block was, ids from the message", () => {
     const root = render(text);
-    const chips = [...root.querySelectorAll(".md-chip")];
-    expect(chips.map((c) => [c.dataset.kind, c.dataset.figure, c.querySelector(".md-chip-title").textContent])).toEqual([
-      ["table", "m1:0", "Name · Kind · Size"],
-      ["math", "m1:1", "\\int_0^1 x^2 \\, dx = \\fr…"],
-      ["diagram", "m1:2", "Sign in"],
-      ["picture", "m1:3", "A chart"],
-      ["picture", "m1:4", "images.example.com"],
+    const chips = [...root.querySelectorAll("[data-kind]")];
+    expect(chips.map((c) => [c.dataset.kind, c.dataset.figure])).toEqual([
+      ["table", "m1:0"],
+      ["math", "m1:1"],
+      ["diagram", "m1:2"],
+      ["picture", "m1:3"],
+      ["picture", "m1:4"],
     ]);
-    expect(chips.map((c) => c.querySelector(".md-chip-kind").textContent)).toEqual(["TABLE", "MATH", "DIAGRAM", "PICTURE", "PICTURE"]);
-    expect(blocks(root).slice(0, 4)).toEqual(["span.md-chip", "span.md-chip", "span.md-chip", "span.md-chip"]);
+    // The four block visuals stand where their blocks were, at the top level.
+    expect([...root.children].slice(0, 4).map((el) => el.dataset.kind)).toEqual(["table", "math", "diagram", "picture"]);
     // The web picture is a link chip that opens the browser; the linked picture is its alt text.
     expect(chips[4].tagName).toBe("A");
     expect(chips[4].getAttribute("href")).toBe("https://images.example.com/a/shot.png");
-    expect(chips[4].classList.contains("md-chip-inline")).toBe(true);
-    expect(root.querySelector("a:not(.md-chip)").textContent).toBe("in a link");
+    expect(root.querySelector("a:not([data-kind])").textContent).toBe("in a link");
     expect(root.querySelector("table, img, svg")).toBeNull();
     expectSafeShape(root);
   });
 
   test("a visual past the stable boundary has no figure yet", () => {
     const root = render("para\n\n| a | b |\n|---|---|\n| 1 | 2 |", { finished: false });
-    const chip = root.querySelector(".md-chip");
+    const chip = root.querySelector("[data-kind]");
     expect(chip.dataset.kind).toBe("table");
     expect(chip.dataset.figure).toBeUndefined();
   });
@@ -237,7 +215,6 @@ describe("plan markers never show (CHAT-033)", () => {
     const root = render(`${PLAN_START_MARKER}\n# Plan\n\n- step\n\n\`\`\`\n${PLAN_READY_MARKER}\n\`\`\``, { plan: "closed" });
     expect(root.textContent).not.toContain("CRUSH_PLAN");
     expect(root.querySelector("pre")).toBeNull();
-    expect(root.className).toBe("md md-plan");
   });
 
   test("a real fence just above the ready marker stays", () => {

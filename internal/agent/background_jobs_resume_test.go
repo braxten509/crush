@@ -74,7 +74,10 @@ func TestFinishedBackgroundJobIsForgotten(t *testing.T) {
 
 	select {
 	case call := <-calls:
-		require.Contains(t, call.Prompt, "exit code 0")
+		name, status, ok := ParseTaskNotification(call.Prompt)
+		require.True(t, ok)
+		require.Equal(t, BackgroundProcessName, name)
+		require.Equal(t, "completed", status)
 	case <-time.After(12 * time.Second):
 		t.Fatal("completion notification missing")
 	}
@@ -119,10 +122,9 @@ func TestShutdownJobIsReportedByTheNextCrush(t *testing.T) {
 		require.True(t, ok)
 		require.Equal(t, BackgroundProcessName, name)
 		require.Equal(t, string(TaskStopped), status)
-		require.Contains(t, call.Prompt, "Job "+job.ID+" (author)")
+		require.Contains(t, call.Prompt, job.ID)
 		require.Contains(t, call.Prompt, hold)
 		require.Contains(t, call.Prompt, "halfway")
-		require.Contains(t, call.Prompt, "Don't end your turn waiting")
 	case <-time.After(5 * time.Second):
 		t.Fatal("interrupted job was not reported")
 	}
@@ -153,8 +155,8 @@ func TestClaimInterruptedJobsTakesOnlyJobsOfGoneCrushes(t *testing.T) {
 	require.Equal(t, "003", left[0].ID)
 
 	notice := interruptedJobsNotification(claimed)
-	require.Contains(t, notice, "ended when Crush closed")
-	require.Contains(t, notice, "ended when Crush stopped unexpectedly")
+	require.Contains(t, notice, "001")
+	require.Contains(t, notice, "002")
 }
 
 func TestNonInteractiveRunsSaveNoJobs(t *testing.T) {

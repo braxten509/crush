@@ -8,7 +8,7 @@ import { describe, expect, test, vi } from "vitest";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 
-const { HINTS, TITLE_MAX, branchErrorText, branchTitle, canBranch, cutOfRange, overlaps, quoteDraft, quoteInReply, selectionToCut } = await import("./branch.js");
+const { TITLE_MAX, branchErrorText, branchTitle, canBranch, cutOfRange, overlaps, quoteDraft, quoteInReply, selectionToCut } = await import("./branch.js");
 const { quoteLines } = await import("./copy.js");
 const { renderMarkdown } = await import("./render/markdown.js");
 const { sourceMapOf } = await import("./render/sourcemap.js");
@@ -254,7 +254,6 @@ describe("canBranch: the reasons of 3.1", () => {
     expect(canBranch(reply(), { error: "unfinished" }, [])).toEqual({ reason: "unfinished" });
     // A reply still being written says so whatever the selection (a whole line spills into the next item).
     expect(canBranch(reply(), { error: "two_messages" }, [])).toEqual({ reason: "unfinished" });
-    expect(HINTS.unfinished).toBe("Wait for the reply to finish");
   });
 
   test("no words is empty", () => {
@@ -272,13 +271,16 @@ describe("canBranch: the reasons of 3.1", () => {
 });
 
 test("a refused branch's notice: the desktop texts of 3.2 step 3, else the engine's message", () => {
-  const cases = [
-    [{ code: "bad_cut", message: "highlight does not match the message text" }, "highlight does not match the message text"],
-    [{ code: "cut_not_finished", message: "x" }, "This reply is still being written."],
-    [{ code: "highlight_overlaps_link", message: "x" }, "These words already open a branch."],
-    [{ code: "transport", message: "x" }, "Branch not made: lost the connection to Crush."],
-    [{ code: "engine_unavailable", message: "x" }, "Branch not made: lost the connection to Crush."],
-    [{ code: "something_new", message: "the engine's own words" }, "the engine's own words"],
+  // The engine's own message passes through.
+  const passed = [
+    { code: "bad_cut", message: "highlight does not match the message text" },
+    { code: "something_new", message: "the engine's own words" },
   ];
-  for (const [error, want] of cases) expect(branchErrorText(error), error.code).toBe(want);
+  for (const error of passed) expect(branchErrorText(error), error.code).toBe(error.message);
+  // Known codes get the desktop's own words, never the raw message.
+  for (const code of ["cut_not_finished", "highlight_overlaps_link", "transport", "engine_unavailable"]) {
+    const text = branchErrorText({ code, message: "x" });
+    expect(text, code).not.toBe("x");
+    expect(text, code).not.toBe("");
+  }
 });

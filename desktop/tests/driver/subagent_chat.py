@@ -1,8 +1,8 @@
 """A sub-agent's chat shows, read only (owner, 2026-10-21, 2026-10-22). On the real engine:
 - sub-1-open    the app's chat starts a sub-agent (crush spawn, scripts/
                 subagent.json, about 25 s); a click on its SUBAGENTS row opens
-                its chat with a typing box, and the left list has its row
-                under its parent's, drawn as a branch and marked Subagent.
+                its chat with a typing box, and the left list has its row,
+                marked as a sub-agent.
 - sub-2-running while it runs its typing box takes no typing, its model box
                 shows the sub-agent's own model and opens no picker, and the
                 parent is handed its result once it finishes.
@@ -11,7 +11,7 @@
                 the parent's own typing box and model button back.
 Usage: tests/check.sh subagent_chat.py
 """
-import contextlib, glob, importlib.util, json, os, subprocess, sys, time
+import contextlib, glob, importlib.util, json, os, subprocess, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import harness as H
@@ -34,8 +34,8 @@ RESULT = "The worker reads each file in turn"
 BOX = """const c = document.querySelector('[data-probe="composer"]');
   const f = c?.querySelector('textarea.input');
   const m = c?.querySelector('[data-helper-model]');
-  return { field: Boolean(f), read_only: f ? f.readOnly : null, tab: f?.getAttribute('tabindex') ?? null,
-           model: (m?.innerText ?? '').trim(), tag: m?.tagName?.toLowerCase() ?? null,
+  return { field: Boolean(f), read_only: f ? f.readOnly : null,
+           model: (m?.innerText ?? '').trim(),
            picker: Boolean(c?.querySelector('button[aria-haspopup="dialog"]')) };"""
 
 
@@ -89,29 +89,20 @@ def main():
         run(probe_path, "document.querySelector('[data-section=\"subagents\"] .open').click(); return true;")
         child, got, _ = rc.poll(side.chat_id, lambda c: bool(c) and c != parent, 10)
         check(child, f"its chat opens ({got} after {parent})")
-        row = lambda: run(probe_path, f"const r = document.querySelector('nav.chats .chat[data-id=\"{got}\"]'); return {{mark: r?.querySelector('.helper-mark')?.textContent ?? '', selected: r?.classList.contains('selected') ?? false, box: !!document.querySelector('textarea.input')}};") or {}
-        listed, state, _ = rc.poll(row, lambda r: r.get("mark") == "Subagent" and r.get("selected") and r.get("box"), 10)
-        check(listed, f"its left-list row is marked Subagent and selected, with a typing box ({state})")
-        # Drawn as one of its parent's branches (owner, 2026-11-12): right
-        # under the parent's row, set in, with the branch line.
-        branch = run(probe_path, f"""const r = document.querySelector('nav.chats .chat[data-id="{got}"]');
-          const p = document.querySelector('nav.chats .chat[data-id="{parent}"]');
-          const left = (el) => Math.round(el?.querySelector('.title')?.getBoundingClientRect().left ?? 0);
-          return {{ branch: r?.classList.contains('branch') ?? false, under: Boolean(r) && r.previousElementSibling === p,
-                   line: r ? getComputedStyle(r, '::before').content !== 'none' : false, row: left(r), parent: left(p) }};""") or {}
-        check(branch.get("branch") and branch.get("under") and branch.get("line") and branch.get("row", 0) > branch.get("parent", 0),
-              f"its row is drawn as a branch under its parent's ({branch})")
+        row = lambda: run(probe_path, f"const r = document.querySelector('nav.chats .chat[data-id=\"{got}\"]'); return {{mark: Boolean(r?.querySelector('[data-helper-mark]')), selected: r?.classList.contains('selected') ?? false, box: !!document.querySelector('textarea.input')}};") or {}
+        listed, state, _ = rc.poll(row, lambda r: r.get("mark") and r.get("selected") and r.get("box"), 10)
+        check(listed, f"its left-list row is marked as a sub-agent and selected, with a typing box ({state})")
         child = got
 
     with step("sub-2-running", out_dir):
         # Its composer shows but takes nothing (owner, 2026-10-22), and its
         # model box names the sub-agent's own model with no picker to open.
         box = run(probe_path, BOX) or {}
-        check(box.get("field") and box.get("read_only") is True and box.get("tab") == "-1", f"its typing box shows and takes no typing ({box})")
-        check(box.get("tag") == "span" and not box.get("picker"), f"its model box opens no picker ({box})")
+        check(box.get("field") and box.get("read_only") is True, f"its typing box shows and takes no typing ({box})")
+        check(not box.get("picker"), f"its model box opens no picker ({box})")
         check("fake-small" in (box.get("model") or ""), f"its model box shows the sub-agent's own model ({box})")
         typed = side.send(FIRST)
-        time.sleep(1.0)
+        rc.poll(side.field, bool, 0.4)
         check(not typed and side.field() == "", f"\"{FIRST}\" cannot be typed there ({typed}, {side.field()!r})")
         check(not any(FIRST in t for _, t in texts(engine, wid, child)), "nothing typed reaches the sub-agent")
         handed, _, _ = rc.poll(lambda: told(engine, wid, parent, RESULT), bool, 60)

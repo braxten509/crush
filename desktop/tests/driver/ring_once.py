@@ -106,7 +106,8 @@ try:
     engine.call("POST", base + "/agent" + q, {"session_id": sid, "prompt": "Say hello from the other folder"})
     seed_chat.wait_turn(engine, base, sid, count)
     until(lambda: len(rings()) > before, 15)
-    time.sleep(2)
+    # The turn has ended and rung; a second ring would follow at once.
+    until(lambda: len(rings()) > before + 1, 0.4)
     new = rings()[before:]
     mine = [r for r in new if r.get("from") == "watch" and r.get("dir") == OTHER and r.get("sound") == "complete" and r.get("session") == sid]
     check(len(mine) == 1 and len(new) == 1, f"the finished turn rings once, from the desktop ({new})")

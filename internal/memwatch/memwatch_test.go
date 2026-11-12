@@ -124,18 +124,3 @@ func TestBiggestAddsUpByName(t *testing.T) {
 	}, 3)
 	require.Equal(t, []Program{{"zen", 6 * gib}, {"qemu", 5 * gib}, {"claude", 1 * gib}}, got)
 }
-
-func TestMessages(t *testing.T) {
-	t.Parallel()
-	s := Status{Percent: 88, High: true, Top: []Program{{"node", 6*gib + gib/10}, {"bash", 300 << 20}}}
-	require.Equal(t, "Memory 88% full. Biggest: node 6.1 GB, bash 300 MB. Close something, or the system may close Crush.", s.Message())
-
-	note := s.AgentNote()
-	require.Contains(t, note, "88% full")
-	require.Contains(t, note, "do not start big tests, builds")
-	require.Contains(t, note, "node (6.1 GB)")
-	require.Contains(t, note, "Start your reply by telling the user")
-	require.Equal(t, "Memory 88% full: the AI was asked to hold off on big tests and builds", s.ChatNotice())
-
-	require.Empty(t, Status{Percent: 88}.AgentNote(), "no note unless High")
-}

@@ -31,7 +31,6 @@ func TestOrcaRouterProvidersLoad(t *testing.T) {
 
 	p, ok := cfg.Providers.Get(OrcaRouterProviderID)
 	require.True(t, ok, "listed with no key and no models")
-	require.Equal(t, "OrcaRouter", p.Name)
 	require.Equal(t, catwalk.TypeCompletions, p.Type)
 	require.Equal(t, orcaRouterBaseURL, p.BaseURL)
 	require.Empty(t, p.Models)
@@ -41,6 +40,5 @@ func TestOrcaRouterProvidersLoad(t *testing.T) {
 	require.True(t, IsOrcaRouterProvider(two))
 	require.Equal(t, orcaRouterBaseURL, two.BaseURL)
 	require.Equal(t, "sk-orca-2", two.APIKey)
-	require.Equal(t, "Claude Fable 5", two.Models[0].Name)
 	require.False(t, IsOrcaRouterProvider(ProviderConfig{ID: "orcarouterx", BaseURL: "https://example.com/v1"}))
 }

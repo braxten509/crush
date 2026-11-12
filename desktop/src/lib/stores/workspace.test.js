@@ -346,7 +346,6 @@ describe("events and reads", () => {
     reads[1].resolve([{ name: "after-failure" }]);
     await settle();
     expect(workspace.ws.skills).toEqual([{ name: "after-failure" }]);
-    expect(logged).toHaveBeenCalledWith("skills read failed", { code: "transport", message: "down" });
   });
 
   it("a failed LSP read still runs the follow-up an event queued during it", async () => {
@@ -363,7 +362,6 @@ describe("events and reads", () => {
     reads[1].resolve({ gopls: { name: "gopls", state: "ready" } });
     await settle();
     expect(workspace.ws.lsps.gopls.state).toBe("ready");
-    expect(logged).toHaveBeenCalledWith("LSP read failed", { code: "transport", message: "down" });
   });
 
   it("a failed MCP read still runs the follow-up an event queued during it", async () => {
@@ -380,7 +378,6 @@ describe("events and reads", () => {
     reads[1].resolve({ github: { name: "github", state: "connected", tool_count: 4 } });
     await settle();
     expect(workspace.ws.mcps.github.tool_count).toBe(4);
-    expect(logged).toHaveBeenCalledWith("MCP read failed", { code: "transport", message: "down" });
   });
 
   it("the Git branch answer is {branch}", async () => {

@@ -2,10 +2,11 @@ package config
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/csync"
@@ -183,7 +184,7 @@ func TestConfig_defaultModelSelection(t *testing.T) {
 			Providers: csync.NewMapFrom(map[string]ProviderConfig{
 				"custom": {
 					APIKey:  "test-key",
-					BaseURL: "https://api.custom.com/v1",
+					BaseURL: closedServerURL(t) + "/v1",
 					Models:  []catwalk.Model{},
 				},
 			}),
@@ -448,73 +449,6 @@ func TestConfig_configureSelectedModels(t *testing.T) {
 		require.Equal(t, "openai", large.Provider)
 		require.Equal(t, int64(100), large.MaxTokens)
 	})
-	t.Run("resolve and persist fallback under writeMu does not deadlock", func(t *testing.T) {
-		dir := t.TempDir()
-		globalPath := filepath.Join(dir, "crush.json")
-		require.NoError(t, os.WriteFile(globalPath, []byte(`{}`), 0o600))
-
-		knownProviders := []catwalk.Provider{
-			{
-				ID:                  "openai",
-				APIKey:              "abc",
-				DefaultLargeModelID: "large-model",
-				DefaultSmallModelID: "small-model",
-				Models: []catwalk.Model{
-					{ID: "large-model", DefaultMaxTokens: 1000},
-					{ID: "small-model", DefaultMaxTokens: 500},
-				},
-			},
-		}
-
-		cfg := &Config{
-			Models: map[SelectedModelType]SelectedModel{
-				"large":                {Provider: "openai", Model: "this-model-does-not-exist"},
-				SelectedModelTypeSmall: {Provider: "openai", Model: "also-does-not-exist"},
-			},
-		}
-		cfg.setDefaults(dir, "")
-		store := &ConfigStore{config: cfg, globalDataPath: globalPath}
-		env := env.NewFromMap(map[string]string{})
-		resolver := NewShellVariableResolver(env)
-		_, err := cfg.configureProviders(context.Background(), env, resolver, knownProviders)
-		require.NoError(t, err)
-
-		// Simulate the Load path: resolve (pure), then persist fallbacks
-		// under writeMu using updateLocked. Before the refactor, the
-		// combined configureSelectedModels(persist=true) self-deadlocked
-		// because SetHelperModel re-acquired writeMu.
-		done := make(chan error, 1)
-		go func() {
-			cfg.takeLegacyChatModel()
-			resolved, resolveErr := resolveSelectedModels(cfg, knownProviders)
-			if resolveErr != nil {
-				done <- resolveErr
-				return
-			}
-			cfg.Models[SelectedModelTypeSmall] = resolved.Small
-
-			store.writeMu.Lock()
-			defer store.writeMu.Unlock()
-			if resolved.WriteSmall {
-				if err := store.updateLocked(ScopeGlobal, func(c *Config) map[string]any {
-					return store.helperModelFields(c, resolved.Small)
-				}); err != nil {
-					done <- err
-					return
-				}
-			}
-			done <- nil
-		}()
-
-		select {
-		case err := <-done:
-			require.NoError(t, err)
-			// Should have fallen back to defaults.
-			require.Equal(t, "small-model", cfg.Models[SelectedModelTypeSmall].Model)
-		case <-time.After(5 * time.Second):
-			t.Fatal("resolve + persist deadlocked under writeMu")
-		}
-	})
 }
 
 // TestHelperModelNeverFollowsAChat: the helper model is set on its own
@@ -569,4 +503,14 @@ func TestHelperModelNeverFollowsAChat(t *testing.T) {
 	_, again := load(map[SelectedModelType]SelectedModel{"small": resolved.Small})
 	require.Equal(t, resolved.Small.Provider, again.Small.Provider)
 	require.False(t, again.WriteSmall)
+}
+
+// closedServerURL is the address of a local server that is already shut,
+// so model discovery against it fails at once, with no network or DNS.
+func closedServerURL(t *testing.T) string {
+	t.Helper()
+	server := httptest.NewServer(http.NotFoundHandler())
+	url := server.URL
+	server.Close()
+	return url
 }

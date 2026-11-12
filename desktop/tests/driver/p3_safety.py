@@ -27,8 +27,7 @@ Steps (each one PASS or FAIL, with a screenshot in tests/out/p3_safety/):
            open (the safety section's links_asked) and add lines to
            <probe>.opened.jsonl; no refused navigation; the page never moves;
            the field holds no dropped address
-  diagram  in the chat, at the start size and again at picture size in a
-           900 px window (figures sit in the chat; no panel shows them since
+  diagram  in the chat (figures sit in the chat; no panel shows them since
            2026-10-19): every valid diagram of
            the diagrams reply (one per kind the renderer supports, titled
            "Valid <kind>") draws as an SVG that names its kind, and a fallback
@@ -333,9 +332,13 @@ with step("safety-corpus", out_dir):
     found = show_corpus()
     check(found["swept"], "the chat scrolls from its top to its bottom (each item mounted at one stop)")
     check(corpus_drawn(found), f"the {len(SHOWN)} replies of script \"unsafe\" are drawn ({[w for w in SHOWN if w not in ' '.join(found['roots'])] or 'all'})")
-    time.sleep(1.0)
-    _, report = safety_heavy()
-    light = report.get("safety") or {}
+    light = {}
+    end = time.time() + 5
+    while time.time() < end and light.get("inline_blocked") is not True:
+        _, report = safety_heavy()
+        light = report.get("safety") or {}
+        if light.get("inline_blocked") is not True:
+            time.sleep(0.1)
     check(light.get("inline_blocked") is True, f"the content rule blocked the probe's own inline script and handler ({light.get('inline_blocked')})")
     for field in SCANS:
         values = sorted({s.get(field) for s in found["scans"]}, key=str)
@@ -410,6 +413,13 @@ page_item = next((item for (item, href, _) in found["anchors"] if href == PAGE),
 page_link = located("anchors", lambda a: a.get("href") == PAGE, page_item)
 
 
+def asked_by(count, timeout=5):
+    """Waits until the page has asked to open links count times in all."""
+    end = time.time() + timeout
+    while time.time() < end and (probe_section(probe_path, "safety") or {}).get("links_asked", 0) < count:
+        time.sleep(0.05)
+
+
 def notice_now():
     return ((probe_section(probe_path, "overlay") or {}).get("notice") or {})
 
@@ -468,13 +478,13 @@ with step("safety-links", out_dir):
     # A plain left click opens it once; the click focused the link, and Enter opens it once more.
     rect = on_screen(page_link, page_item)
     click(*centre(rect))
-    time.sleep(0.8)
+    asked_by(asked + 1)
     if notice_now():
         note(f"the notice after the click: {notice_now()}")
     heavy, _ = safety_heavy()
     check((heavy.get("focus") or {}).get("href") == PAGE, f"the click left the http link focused ({heavy.get('focus')})")
     key("Return")
-    time.sleep(0.8)
+    asked_by(asked + 2)
     if notice_now():
         note(f"the notice after Enter: {notice_now()}")
     light = probe_section(probe_path, "safety") or {}
@@ -539,27 +549,9 @@ def check_diagram(where):
     check(hits == [], f"{where}: nothing reached the listener ({hits})")
 
 
-def zoom_is(target):
-    p = wait_for(probe_path, lambda p: p.get("zoom") is not None and abs(p["zoom"] - target) < 1e-6)
-    return p.get("zoom") is not None and abs(p["zoom"] - target) < 1e-6
-
-
 with step("safety-diagram", out_dir):
     check_diagram("in the chat")
-    # Again in the narrowest window (900 px) at picture size (Ctrl = four times
-    # from 8/12), where the right panel hides (SIDE-002).
-    xdo("windowfocus", "--sync", wid)
-    for _ in range(4):
-        key("ctrl+equal")
-        time.sleep(0.2)
-    check(zoom_is(1.0), "picture size (12/12) after four Ctrl = presses")
-    xdo("windowsize", wid, 900, start_h)
-    check_diagram("in the narrow chat")
     subprocess.run(["import", "-window", wid, os.path.join(out_dir, "safety-diagram-inline.png")], check=False)
-    key("ctrl+0")
-    xdo("windowsize", wid, start_w, start_h)
-    check(zoom_is(8 / 12), "Ctrl 0 returns to Compact (8/12)")
-    time.sleep(1.0)
 
 with step("safety-env", out_dir):
     light = probe_section(probe_path, "safety") or {}

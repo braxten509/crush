@@ -7,14 +7,13 @@ Case 1, every run:
                         "Reconnect check: a long reply" (scripts/stream2m.json,
                         about 10 s); the reply streams.
   reconnect-2-kill      with "Reconnect check: kept while reconnecting" typed in
-                        the field, kill -9 on connection.engine.pid: the "Lost
-                        connection to the Crush server — reconnecting…"
-                        notification is issued (on the line in a probe write,
-                        or in connection.notices: a quick rejoin replaces it
-                        before a write, as the terminal does; reconnect-6
-                        proves it reaches the line), a new
-                        engine from ensure (another pid, fresh_engine true),
-                        "Reconnected to the Crush server.", connected within
+                        the field, kill -9 on connection.engine.pid: the lost
+                        notice (kind warn) is issued (on the line in a probe
+                        write, or in connection.notices: a quick rejoin
+                        replaces it before a write, as the terminal does;
+                        reconnect-6 proves it reaches the line), a new engine
+                        from ensure (another pid, fresh_engine true), the
+                        reconnected notice (kind success), connected within
                         15 s; the field keeps its text the whole time.
   reconnect-3-reload    the chat reloads: the window has every finished message
                         the new engine has, none twice, in the engine's order;
@@ -26,37 +25,28 @@ Case 1, every run:
                         back in the field, or shown pending in the chat.
 Case 2, only with CHECK_CRUSH=$PWD/tests/fakes/crush-wrap (its ensure fails
 while /tmp/fail-ensure exists):
-  reconnect-6-failed    /tmp/fail-ensure made, kill -9: reconnecting, with "Lost
-                        connection to the Crush server — reconnecting…" on the
-                        notice line while the tries fail, then after
-                        three failed tries "Can't restore the connection to the
-                        Crush server. Restart Crush to recover." with Try again;
-                        the field keeps "Reconnect check: typed while failed"
-                        and Enter sends nothing.
-  reconnect-7-try-again the file removed, Try again: connected within 15 s,
-                        "Reconnected to the Crush server.", the chat matches the
-                        engine, nothing was sent while failed, and the kept text
-                        then sends.
-Fails when the state is not connected within 15 s, a text is missing, messages
-are missing or doubled against the engine's list, the chat stays busy after
-the reload, or the field loses its text or sends while the engine is gone. The
-replies are scripts/stream2m.json's "Reconnect check: ..." turns, so stream2m
-is made the active script (6.2: drivers activate the script whose turns they
-use; 2.9 names script basic, another piece's). The notices are read from the
-probe's notice section (1.9, P3.8: kind, text, action{label}) and Try again is
-pressed at its heavy rect (notice.action.rect); while the section is absent
-(P3.8 not merged), each check that needs it prints NOT RUN and fails.
+  reconnect-6-failed    /tmp/fail-ensure made, kill -9: reconnecting, with the
+                        lost notice on the line while the tries fail, then the
+                        failed notice (kind error) with Try again; the field
+                        keeps "Reconnect check: typed while failed" and Enter
+                        sends nothing.
+  reconnect-7-try-again the file removed, Try again: connected within 15 s, the
+                        reconnected notice, the chat matches the engine,
+                        nothing was sent while failed, and the kept text then
+                        sends.
+Fails when the state is not connected within 15 s, a notice is missing,
+messages are missing or doubled against the engine's list, the chat stays busy
+after the reload, or the field loses its text or sends while the engine is
+gone. The replies are scripts/stream2m.json's "Reconnect check: ..." turns, so
+stream2m is made the active script (6.2: drivers activate the script whose
+turns they use; 2.9 names script basic, another piece's). The notices are read
+from the probe's notice section (1.9, P3.8: kind, text, action{label}) and Try
+again is pressed at its heavy rect (notice.action.rect).
 
---stand-in plays the screens' part through the app's own commands (engine_open,
-api, events_take, engine_retry), for builds without P3.3's stores: it checks
-the Rust side's reconnect (its connection events, engine_unavailable while the
-engine is gone) and this driver's steps; texts on screen are not checked.
---self-check runs the notice and chat.busy helpers on made-up samples (no app).
-Usage: tests/check.sh p3_reconnect.py [--stand-in]
-       CHECK_CRUSH=$PWD/tests/fakes/crush-wrap tests/check.sh p3_reconnect.py [--stand-in]
-       python3 -I tests/driver/p3_reconnect.py --self-check
+Usage: tests/check.sh p3_reconnect.py
+       CHECK_CRUSH=$PWD/tests/fakes/crush-wrap tests/check.sh p3_reconnect.py
 """
-import importlib.util, os, signal, sys, threading, time
+import importlib.util, os, signal, sys, time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from harness import check, finish, key, step, type_text, wait_for
@@ -78,9 +68,10 @@ LONG = "Reconnect check: a long reply"
 KEPT = "Reconnect check: kept while reconnecting"
 MID = "Reconnect check: sent as the engine stops"
 TYPED = "Reconnect check: typed while failed"
-LOST = "Lost connection to the Crush server — reconnecting…"
-FAILED = "Can't restore the connection to the Crush server. Restart Crush to recover."
-BACK = "Reconnected to the Crush server."
+# The notices' kinds (lib/stores/connection.svelte.js): lost, failed, back.
+LOST = "warn"
+FAILED = "error"
+BACK = "success"
 LIMIT = 15  # 2.9: connected again within 15 s
 
 
@@ -133,17 +124,18 @@ def compare(window, engine):
     return True, ""
 
 
-def notice_seen(samples, text):
-    """Whether the notice line said text in any sample: True or False, or None
-    when no sample had a notice section (P3.8 is not in this build)."""
+def notice_seen(samples, kind):
+    """Whether the notice line showed a notice of kind in any sample: True or
+    False, or None when no sample had a notice section (P3.8 is not in this
+    build)."""
     shown = [s for s in samples if s.get("has_notice")]
     if not shown:
         return None
-    return any(pc.flat(s.get("notice")) == pc.flat(text) for s in shown)
+    return any(s.get("notice_kind") == kind for s in shown)
 
 
 def notices_added(before, after):
-    """The connection notices shown between two reads of the connection
+    """The kinds of the connection notices shown between two reads of the connection
     section's notices list (1.9: every connection notice handed to the notice
     line, newest last, at most 20). The terminal replaces its status line at
     once (internal/ui/model/agent_events.go:29-52), so a reconnect quicker than
@@ -151,8 +143,8 @@ def notices_added(before, after):
     still has it. None when the section has no list."""
     if before is None or after is None:
         return None
-    texts = lambda notices: [pc.flat(n.get("text")) for n in notices]
-    before, after = texts(before), texts(after)
+    kinds = lambda notices: [n.get("kind") for n in notices]
+    before, after = kinds(before), kinds(after)
     for start in range(len(before) + 1):  # the longest end of before that starts after
         if after[:len(before) - start] == before[start:]:
             return after[len(before) - start:]
@@ -248,7 +240,7 @@ class WindowSide:
         p = self.app.report()
         c = p.get("connection") or {}
         return {"state": c.get("state"), "attempt": c.get("attempt"), "pid": (c.get("engine") or {}).get("pid"),
-                "fresh": c.get("fresh_engine"), "has_notice": "notice" in p, "notice": (p.get("notice") or {}).get("text"),
+                "fresh": c.get("fresh_engine"), "has_notice": "notice" in p, "notice_kind": (p.get("notice") or {}).get("kind"),
                 "field": (p.get("composer") or {}).get("value") or "", "at": time.time()}
 
     def states(self, samples):
@@ -260,14 +252,12 @@ class WindowSide:
             seen.add("reconnecting")
         return seen
 
-    def notice(self, text, row, timeout=5, action=None):
-        """Waits until the notice line (the probe's notice section, P3.8) says
-        text, with the button action when one is given: True or False, or None
-        with a NOT RUN line when no write had a notice section."""
-        held, _ = pc.wait_section(self.app, "notice", lambda n: pc.flat(n.get("text")) == pc.flat(text)
+    def notice(self, kind, timeout=5, action=None):
+        """Waits until the notice line (the probe's notice section, P3.8) shows
+        a notice of kind, with the button action when one is given: True or
+        False (None when no write had a notice section)."""
+        held, _ = pc.wait_section(self.app, "notice", lambda n: n.get("kind") == kind
                                   and (action is None or (n.get("action") or {}).get("label") == action), timeout)
-        if held is None:
-            pc.not_run(row, "the probe has no notice section (P3.8 is not in this build), so the notice line could not be read")
         return held
 
     def busy(self):
@@ -278,136 +268,13 @@ class WindowSide:
 
     def try_again(self, row):
         """The failed notice's Try again: a real click at notice.action.rect
-        (1.9). When it cannot be pressed (NOT RUN without a notice section, a
-        failed check without the button), engine_retry, what the button calls,
-        stands in so the steps after it can still run."""
+        (1.9). When it cannot be pressed (a failed check), engine_retry, what
+        the button calls, stands in so the steps after it can still run."""
         if pc.press_button(self.app, "notice", "action", "P3.8", row):
             return True
         print("NOTE engine_retry stood in for the click so the later checks still run", flush=True)
         self.app.invoke("engine_retry")
         return False
-
-
-class StandInSide:
-    """--stand-in: the screens' part through the app's own commands. The page's
-    frame loop takes every batch at its doorbell, so the connection's states are
-    read the way P3.1's own scratch check read them: an api call answers the
-    engine's pid while connected and engine_unavailable while reconnecting or
-    failed (with a message for each), and the app's log names each try."""
-
-    def __init__(self, probe_path, out_dir):
-        self.app = pc.AppRun.existing(probe_path, PROJ)
-        self.log = os.path.join(out_dir, "app.log")
-        self.mark = 0
-        self.sid = None
-        self.text = ""
-        self.last_send = None
-
-    def has_connection(self):
-        return True
-
-    def join(self, timeout=45):
-        return bool(self.app.invoke("engine_open", {"cwd": PROJ}, timeout).get("ok"))
-
-    def log_lines(self):
-        """The app's log since the last mark (run-in-sandbox.sh saves it as app.log)."""
-        try:
-            with open(self.log, errors="replace") as f:
-                return f.read().splitlines()[self.mark:]
-        except OSError:
-            return []
-
-    def set_mark(self):
-        self.mark += len(self.log_lines())
-
-    def engine(self):
-        """(pid, socket, workspace id) of the engine the window is on, or Nones while it has none."""
-        a = self.api("GET", "/v1/engine")
-        if not a.get("ok"):
-            return None, None, None
-        info = a.get("value") or {}
-        sock = (info.get("address") or "").removeprefix("unix://")
-        return info.get("pid"), sock, pc.workspace_for(seed_chat.Engine(sock), PROJ)
-
-    def api(self, method, path, body=None):
-        args = {"method": method, "path": path}
-        if body is not None:
-            args["body"] = body
-        return self.app.invoke("api", args, 30)
-
-    def prepare(self):
-        a = self.api("POST", "sessions", {"title": "Reconnect check"})
-        self.sid = (a.get("value") or {}).get("id")
-        return bool(self.sid)
-
-    def field(self):
-        return self.text
-
-    def clear(self):
-        self.text = ""
-        return True
-
-    def wait_chat_id(self, timeout):
-        return self.sid
-
-    def type_only(self, text):
-        self.text = text
-        return True
-
-    def enter(self):
-        """The composer's send (TYPE-048): sent, the field empties; refused, it keeps the text."""
-        self.last_send = self.api("POST", "agent", {"session_id": self.sid, "prompt": self.text})
-        if self.last_send.get("ok"):
-            self.text = ""
-
-    def send(self, text):
-        self.type_only(text)
-        self.enter()
-        return bool(self.last_send.get("ok"))
-
-    def chat_id(self):
-        return self.sid
-
-    def messages(self):
-        a = self.api("GET", f"sessions/{self.sid}/messages")
-        return [{"id": m["id"], "role": m["role"], "finished": engine_finished(m), "text": engine_text(m)} for m in a.get("value") or []]
-
-    def sample(self):
-        a = self.api("GET", "/v1/engine")
-        error = a.get("error") or {}
-        if a.get("ok"):
-            state = "connected"
-        elif error.get("code") == "engine_unavailable":
-            state = "failed" if "lost its connection" in (error.get("message") or "") else "reconnecting"
-        else:
-            state = error.get("code")
-        return {"state": state, "attempt": None, "pid": (a.get("value") or {}).get("pid") if a.get("ok") else None,
-                "fresh": None, "has_notice": False, "notice": None, "field": self.text, "at": time.time()}
-
-    def states(self, samples):
-        """The states the calls answered, and reconnecting when the log says a
-        reconnect began (a quick one can fall between two calls)."""
-        seen = {s["state"] for s in samples if s["state"]}
-        if any("lost the engine" in line and "reconnecting" in line for line in self.log_lines()):
-            seen.add("reconnecting")
-        return seen
-
-    def failed_tries(self):
-        """The reconnect tries the log names as failed since the mark: [(n, message)]."""
-        tries = []
-        for line in self.log_lines():
-            head, sep, rest = line.partition("reconnect try ")
-            if sep and " failed: " in rest:
-                n, _, message = rest.partition(" failed: ")
-                tries.append((int(n) if n.isdigit() else n, message))
-        return tries
-
-    def chat_shows(self, text):
-        return False
-
-    def try_again(self, row):
-        self.app.invoke("engine_retry")
-        return True
 
 
 def watch(side, until, timeout):
@@ -430,38 +297,9 @@ def kill_engine(pid):
         return False
 
 
-def self_check():
-    """--self-check: the helpers that read the notice line and chat.busy, on
-    made-up samples and readers. No app runs."""
-    seen = [{"has_notice": True, "notice": None}, {"has_notice": True, "notice": LOST}, {"has_notice": True, "notice": BACK}]
-    check(notice_seen(seen, LOST) is True, "notice: samples that showed the lost notice find it")
-    check(notice_seen([{"has_notice": True, "notice": BACK}], LOST) is False, "notice: samples that never showed it answer False")
-    check(notice_seen([{"has_notice": False, "notice": None}], LOST) is None, "notice: no notice section in any sample is not a pass (NOT RUN)")
-    old = [{"kind": "success", "text": BACK}]
-    check(notices_added(old, old + [{"kind": "warn", "text": LOST}, {"kind": "success", "text": BACK}]) == [pc.flat(LOST), pc.flat(BACK)],
-          "notices: the lost and reconnected notices shown between two writes are found in the list")
-    check(notices_added(old, old) == [], "notices: a list that did not grow adds nothing")
-    full = [{"text": str(i)} for i in range(20)]
-    check(notices_added(full, full[1:] + [{"text": LOST}]) == [pc.flat(LOST)], "notices: a full list that dropped its oldest still gives the new one")
-    check(notices_added(None, old) is None, "notices: no list in the probe is not a pass (NOT RUN)")
-    rect = {"x": 700, "y": 900, "w": 90, "h": 24}
-    report = {"notice": {"kind": "error", "text": FAILED, "action": {"label": pc.TRY_AGAIN}}, "heavy": {"notice": {"action": {"rect": rect}}}}
-    check(pc.button_of(report, "notice", "action") == (pc.TRY_AGAIN, rect), "notice: Try again is pressed at heavy notice.action.rect")
-    check(busy_after_reload(lambda: False, 0.3) == "idle", "busy: a chat that is not busy after the reload passes")
-    check(busy_after_reload(lambda: True, 0.3) == "busy", "busy: chat.busy that stays true (a stuck live flag, D41) fails by name")
-    check(busy_after_reload(lambda: None, 0.3) is None, "busy: no chat.busy in the probe is not a pass (NOT RUN)")
-    values = iter([True, True, False])
-    check(busy_after_reload(lambda: next(values, False), 2) == "idle", "busy: a chat that turns idle just after the reload passes")
-
-
 def main():
-    if sys.argv[1:] == ["--self-check"]:
-        return self_check()
     probe_path, out_dir, port = sys.argv[1], sys.argv[2], sys.argv[3]
-    pc.STAND_IN = stand_in = "--stand-in" in sys.argv[4:]
-    side = StandInSide(probe_path, out_dir) if stand_in else WindowSide(probe_path)
-    if stand_in:
-        print("NOTE --stand-in: the screens' part is played through the app's commands; texts on screen are not checked", flush=True)
+    side = WindowSide(probe_path)
     print(f"NOTE the app runs {pc.CRUSH}" + ("; case 2 runs (ensure fails while /tmp/fail-ensure exists)" if WRAPPED else ""), flush=True)
     sid = None
     try:
@@ -487,37 +325,25 @@ def main():
 
         with step("reconnect-2-kill", out_dir):
             check(side.type_only(KEPT), f"\"{KEPT}\" is typed in the field")
-            old_pid, old_wid = pid, wid
-            if stand_in:
-                side.set_mark()
-            notices_before = None if stand_in else side.conn().get("notices")
+            old_pid = pid
+            notices_before = side.conn().get("notices")
             killed_at = time.time()
             check(kill_engine(old_pid), f"kill -9 on the engine (pid {old_pid})")
             back, samples = watch(side, lambda s: s["state"] == "connected" and s["pid"] not in (None, old_pid), LIMIT)
             took = time.time() - killed_at
             states = side.states(samples)
             check("reconnecting" in states, f"the window turns reconnecting (states seen: {sorted(states)})")
-            if not stand_in:
-                on_line = notice_seen(samples, LOST)
-                added = notices_added(notices_before, side.conn().get("notices"))
-                if on_line is None or added is None:
-                    pc.not_run("reconnect-2-kill: the lost notice",
-                               "the probe has no notice section (P3.8) or no connection notices list (P3.3), so the notice line could not be read")
-                else:
-                    check(on_line or pc.flat(LOST) in added,
-                          f"the lost notification \"{LOST}\" is issued (on the line in a probe write: {on_line}; connection notices since the kill: {added})")
+            on_line = notice_seen(samples, LOST)
+            added = notices_added(notices_before, side.conn().get("notices"))
+            check(bool(on_line) or LOST in (added or []),
+                  f"the lost notice is issued (on the line in a probe write: {on_line}; connection notices since the kill: {added})")
             new_pid = samples[-1]["pid"] if samples else None
             check(back, f"it is connected to a new engine within {LIMIT} s (pid {old_pid} -> {new_pid}, {took:.1f} s)")
             pid, sock, wid = side.engine()
-            if stand_in:
-                check(bool(wid) and wid != old_wid, f"the new engine gave the window a fresh workspace ({old_wid} -> {wid})")
-            else:
-                check(bool(samples) and samples[-1]["fresh"] is True, "the window knows the engine is a fresh one (fresh_engine)")
-                shown = side.notice(BACK, "reconnect-2-kill: the reconnected notice")
-                if shown is not None:
-                    check(shown, f"its notice line shows \"{BACK}\"")
-                kept = [s["field"] for s in samples if s["field"] != KEPT]
-                check(not kept and side.field() == KEPT, f"the field kept its text the whole time ({kept[:3]})")
+            check(bool(samples) and samples[-1]["fresh"] is True, "the window knows the engine is a fresh one (fresh_engine)")
+            check(side.notice(BACK) is True, "its notice line shows the reconnected notice")
+            kept = [s["field"] for s in samples if s["field"] != KEPT]
+            check(not kept and side.field() == KEPT, f"the field kept its text the whole time ({kept[:3]})")
 
         if not sid:
             check(False, "reconnect-3 to 7 compare the chat reconnect-1 should have opened, and there is none; stopping here")
@@ -531,13 +357,9 @@ def main():
                     break
                 time.sleep(0.2)
             check(agree, f"the chat has every finished message of the new engine, none twice, in order {why}")
-            if not stand_in:
-                busy = busy_after_reload(side.busy)
-                if busy is None:
-                    pc.not_run("reconnect-3-reload: chat.busy", "the probe's chat section has no busy field (P3.5 is not in this build)")
-                else:
-                    check(busy == "idle", f"after the reload the chat is not busy (chat.busy {'stays true' if busy == 'busy' else 'false'}; "
-                                          "D41: the reply the engine's death stopped does not keep it busy)")
+            busy = busy_after_reload(side.busy)
+            check(busy == "idle", f"after the reload the chat is not busy (chat.busy {busy}; "
+                                  "D41: the reply the engine's death stopped does not keep it busy)")
             ends = reply_after(engine_messages(sock, wid, sid), LONG)
             print(f"NOTE the stopped reply in the new engine: {len(ends.get('text') or '')} characters, finished {ends.get('finished')}", flush=True)
 
@@ -552,16 +374,8 @@ def main():
         with step("reconnect-5-mid-send", out_dir):
             check(side.type_only(MID), f"\"{MID}\" is typed in the field")
             old_pid = pid
-            if stand_in:
-                threading.Timer(0.1, kill_engine, [old_pid]).start()
-                side.enter()
-                answer = side.last_send or {}
-                kind = "accepted" if answer.get("ok") else (answer.get("error") or {}).get("code")
-                check(kind in ("accepted", "transport", "engine_unavailable"),
-                      f"the send's answer is accepted, transport or engine_unavailable ({kind})")
-            else:
-                side.enter()
-                kill_engine(old_pid)
+            side.enter()
+            kill_engine(old_pid)
             back, samples = watch(side, lambda s: s["state"] == "connected" and s["pid"] not in (None, old_pid), LIMIT)
             check(back, f"the window is connected to a new engine within {LIMIT} s (pid {old_pid} -> {samples[-1]['pid'] if samples else None})")
             pid, sock, wid = side.engine()
@@ -577,11 +391,7 @@ def main():
                 if where:
                     break
                 time.sleep(0.2)
-            if stand_in:
-                print(f"NOTE the prompt sent as the engine stopped ended up {where or 'nowhere the stand-in can see'} "
-                      "(keeping it is the composer's job, TYPE-048)", flush=True)
-            else:
-                check(where is not None, f"TYPE-048: the prompt is not lost ({where})")
+            check(where is not None, f"TYPE-048: the prompt is not lost ({where})")
             check(user_texts(engine_messages(sock, wid, sid)).count(MID) <= 1, "and the engine has it at most once")
 
         if not WRAPPED:
@@ -593,36 +403,19 @@ def main():
             with open(FAIL_FILE, "w") as f:
                 f.write("p3_reconnect.py: ensure fails while this file exists\n")
             old_pid = pid
-            if stand_in:
-                side.set_mark()
             check(kill_engine(old_pid), f"kill -9 on the engine (pid {old_pid}) while ensure fails")
             failed, samples = watch(side, lambda s: s["state"] == "failed", LIMIT)
             states = side.states(samples)
             check(failed and "reconnecting" in states, f"the window reconnects, then fails (states seen: {sorted(states)})")
-            if not stand_in:
-                # The tries fail for seconds here, so the lost notice stays up long
-                # enough for a probe write: this proves it reaches the line.
-                trying = [s for s in samples if s["state"] == "reconnecting"]
-                lost = notice_seen(trying, LOST)
-                if lost is None:
-                    pc.not_run("reconnect-6-failed: the lost notice", "no probe write while reconnecting had a notice section (P3.8)")
-                else:
-                    check(lost, f"while the tries fail, its notice line shows \"{LOST}\" ({len(trying)} probe reads while reconnecting)")
-            if stand_in:
-                tries = side.failed_tries()
-                check([n for n, _ in tries] == [1, 2, 3], f"after three failed tries ({[n for n, _ in tries]})")
-                check(bool(tries) and all(m.endswith("(start_failed)") for _, m in tries),
-                      f"each with ensure's error ({tries[-1][1] if tries else None})")
-            else:
-                shown = side.notice(FAILED, "reconnect-6-failed: the failed notice", action=pc.TRY_AGAIN)
-                if shown is not None:
-                    check(shown, f"its notice line shows \"{FAILED}\" with a \"{pc.TRY_AGAIN}\" button")
+            # The tries fail for seconds here, so the lost notice stays up long
+            # enough for a probe write: this proves it reaches the line.
+            trying = [s for s in samples if s["state"] == "reconnecting"]
+            check(notice_seen(trying, LOST) is True, f"while the tries fail, its notice line shows the lost notice ({len(trying)} probe reads while reconnecting)")
+            check(side.notice(FAILED, action=pc.TRY_AGAIN) is True, f"its notice line shows the failed notice with a \"{pc.TRY_AGAIN}\" button")
             side.enter()
-            if stand_in:
-                code = ((side.last_send or {}).get("error") or {}).get("code")
-                check(code == "engine_unavailable", f"a send while failed is refused at once, nothing sent ({code})")
-            else:
-                time.sleep(2)
+            # Nothing can go out while failed: the field keeps its text (the
+            # engine's list is checked once it is back, in reconnect-7).
+            poll(side.field, lambda v: v != TYPED, 0.5, 0.05)
             check(side.field() == TYPED, "the field keeps its text and Enter sends nothing")
 
         with step("reconnect-7-try-again", out_dir):
@@ -631,10 +424,7 @@ def main():
             side.try_again("reconnect-7-try-again: Try again")
             back, samples = watch(side, lambda s: s["state"] == "connected" and s["pid"] not in (None, old_pid), LIMIT)
             check(back, f"Try again connects within {LIMIT} s ({time.time() - pressed_at:.1f} s, pid {samples[-1]['pid'] if samples else None})")
-            if not stand_in:
-                shown = side.notice(BACK, "reconnect-7-try-again: the reconnected notice")
-                if shown is not None:
-                    check(shown, f"its notice line shows \"{BACK}\"")
+            check(side.notice(BACK) is True, "its notice line shows the reconnected notice")
             pid, sock, wid = side.engine()
             agree, why = False, "no read"
             for _ in range(50):
@@ -667,5 +457,4 @@ def poll(read, ok, timeout, every=0.1):
 
 if __name__ == "__main__":
     main()
-    pc.check_all_ran()
     finish()

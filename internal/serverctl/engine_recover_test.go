@@ -143,33 +143,6 @@ func (a *app) enginePIDs() []int {
 	return slices.Clone(a.pids)
 }
 
-// streamSettle is how long a test lets new subscriptions open their event
-// streams before it kills the engine under them.
-const streamSettle = 500 * time.Millisecond
-
-// TestClientRecoversWhenEngineKilled: the engine dies by SIGKILL under a
-// subscribed app. The app runs ensure, which starts a new engine; the new
-// engine does not know the workspace, so the app creates it again under a
-// new ID, and the app is told the connection recovered.
-func TestClientRecoversWhenEngineKilled(t *testing.T) {
-	p := newEngineProject(t, "")
-	h, err := p.ensure(t.Context())
-	require.NoError(t, err)
-	a := p.startApp(t, h)
-	time.Sleep(streamSettle)
-
-	killEngine(t, h.PID)
-
-	waitForConnection(t, a.events, workspace.ConnectionRecovered, 30*time.Second)
-	require.GreaterOrEqual(t, a.ensures.Load(), int32(1), "the app ran ensure")
-	info, err := p.engineInfo(t)
-	require.NoError(t, err)
-	require.NotEqual(t, h.PID, info.PID, "a new engine")
-	require.Equal(t, []int{info.PID}, a.enginePIDs())
-	require.NotEmpty(t, info.WorkspaceID)
-	require.NotEqual(t, a.ws.ID, info.WorkspaceID, "the workspace was created again under a new ID")
-}
-
 // fakeModel is an OpenAI-compatible chat server for the provider "fake".
 // A helper's turn blocks until finishHelpers or the test's end, so the
 // helper keeps running; any other turn answers at once.
@@ -363,8 +336,13 @@ func TestTwoAppsRecoverAndHelperResumes(t *testing.T) {
 	chat, err := apps[0].cw.CreateSession(ctx, "chat")
 	require.NoError(t, err)
 	model.parentHash.Store(session.HashID(chat.ID))
+	// The engine refuses a chat selection from an app whose event stream
+	// is not attached yet, so a selection that goes through proves the
+	// stream is open before the engine is killed under it.
 	for _, a := range apps {
-		require.NoError(t, a.cw.SetCurrentSession(ctx, chat.ID))
+		require.Eventually(t, func() bool {
+			return a.cw.SetCurrentSession(ctx, chat.ID) == nil
+		}, 10*time.Second, 20*time.Millisecond, "the app's event stream did not attach")
 	}
 
 	task := p.spawnHelper(t, h.PID, map[string]any{
@@ -373,7 +351,6 @@ func TestTwoAppsRecoverAndHelperResumes(t *testing.T) {
 	require.Equal(t, "running", task.Status)
 	childHash := session.HashID(task.ChildID)
 	model.waitForHelperCall(t, childHash, 30*time.Second)
-	time.Sleep(streamSettle)
 
 	killEngine(t, h.PID)
 
@@ -383,6 +360,8 @@ func TestTwoAppsRecoverAndHelperResumes(t *testing.T) {
 	info, err := p.engineInfo(t)
 	require.NoError(t, err)
 	require.NotEqual(t, h.PID, info.PID)
+	require.NotEmpty(t, info.WorkspaceID)
+	require.NotEqual(t, apps[0].ws.ID, info.WorkspaceID, "the workspace was created again under a new ID")
 	for i, a := range apps {
 		pids := a.enginePIDs()
 		require.NotEmpty(t, pids, "app %d ran ensure", i)

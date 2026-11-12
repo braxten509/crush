@@ -1,7 +1,7 @@
 // CHAT-038 to CHAT-044: a `!` shell item (port of chat/shell.go and the
 // cases of shell_test.go).
 import { describe, expect, it } from "vitest";
-import { exitMark, firstLines, lastLines, SHELL_MAX_LINES, SHELL_STEP, shellCommandLine, shellView, trimOutput } from "./shell.js";
+import { exitMark, firstLines, lastLines, SHELL_MAX_LINES, shellCommandLine, shellView, trimOutput } from "./shell.js";
 
 const seq = (n) => Array.from({ length: n }, (_, i) => String(i + 1)).join("\n") + "\n";
 
@@ -70,8 +70,5 @@ describe("shell item", () => {
     expect(trimOutput("a\n\x1b[0m\n  \n")).toBe("a");
     expect(trimOutput("\x1b[31mred\x1b[0m")).toBe("\x1b[31mred");
     expect(shellView({ command: "x", output: " \n\x1b[0m\n", exitCode: 0 }).lines).toEqual([]);
-  });
-  it("moves the output five characters a step (CHAT-043)", () => {
-    expect(SHELL_STEP).toBe(5);
   });
 });

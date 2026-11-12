@@ -59,24 +59,33 @@ check(bool(title) and window_name() == title, f"the window's title follows the p
 
 got = page('const r = await window.crushBridge.invoke("alert_window_state", { state: "blocked", projectDir: "/tmp/home/proj",'
            ' sessionId: "7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f01", focused: false }); return "ok" in r;')
-time.sleep(1)
+time.sleep(0.5)
 alive = page('return (await window.crushBridge.invoke("updates_claim", {})).ok !== undefined;')
 check(got is True and alive is True, "the taskbar marks of a blocked chat are set and the app lives on")
 
 opened = probe_path + ".opened.jsonl"
 before = open(opened).read().count("\n") if os.path.exists(opened) else 0
 page('location.href = "https://example.com/"; return 1;')
-time.sleep(1.5)
-lines = open(opened).read().splitlines() if os.path.exists(opened) else []
+lines = []
+end = time.time() + 5
+while time.time() < end:
+    lines = open(opened).read().splitlines() if os.path.exists(opened) else []
+    if len(lines) > before:
+        break
+    time.sleep(0.05)
 here = page('return location.protocol + "//" + location.host;')
 check(len(lines) > before and json.loads(lines[-1]) == {"refused_navigation": "https:"} and here == "app://localhost",
       f"a navigation away is refused and recorded ({lines[-1:]}, page still at {here})")
 
 page('window.__beforeReload = 1; return 1;')
 page('await window.crushBridge.invoke("crash_restart", {}); return 1;')
-time.sleep(1)
+got = None
+end = time.time() + 20
+while time.time() < end and got is not True:
+    got = page('return window.__beforeReload === undefined;', wait=2)
+    if got is not True:
+        time.sleep(0.1)
 wait_for(probe_path, lambda p: (p.get("connection") or {}).get("state") == "connected", 40)
-got = page('return window.__beforeReload === undefined;', wait=15)
 check(got is True, "crash_restart reloads the page, which joins again")
 
 # A picture dragged from another program onto the window (the owner's report,
@@ -118,7 +127,7 @@ for i in range(1, 21):
 for d in range(10):
     subprocess.run(["xdotool", "mousemove", str(tx + d % 3), str(ty + d % 2)])
     time.sleep(0.15)
-time.sleep(1.0)
+time.sleep(0.5)
 subprocess.run(["xdotool", "mouseup", "1"])
 p = wait_for(probe_path, lambda p: any(a.get("name") == "dropped-picture.png" for a in (p.get("composer") or {}).get("attachments") or []), 10)
 attached = (p.get("composer") or {}).get("attachments") or []

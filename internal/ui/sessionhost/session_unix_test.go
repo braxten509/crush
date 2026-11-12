@@ -23,12 +23,27 @@ func TestBusySessionNeverBlocksTheHost(t *testing.T) {
 		dir:  t.TempDir(),
 		env:  os.Environ(),
 	}
-	s, err := startSession(1, l, 40, 10, nil, nil, func(tea.Msg) {}, func(*session) {})
+	// Shown, so its first output is reported; wait for that instead of
+	// guessing how long the session takes to fill its input.
+	wrote := make(chan struct{}, 1)
+	send := func(msg tea.Msg) {
+		if _, ok := msg.(outputMsg); ok {
+			select {
+			case wrote <- struct{}{}:
+			default:
+			}
+		}
+	}
+	s, err := startSession(1, l, 40, 10, nil, nil, send, func(s *session) { s.visible.Store(true) })
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		kill(s.cmd.Process)
 	})
-	time.Sleep(500 * time.Millisecond)
+	select {
+	case <-wrote:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the session never wrote anything")
+	}
 
 	done := make(chan struct{})
 	go func() {

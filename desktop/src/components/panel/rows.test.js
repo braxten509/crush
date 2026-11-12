@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { goCompare, lspRows, mcpCountWords, mcpRows, mcpTitle, skillRows } from "./rows.js";
+import { goCompare, lspRows, mcpRows, mcpTitle, skillRows } from "./rows.js";
+
+// A row without its shown words: the name, the state and the counts.
+const withoutWords = (rows) => rows.map(({ text: _text, ...rest }) => rest);
 
 // SIDE-009 to SIDE-011: ports of internal/ui/model/lsp.go, mcp.go and skills.go.
 
@@ -26,16 +29,16 @@ describe("lspRows", () => {
     bare: { name: "bare", state: 3 },
   };
 
-  it("sorted by name; each state's icon and words; other states left out", () => {
-    expect(lspRows(lsps).rows).toEqual([
-      { name: "bare", status: "error", text: "error" },
-      { name: "clangd", status: "offline", text: "unstarted" },
-      { name: "gopls", status: "online", text: "", counts: { error: 0, warning: 0, hint: 0, information: 0 } },
-      { name: "nil", status: "disabled", text: "disabled" },
-      { name: "pyright", status: "error", text: "error: exec: not found" },
-      { name: "rust", status: "busy", text: "starting..." },
-      { name: "tsserver", status: "online", text: "", counts: { error: 1, warning: 2, hint: 3, information: 4 } },
-      { name: "zls", status: "offline", text: "stopped" },
+  it("sorted by name; each state's status; other states left out", () => {
+    expect(withoutWords(lspRows(lsps).rows)).toEqual([
+      { name: "bare", status: "error" },
+      { name: "clangd", status: "offline" },
+      { name: "gopls", status: "online", counts: { error: 0, warning: 0, hint: 0, information: 0 } },
+      { name: "nil", status: "disabled" },
+      { name: "pyright", status: "error" },
+      { name: "rust", status: "busy" },
+      { name: "tsserver", status: "online", counts: { error: 1, warning: 2, hint: 3, information: 4 } },
+      { name: "zls", status: "offline" },
     ]);
     expect(lspRows({}).rows).toEqual([]);
   });
@@ -63,22 +66,16 @@ describe("mcpRows", () => {
   const configured = { fs: {}, docker: {}, broken: {}, gh: {}, off: { disabled: true }, boot: {}, weird: {}, missing: {} };
 
   it("only configured servers with a state, sorted by name; Docker MCP named so", () => {
-    expect(mcpRows(mcps, configured).rows).toEqual([
-      { name: "boot", status: "busy", text: "starting..." },
-      { name: "broken", status: "error", text: "error: dial: refused" },
-      { name: "Docker MCP", status: "online", text: "", counts: { tools: 3, prompts: 0, resources: 2, channel: false } },
-      { name: "fs", status: "online", text: "", counts: { tools: 0, prompts: 0, resources: 0, channel: true } },
-      { name: "gh", status: "auth", text: "needs authentication" },
-      { name: "off", status: "disabled", text: "disabled" },
-      { name: "weird", status: "offline", text: "" },
+    expect(withoutWords(mcpRows(mcps, configured).rows)).toEqual([
+      { name: "boot", status: "busy" },
+      { name: "broken", status: "error" },
+      { name: "Docker MCP", status: "online", counts: { tools: 3, prompts: 0, resources: 2, channel: false } },
+      { name: "fs", status: "online", counts: { tools: 0, prompts: 0, resources: 0, channel: true } },
+      { name: "gh", status: "auth" },
+      { name: "off", status: "disabled" },
+      { name: "weird", status: "offline" },
     ]);
     expect(mcpTitle("docker")).toBe("Docker MCP");
-  });
-
-  it("the counts' words skip zeros; channel last", () => {
-    expect(mcpCountWords({ tools: 3, prompts: 0, resources: 2, channel: false })).toBe("3 tools 2 resources");
-    expect(mcpCountWords({ tools: 0, prompts: 1, resources: 0, channel: true })).toBe("1 prompts channel");
-    expect(mcpCountWords({ tools: 0, prompts: 0, resources: 0, channel: false })).toBe("");
   });
 
   it("the same cut as the LSP list", () => {

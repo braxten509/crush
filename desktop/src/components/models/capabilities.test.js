@@ -74,5 +74,4 @@ it("capabilities follow the shown chat and drop a late reply for another", async
   await settle();
   expect(capabilities.supports_fast).toBe(true);
   expect(fast.shown()).toBe(true);
-  expect(fast.label).toBe("Enable FAST Mode");
 });

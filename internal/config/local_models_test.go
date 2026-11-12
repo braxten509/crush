@@ -23,7 +23,7 @@ func TestLocalModelsOptInWithDefaultProvidersDisabled(t *testing.T) {
 	p, ok := c.Providers.Get(localmodel.ProviderID)
 	require.True(t, ok)
 	require.Len(t, p.Models, 1)
-	require.Contains(t, p.Models[0].Name, "Example.gguf ·")
+	require.Contains(t, p.Models[0].Name, "Example.gguf")
 	require.NotContains(t, p.Models[0].Name, dir)
 	require.NotEmpty(t, p.APIKey)
 	require.False(t, *p.AutoDiscoverModels)

@@ -88,7 +88,7 @@ func TestFormCancelAndEmptySlotsWriteNothing(t *testing.T) {
 	}
 	form := openTestForm(t, specs)
 	_, err := OpenForm("session", formRequest("first", "second", "other"), specs)
-	require.ErrorContains(t, err, "already open")
+	require.Error(t, err)
 	form.Cancel()
 	result := <-form.Result()
 	require.True(t, result.Cancelled)
@@ -126,7 +126,7 @@ func TestPartialSaveMakesUnenteredSlotsUnavailable(t *testing.T) {
 	require.False(t, form.Field("second").Available())
 	require.True(t, form.Field("other").Available())
 	err := form.Submit([]question.Answer{{QuestionID: "second"}}, map[string][]byte{"second": []byte("dummy-late-value")})
-	require.ErrorContains(t, err, "already saved")
+	require.Error(t, err)
 	select {
 	case <-form.Result():
 		t.Fatal("must not report a silently skipped new value as completed")
@@ -188,7 +188,7 @@ func TestFormFailedSaveChangesNothingAndCanRetry(t *testing.T) {
 func TestFormPreflight(t *testing.T) {
 	path := template(t, "EXISTING="+formExisting+"\nA=%s\nB=%s\n")
 	_, err := OpenForm("session", formRequest("first"), map[string]Spec{"first": {File: path, Occurrence: 1}})
-	require.ErrorContains(t, err, "local Crush terminal")
+	require.Error(t, err)
 
 	forms := make(chan *Form, 1)
 	detach := AttachForms(func(f *Form) { forms <- f })

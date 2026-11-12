@@ -34,9 +34,16 @@ func TestExplicitUsageRefreshBypassesCacheAndKeepsLastGoodData(t *testing.T) {
 	require.ErrorContains(t, RefreshLimitsNow(t.Context(), kind), "offline")
 	require.Equal(t, float64(20), Limits(kind, "")[0].Used)
 	limitFetchers[kind] = func(context.Context) ([]Limit, error) { return nil, nil }
-	require.ErrorContains(t, RefreshLimitsNow(t.Context(), kind), "No usage windows")
+	require.Error(t, RefreshLimitsNow(t.Context(), kind))
+	require.Equal(t, float64(20), Limits(kind, "")[0].Used)
 	limitStore.Lock()
 	limitStore.pending[limitKey{kind: kind}] = true
 	limitStore.Unlock()
-	require.ErrorContains(t, RefreshLimitsNow(t.Context(), kind), "already in progress")
+	calls = 0
+	limitFetchers[kind] = func(context.Context) ([]Limit, error) {
+		calls++
+		return []Limit{{Name: "5h", Used: 30}}, nil
+	}
+	require.ErrorIs(t, RefreshLimitsNow(t.Context(), kind), errRefreshPending)
+	require.Zero(t, calls, "a refresh already in progress is not started twice")
 }

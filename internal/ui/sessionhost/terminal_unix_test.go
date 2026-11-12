@@ -3,6 +3,7 @@
 package sessionhost
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -69,6 +70,16 @@ func requireShellForeground(t *testing.T, s *session) {
 	}, 5*time.Second, 20*time.Millisecond, "shell must regain the terminal after Ctrl+C")
 }
 
+// gateCommand is a foreground job that runs until the test ends: a shell
+// of its own (so it gets its own process group, as a real command does)
+// that waits for a file the test's cleanup creates.
+func gateCommand(t *testing.T) string {
+	t.Helper()
+	gate := filepath.Join(t.TempDir(), "release")
+	t.Cleanup(func() { _ = os.WriteFile(gate, nil, 0o600) })
+	return fmt.Sprintf("sh -c 'while [ ! -e \"%s\" ]; do sleep 0.05; done'\n", gate)
+}
+
 func TestTerminalPickerStartsARealShellInChosenFolder(t *testing.T) {
 	h, events := interactiveTerminalHost(t)
 	dir := filepath.Join(t.TempDir(), "chosen folder")
@@ -98,7 +109,8 @@ func TestTerminalPickerStartsARealShellInChosenFolder(t *testing.T) {
 
 	h.Update(tea.WindowSizeMsg{Width: 140, Height: 40})
 	s.emu.SendText("stty size\n")
-	requireTerminalOutput(t, s, "40 110")
+	area := h.sessionArea()
+	requireTerminalOutput(t, s, fmt.Sprintf("%d %d", area.Dy(), area.Dx()))
 
 	// Control-D ends the shell and removes just its own tab.
 	h.Update(tea.KeyPressMsg{Code: 'd', Mod: tea.ModCtrl})
@@ -119,7 +131,7 @@ func TestTerminalControlCStopsTheForegroundCommand(t *testing.T) {
 	require.NoError(t, h.startTerminal(t.TempDir()))
 	s := h.current()
 	requireTerminalOutput(t, s, "TERM> ")
-	s.emu.SendText("sleep 30\n")
+	s.emu.SendText(gateCommand(t))
 	require.Eventually(t, func() bool {
 		foreground, err := unix.IoctlGetInt(int(s.tty.Fd()), unix.TIOCGPGRP)
 		return err == nil && foreground != s.cmd.Process.Pid
@@ -171,7 +183,7 @@ func TestTerminalCloseHangsUpForegroundAndStoppedJobs(t *testing.T) {
 			require.NoError(t, h.startTerminal(t.TempDir()))
 			s := h.current()
 			requireTerminalOutput(t, s, "TERM> ")
-			s.emu.SendText("sleep 30\n")
+			s.emu.SendText(gateCommand(t))
 			var job int
 			require.Eventually(t, func() bool {
 				foreground, err := unix.IoctlGetInt(int(s.tty.Fd()), unix.TIOCGPGRP)

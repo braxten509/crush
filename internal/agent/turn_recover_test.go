@@ -2,7 +2,9 @@ package agent
 
 import (
 	"context"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -12,7 +14,8 @@ import (
 )
 
 func TestRunTurnPanicBecomesChatError(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	state := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", state)
 	c := sessionRunTestCoordinator(t, func(context.Context, SessionAgentCall) (*fantasy.AgentResult, error) {
 		panic("boom")
 	})
@@ -32,10 +35,19 @@ func TestRunTurnPanicBecomesChatError(t *testing.T) {
 		}
 	}
 	require.NotNil(t, finish, "the chat should show the internal error")
-	require.Equal(t, "Crush hit an internal error", finish.Message)
-	_, path, ok := strings.Cut(finish.Details, "Details saved to ")
-	require.True(t, ok, finish.Details)
-	report, err := os.ReadFile(path)
-	require.NoError(t, err)
-	require.Contains(t, string(report), "boom")
+
+	// The crash report is saved under the state folder.
+	var reported bool
+	require.NoError(t, filepath.WalkDir(state, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil || entry.IsDir() {
+			return err
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		reported = reported || strings.Contains(string(data), "boom")
+		return nil
+	}))
+	require.True(t, reported, "a saved report names the panic")
 }

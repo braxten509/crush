@@ -99,6 +99,16 @@ def sheet_counts(selector):
     return tuple(got) if isinstance(got, list) else (0, 0)
 
 
+def until(read, ok, timeout=5):
+    """read() once ok(value) holds, else its last value."""
+    end = time.time() + timeout
+    got = read()
+    while time.time() < end and not ok(got):
+        time.sleep(0.15)
+        got = read()
+    return got
+
+
 def note(sheet, fy, text):
     click(sheet["x"] + sheet["w"] * 0.25, sheet["y"] + sheet["h"] * fy)
     time.sleep(0.4)
@@ -128,14 +138,12 @@ drag(sheet, 0.7)
 _, red = sheet_counts("[data-viewer-sheet]")
 check(red > 200, f"the pen line is drawn red ({red} red pixels)")
 key("Escape")
-time.sleep(0.6)
-check(box("[data-image-viewer]") is False, "Esc closes the picture viewer")
+check(until(lambda: box("[data-image-viewer]"), lambda b: b is False) is False, "Esc closes the picture viewer")
 
 # A recording from the phone.
 press("[data-phone-shot]")
 press('[data-phone-pick="record"]')
 check(bool(wait_box("[data-phone-recording]")), "the red dot shows while recording")
-time.sleep(1)
 press("[data-phone-recording]")
 press('.chip[data-kind="video"] .label')
 check(bool(wait_box("[data-video-viewer]")), "the video viewer opens")
@@ -143,24 +151,29 @@ sheet = wait_box("[data-video-sheet]")
 check(bool(sheet), "the drawing sheet lies over the paused video")
 
 
-def frame_text():
-    return run("return document.querySelector('[data-video-frame]')?.innerText ?? '';") or ""
+def frame():
+    """The shown frame's index (0 for the first), from data-video-frame."""
+    got = run("return document.querySelector('[data-video-frame]')?.dataset.videoFrame ?? null;")
+    return int(got) if isinstance(got, str) and got.isdigit() else None
+
+
+def marks():
+    """The marked frames' indexes."""
+    return run("return [...document.querySelectorAll('[data-video-marks] [data-frame]')].map((b) => Number(b.dataset.frame));") or []
 
 
 press("[data-video-forward]")
-check(frame_text().startswith("Frame 11 of"), f">> moves 10 frames ({frame_text()})")
+check(until(frame, lambda f: f == 10) == 10, f">> moves 10 frames, to frame 11 ({frame()})")
 press("[data-video-back]")
-check(frame_text().startswith("Frame 1 of"), f"<< moves back 10 frames ({frame_text()})")
+check(until(frame, lambda f: f == 0) == 0, f"<< moves back 10 frames ({frame()})")
 press("[data-video-forward]")
 press("[data-video-pen]")
 drag(sheet, 0.7)
-time.sleep(0.6)
-marked = run("return [...document.querySelectorAll('[data-video-marks] .jump')].map((b) => b.innerText);") or []
-check(len(marked) == 1 and marked[0].startswith("Frame 11"), f"drawing on frame 11 marks it ({marked})")
+marked = until(marks, lambda m: len(m) > 0)
+check(marked == [10], f"drawing on frame 11 marks it ({marked})")
 press("[data-video-text]")
 note(sheet, 0.3, "Mom")
-time.sleep(0.6)
-marked = run("return [...document.querySelectorAll('[data-video-marks] .jump')].map((b) => b.innerText);") or []
+marked = until(marks, lambda m: len(m) != 1, 0.4)
 check(len(marked) == 1, f"the m in the note did not unmark the frame ({marked})")
 white, red = sheet_counts("[data-video-sheet]")
 check(white > 200 and red > 200, f"the frame shows the note and the line ({white} white, {red} red)")
@@ -168,7 +181,7 @@ press("[data-video-next]")
 white, red = sheet_counts("[data-video-sheet]")
 check(white == 0 and red == 0, f"frame 12 has its own empty sheet ({white} white, {red} red)")
 key("Escape")
-time.sleep(0.6)
+until(lambda: box("[data-video-viewer]"), lambda b: b is False)
 
 # Send, and read the pictures as the engine got them.
 api_log = probe_path + ".api.jsonl"

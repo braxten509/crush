@@ -155,13 +155,24 @@ func TestLanguageModelAppliesDecoratorChain(t *testing.T) {
 
 	lm, err := b.LanguageModel(t.Context(), stubProvider{inner}, config.ProviderConfig{ID: hyper.Name, Type: hyper.Name}, config.SelectedModel{Provider: hyper.Name, Model: "m"})
 	require.NoError(t, err)
-	credits, ok := lm.(*hyperCreditsModel)
-	require.True(t, ok, "hyper models refresh the credit balance, got %T", lm)
-	recovery, ok := credits.LanguageModel.(emptyStreamModel)
-	require.True(t, ok, "API models recover empty incomplete streams, got %T", credits.LanguageModel)
-	timed, ok := recovery.LanguageModel.(requestTimeoutModel)
-	require.True(t, ok, "API models are bounded by the request timeout, got %T", recovery.LanguageModel)
-	require.Same(t, inner, timed.LanguageModel)
+	// Walk the wrappers, in whatever order they sit.
+	var credits, recovery, timed bool
+	for unwrapped := false; !unwrapped; {
+		switch m := lm.(type) {
+		case *hyperCreditsModel:
+			credits, lm = true, m.LanguageModel
+		case emptyStreamModel:
+			recovery, lm = true, m.LanguageModel
+		case requestTimeoutModel:
+			timed, lm = true, m.LanguageModel
+		default:
+			unwrapped = true
+		}
+	}
+	require.True(t, credits, "hyper models refresh the credit balance")
+	require.True(t, recovery, "API models recover empty incomplete streams")
+	require.True(t, timed, "API models are bounded by the request timeout")
+	require.Same(t, inner, lm)
 
 	cli, err := b.LanguageModel(t.Context(), stubProvider{inner}, config.ProviderConfig{ID: "claude", Type: config.TypeClaudeCode}, config.SelectedModel{Provider: "claude", Model: "m"})
 	require.NoError(t, err)

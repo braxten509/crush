@@ -94,7 +94,7 @@
           data-lock={row.lock}
         ><Icon name={row.lock === "unlocked" ? "lock-open" : "lock"} size={14} /></span>
       {/if}
-      {#if row.helper}<span class="helper-mark">Subagent</span>{/if}
+      {#if row.helper}<span class="helper-mark" data-helper-mark>Subagent</span>{/if}
       {#if row.state}
         <span class="state {row.stateKind}">
           <Icon name={STATE_ICONS[row.stateKind] ?? "working"} />

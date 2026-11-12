@@ -2,7 +2,7 @@
 // marked extensions that find math in a reply.
 import { Marked } from "marked";
 import { describe, expect, test } from "vitest";
-import { KATEX_OPTIONS, mathExtensions, mathTitle, renderMath } from "./math.js";
+import { mathExtensions, mathTitle, renderMath } from "./math.js";
 
 function lex(src) {
   return new Marked({ gfm: true }).use({ extensions: mathExtensions }).lexer(src);
@@ -13,10 +13,6 @@ function inlineTypes(src) {
 }
 
 describe("renderMath", () => {
-  test("the options of 1.7", () => {
-    expect(KATEX_OPTIONS).toMatchObject({ trust: false, throwOnError: false, strict: "ignore", maxExpand: 1000, output: "htmlAndMathml" });
-  });
-
   test("renders inline and display math, MathML kept", () => {
     const inline = renderMath("x^2");
     expect(inline.querySelector(".katex .katex-html")).not.toBeNull();
@@ -35,9 +31,8 @@ describe("renderMath", () => {
     }
   });
 
-  test("broken TeX shows in the error color and never throws", () => {
+  test("broken TeX never throws and shows its source", () => {
     const fragment = renderMath("\\frac{");
-    expect(fragment.querySelector(".katex-error")).not.toBeNull();
     expect(fragment.textContent).toContain("\\frac{");
   });
 

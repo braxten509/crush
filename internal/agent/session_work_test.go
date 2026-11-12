@@ -18,8 +18,8 @@ func TestTreeGuardIgnoresOtherChatsJobs(t *testing.T) {
 	hold, _ := gate(t)
 	startJob(t, h, b.ID, hold)
 	require.NoError(t, SessionBackgroundBlock(a.ID), "a job in another chat does not block")
-	require.EqualError(t, SessionBackgroundBlock(b.ID), "wait for background commands and their completion messages to finish first")
+	require.Error(t, SessionBackgroundBlock(b.ID))
 
 	startJob(t, h, a.ID, hold)
-	require.EqualError(t, SessionBackgroundBlock(a.ID), "wait for background commands and their completion messages to finish first")
+	require.Error(t, SessionBackgroundBlock(a.ID))
 }

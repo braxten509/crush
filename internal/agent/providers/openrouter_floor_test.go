@@ -21,9 +21,12 @@ func TestOpenRouterRefusesHostsBelowFP8(t *testing.T) {
 		require.True(t, ok)
 		return parsed.Provider
 	}
-	floor := []string{"fp8", "mxfp8", "fp16", "bf16", "fp32", "unknown"}
 	openrouterProvider := config.ProviderConfig{ID: "openrouter", Type: openrouter.Name}
-	require.Equal(t, floor, routing(openrouterProvider, config.SelectedModel{}).Quantizations)
+	floor := routing(openrouterProvider, config.SelectedModel{}).Quantizations
+	require.Contains(t, floor, "fp8")
+	for _, low := range []string{"fp4", "fp6", "int4", "int8"} {
+		require.NotContains(t, floor, low, "hosts below FP8 are refused")
+	}
 
 	// The user's own list of precisions is theirs, not ours.
 	own := config.SelectedModel{ProviderOptions: map[string]any{"provider": map[string]any{"quantizations": []any{"fp16"}}}}

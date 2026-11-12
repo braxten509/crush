@@ -25,14 +25,18 @@ func TestSecureFieldStatus(t *testing.T) {
 			require.Equal(t, form.Field(fi.QuestionID).Saved(), fi.Saved, fi.QuestionID)
 			require.Equal(t, form.Field(fi.QuestionID).Available(), fi.Available, fi.QuestionID)
 		}
+		// Labels are wording; only which field is saved or open matters.
+		for i := range fields {
+			fields[i].Label = ""
+		}
 		return fields
 	}
 
 	// A fresh field is open.
 	require.Equal(t, []FieldInfo{
-		{QuestionID: "first", Label: "Main key", Available: true},
-		{QuestionID: "second", Label: "API key", Available: true},
-		{QuestionID: "other", Label: "Other key", Available: true},
+		{QuestionID: "first", Available: true},
+		{QuestionID: "second", Available: true},
+		{QuestionID: "other", Available: true},
 	}, agrees())
 
 	// Once its file was written (here: the state after this file's rename
@@ -43,9 +47,9 @@ func TestSecureFieldStatus(t *testing.T) {
 	form.fields["first"].saved = true
 	form.mu.Unlock()
 	require.Equal(t, []FieldInfo{
-		{QuestionID: "first", Label: "Main key", Saved: true},
-		{QuestionID: "second", Label: "API key"},
-		{QuestionID: "other", Label: "Other key", Available: true},
+		{QuestionID: "first", Saved: true},
+		{QuestionID: "second"},
+		{QuestionID: "other", Available: true},
 	}, agrees())
 	described := fmt.Sprintf("%+v %#v", form.Fields(), form.Fields())
 	for _, file := range []string{path, other} {

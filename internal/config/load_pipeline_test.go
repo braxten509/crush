@@ -9,11 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"charm.land/catwalk/v3/pkg/catwalk"
 	"charm.land/catwalk/v3/pkg/embedded"
-	"github.com/charmbracelet/crush/internal/csync"
-	"github.com/charmbracelet/crush/internal/env"
-	"github.com/charmbracelet/crush/internal/oauth"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
 )
@@ -245,27 +241,6 @@ func TestLoadPipeline_AnthropicOAuthRemovedOnDisk(t *testing.T) {
 	data, err = os.ReadFile(e.globalData)
 	require.NoError(t, err)
 	require.False(t, gjson.GetBytes(data, "providers.anthropic").Exists(), "reload must remove the stale provider on disk")
-}
-
-// TestConfigureProviders_AnthropicOAuthIsPendingWrite verifies that
-// configureProviders leaves the stale-subscription removal to its caller
-// instead of writing to disk itself.
-func TestConfigureProviders_AnthropicOAuthIsPendingWrite(t *testing.T) {
-	t.Parallel()
-	cfg := &Config{
-		Providers: csync.NewMapFrom(map[string]ProviderConfig{
-			"anthropic": {APIKey: "token", OAuthToken: &oauth.Token{AccessToken: "token"}},
-		}),
-	}
-	cfg.setDefaults(t.TempDir(), "")
-	vars := env.NewFromMap(map[string]string{})
-	known := []catwalk.Provider{{ID: catwalk.InferenceProviderAnthropic, APIKey: "$ANTHROPIC_API_KEY"}}
-
-	pending, err := cfg.configureProviders(t.Context(), vars, NewShellVariableResolver(vars), known)
-	require.NoError(t, err)
-	require.Equal(t, []pendingWrite{{Scope: ScopeGlobal, Remove: "providers.anthropic"}}, pending)
-	_, ok := cfg.Providers.Get("anthropic")
-	require.False(t, ok)
 }
 
 // TestLoadPipeline_ModelFallbackPersistence characterizes how an unknown

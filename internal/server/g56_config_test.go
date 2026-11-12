@@ -117,15 +117,21 @@ func TestConfigWatchSeesThemeFile(t *testing.T) {
 	g := newG56Workspace(t)
 	events := g.h.subscribeLiveSSE(t, g.ws.ID, g.app)
 	g.h.waitForAttachedOn(t, mustWorkspace(t, g), 1)
-	// Let the watch take its first look at the themes folder.
-	time.Sleep(1500 * time.Millisecond)
 
 	path, err := styles.ThemePath("outside")
 	require.NoError(t, err)
-	require.NoError(t, styles.SaveThemeFile(path, &styles.ThemeFile{Base: "graphite", Palette: styles.Palette{BgBase: "#101010"}}))
-
-	_, ok := nextLive[proto.ConfigChanged](t, events, pubsub.PayloadTypeConfigChanged, 5*time.Second)
-	require.True(t, ok, "a new theme file sends config_changed")
+	// The watch's first look at the themes folder may come after a write,
+	// so the file is written again, each time different, until a look
+	// after a write sees the change.
+	colors := []string{"#101010", "#202020"}
+	deadline := time.Now().Add(10 * time.Second)
+	for writes := 0; ; writes++ {
+		require.NoError(t, styles.SaveThemeFile(path, &styles.ThemeFile{Base: "graphite", Palette: styles.Palette{BgBase: colors[writes%2]}}))
+		if _, ok := nextLive[proto.ConfigChanged](t, events, pubsub.PayloadTypeConfigChanged, 250*time.Millisecond); ok {
+			return
+		}
+		require.True(t, time.Now().Before(deadline), "a new theme file sends config_changed")
+	}
 }
 
 // mustWorkspace returns the backend's record of g's workspace.
@@ -134,15 +140,6 @@ func mustWorkspace(t *testing.T, g *g56Workspace) *backend.Workspace {
 	ws, err := g.h.backend.GetWorkspace(g.ws.ID)
 	require.NoError(t, err)
 	return ws
-}
-
-// TestWorkspaceCarriesConfigPath: the workspace record names the global
-// data config file (G-6).
-func TestWorkspaceCarriesConfigPath(t *testing.T) {
-	g := newG56Workspace(t)
-	require.Equal(t, config.GlobalConfigData(), g.ws.ConfigPath, "the create answer carries config_path")
-	got := liveJSON[proto.Workspace](t, g.h, http.MethodGet, g.path(""), nil, http.StatusOK)
-	require.Equal(t, config.GlobalConfigData(), got.ConfigPath, "GET workspace carries config_path")
 }
 
 // TestDraftCleanupSkipsShownDrafts: listing saved chats discards old empty

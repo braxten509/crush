@@ -13,6 +13,11 @@ type emptyStreamModel struct {
 	fantasy.LanguageModel
 }
 
+// incompleteStreamHeaders go on an incomplete stream's error as if the
+// server had sent them. Nil outside tests; tests set a short retry-after-ms
+// so they don't wait out the normal retry backoff.
+var incompleteStreamHeaders map[string]string
+
 func (m emptyStreamModel) Stream(ctx context.Context, call fantasy.Call) (fantasy.StreamResponse, error) {
 	stream, err := m.LanguageModel.Stream(ctx, call)
 	if err != nil {
@@ -39,6 +44,8 @@ func (m emptyStreamModel) Stream(ctx context.Context, call fantasy.Call) (fantas
 			yield(fantasy.StreamPart{Type: fantasy.StreamPartTypeError, Error: err})
 			return
 		}
-		yield(fantasy.StreamPart{Type: fantasy.StreamPartTypeError, Error: fantasy.NewIncompleteStreamError()})
+		incomplete := fantasy.NewIncompleteStreamError()
+		incomplete.ResponseHeaders = incompleteStreamHeaders
+		yield(fantasy.StreamPart{Type: fantasy.StreamPartTypeError, Error: incomplete})
 	}, nil
 }

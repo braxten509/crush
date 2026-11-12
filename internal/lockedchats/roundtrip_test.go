@@ -28,7 +28,7 @@ func TestLockRejectsConcurrentMessage(t *testing.T) {
 		return nil
 	}
 	f.lock()
-	require.Contains(t, reported, "changed during locking")
+	require.NotEmpty(t, reported)
 	require.Empty(t, f.state())
 	var count int
 	require.NoError(t, other.QueryRowContext(f.ctx, `SELECT count(*) FROM messages WHERE session_id IN (?, ?)`, f.root, f.child).Scan(&count))

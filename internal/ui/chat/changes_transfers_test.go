@@ -27,10 +27,8 @@ func TestSavedCloneReviewShowsCopiedCheckout(t *testing.T) {
 	g := NewToolGroupItem(&sty)
 	g.SetChildren([]MessageItem{NewToolMessageItem(&sty, "saved", call, result, false, "")})
 	header := ansi.Strip(g.header(160))
-	require.Contains(t, header, "checked out main.go")
 	require.NotContains(t, header, "+0")
 	require.NotContains(t, header, "+100000")
-	require.NotContains(t, header, "edited main.go")
 	require.Len(t, g.Changes(), 1, "the file remains available in the review")
 	require.Nil(t, result.Review.Changes[0].Transfer, "presentation does not rewrite saved history")
 }

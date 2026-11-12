@@ -160,7 +160,7 @@ func (g *ToolGroupItem) activitySuffix(status string) string {
 		g.animLabel = status
 		g.anim.SetLabel(status)
 	}
-	if status == "Compacting conversation" {
+	if status == StatusCompacting {
 		return g.sty.Tool.ParamKey.Render(" | ") + renderCompactingStatus(g.sty, g.activity.elapsed(time.Now()), g.anim.RenderEllipsis())
 	}
 	if status != "" {
@@ -296,7 +296,7 @@ func editedFile(t ToolMessageItem) string {
 // thoughtLine is the newest line of the live step's thinking while the
 // group is thinking, or "".
 func (g *ToolGroupItem) thoughtLine(status string) string {
-	if status != "Thinking" || len(g.children) == 0 {
+	if status != StatusThinking || len(g.children) == 0 {
 		return ""
 	}
 	if last, ok := g.children[len(g.children)-1].(*AssistantMessageItem); ok {

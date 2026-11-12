@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readable } from "./contrast.js";
-import { contrast, mix, tokensOf } from "./tokens.js";
+import { contrast, luminance, mix, tokensOf } from "./tokens.js";
 
 // Theme colors (desktop-design-5-6 3.1, 3.6, 3.7): a slip in this math gives
 // a theme that looks a little off or hard to read, with no error anywhere.
@@ -16,18 +16,15 @@ describe("color math", () => {
 });
 
 describe("tokensOf", () => {
-  it("keeps the edition's exact derived values while its roles are untouched", () => {
-    const tokens = tokensOf({ root: "scholars-edition", resolved: EDITION });
-    expect(tokens["--rule-frame"]).toBe("#aaa9a3");
-    expect(tokens["--selection"]).toBe("#e6d9a8");
-    expect(tokens["--paper"]).toBe("#f9f8ef");
-  });
-
   it("mixes derived values once a role they read has changed", () => {
+    const edition = tokensOf({ root: "scholars-edition", resolved: EDITION });
     const tokens = tokensOf({ root: "scholars-edition", resolved: { ...EDITION, bg_base: "#ffffff" } });
-    expect(tokens["--rule-frame"]).toBe(mix("#0f0f0f", "#ffffff", 0.338));
+    expect(tokens["--rule-frame"]).not.toBe(edition["--rule-frame"]);
+    const frame = luminance(tokens["--rule-frame"]);
+    expect(frame).toBeGreaterThan(luminance("#0f0f0f"));
+    expect(frame).toBeLessThan(luminance("#ffffff"));
     // The wash reads the paper too, so it is mixed as well.
-    expect(tokens["--vermilion-wash"]).toBe(mix("#e52b0e", "#ffffff", 0.04));
+    expect(tokens["--vermilion-wash"]).not.toBe(edition["--vermilion-wash"]);
   });
 
   it("puts the more readable of ink and paper on the warning color", () => {

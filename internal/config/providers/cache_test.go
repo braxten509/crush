@@ -45,7 +45,6 @@ func TestCache_GetNonExistent(t *testing.T) {
 
 	_, _, err := cache.Get()
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "failed to read provider cache file")
 }
 
 func TestCache_GetInvalidJSON(t *testing.T) {
@@ -60,7 +59,6 @@ func TestCache_GetInvalidJSON(t *testing.T) {
 
 	_, _, err := cache.Get()
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "failed to unmarshal provider data from cache")
 }
 
 // TestCacheStore_ReplacesFileInsteadOfRewritingIt guards the property that

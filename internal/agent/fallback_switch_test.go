@@ -6,7 +6,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -115,6 +114,16 @@ func chatLines(t *testing.T, c *coordinator, sessionID string) []string {
 	return lines
 }
 
+// requireMoveLines checks the chat has one line per move, each naming
+// where the chat went (or what it waits for).
+func requireMoveLines(t *testing.T, lines []string, destinations ...string) {
+	t.Helper()
+	require.Len(t, lines, len(destinations))
+	for i, destination := range destinations {
+		require.Contains(t, lines[i], destination)
+	}
+}
+
 var errOut = errors.New("You've hit your session limit · resets 11:59pm")
 
 // The owner's example: Claude 1 runs out, the chat moves to Claude 2 with
@@ -132,9 +141,7 @@ func TestRunningOutSwitchesToTheNextAccountAndContinues(t *testing.T) {
 
 	require.True(t, c.fallbackOnOut(t.Context(), sid, errOut))
 	require.Equal(t, "claude-2", chatModelOf(t, c, sid).Account)
-	lines := chatLines(t, c, sid)
-	require.Len(t, lines, 1)
-	require.Equal(t, "Switched to Claude 2 · Claude Opus: Claude 1 it ran out.", lines[0])
+	requireMoveLines(t, chatLines(t, c, sid), "Claude 2")
 	// The chat is continued at once.
 	select {
 	case id := <-sent:
@@ -158,9 +165,7 @@ func TestWaitBlockWaitsThenReturnsToTheAccount(t *testing.T) {
 	c.limitRetries.now = clock.Now
 
 	require.True(t, c.fallbackOnOut(t.Context(), sid, errOut))
-	lines := chatLines(t, c, sid)
-	require.Len(t, lines, 1)
-	require.True(t, strings.HasPrefix(lines[0], "Claude 2 it ran out. Waiting for Claude 1 to refill at "), lines[0])
+	requireMoveLines(t, chatLines(t, c, sid), "Claude 1")
 	require.Len(t, c.limitRetries.pending, 1)
 	require.Equal(t, "claude-2", chatModelOf(t, c, sid).Account, "nothing moves before the refill")
 
@@ -189,7 +194,7 @@ func TestRefillFirstSpendsACodexRefill(t *testing.T) {
 	require.True(t, c.fallbackOnOut(t.Context(), sid, errOut))
 	require.Equal(t, "codex-2", asked)
 	require.Equal(t, "codex-2", chatModelOf(t, c, sid).Account, "the chat stays on the refilled account")
-	require.Equal(t, []string{"Used a free refill on Codex 2."}, chatLines(t, c, sid))
+	requireMoveLines(t, chatLines(t, c, sid), "Codex 2")
 }
 
 func TestFailedRefillMovesOn(t *testing.T) {
@@ -219,7 +224,7 @@ func TestComeBackSwitchesBackBeforeATurn(t *testing.T) {
 	require.NoError(t, err)
 	c.fallbackBeforeTurn(t.Context(), sid)
 	require.Equal(t, "", chatModelOf(t, c, sid).Account)
-	require.Equal(t, []string{"Switched to Claude 1 · Claude Opus by the fallback order."}, chatLines(t, c, sid))
+	requireMoveLines(t, chatLines(t, c, sid), "Claude 1")
 }
 
 func TestAnErrorThatIsNotAUsageLimitLeavesTheChat(t *testing.T) {
@@ -245,7 +250,7 @@ func TestASwitchSkipsAnAccountWithNoRoomLeft(t *testing.T) {
 
 	require.True(t, c.fallbackOnOut(t.Context(), sid, errOut))
 	require.Equal(t, config.SelectedModel{Provider: "codex-cli", Model: "gpt-5.6-sol", ChosenProvider: "claude-code", ChosenModel: "opus"}, chatModelOf(t, c, sid))
-	require.Equal(t, []string{"Switched to Codex 1 · GPT-5.6 Sol: Claude 1 it ran out."}, chatLines(t, c, sid))
+	requireMoveLines(t, chatLines(t, c, sid), "Codex 1")
 }
 
 // When an account's usage can't be read, one hidden request tests it
@@ -261,10 +266,10 @@ func TestASwitchTriesAnAccountWhoseUsageCantBeRead(t *testing.T) {
 		name   string
 		answer error
 		want   config.SelectedModel
-		line   string
+		where  string
 	}{
-		{"it answers", nil, config.SelectedModel{Provider: "claude-code", Model: "opus", Account: "claude-2"}, "Switched to Claude 2 · Claude Opus: Claude 1 it ran out."},
-		{"it is out too", errors.New("claude: You've hit your limit · resets 11:59pm"), config.SelectedModel{Provider: "codex-cli", Model: "gpt-5.6-sol", ChosenProvider: "claude-code", ChosenModel: "opus"}, "Switched to Codex 1 · GPT-5.6 Sol: Claude 1 it ran out."},
+		{"it answers", nil, config.SelectedModel{Provider: "claude-code", Model: "opus", Account: "claude-2"}, "Claude 2"},
+		{"it is out too", errors.New("claude: You've hit your limit · resets 11:59pm"), config.SelectedModel{Provider: "codex-cli", Model: "gpt-5.6-sol", ChosenProvider: "claude-code", ChosenModel: "opus"}, "Codex 1"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			usage := map[string]float64{"claude-code/": 100}
@@ -279,7 +284,7 @@ func TestASwitchTriesAnAccountWhoseUsageCantBeRead(t *testing.T) {
 			require.True(t, c.fallbackOnOut(t.Context(), sid, errOut))
 			require.Equal(t, []string{"claude-code/claude-2 opus"}, tried)
 			require.Equal(t, tc.want, chatModelOf(t, c, sid))
-			require.Equal(t, []string{tc.line}, chatLines(t, c, sid))
+			requireMoveLines(t, chatLines(t, c, sid), tc.where)
 		})
 	}
 }
@@ -386,11 +391,7 @@ func TestTheOwnersOpusOrderStepByStep(t *testing.T) {
 	require.True(t, c.fallbackOnOut(t.Context(), sid, errors.New("You've hit your limit · resets in 5h")))
 	require.Equal(t, [3]string{"claude-2", "high", "claude-code/opus"}, where(t, c, sid))
 
-	require.Equal(t, []string{
-		"Switched to Claude 2 · Claude Opus: Claude 1 it ran out.",
-		"Switched to Claude 3 · Claude Opus: Claude 2 it ran out.",
-		"Switched to Claude 2 · Claude Opus: Claude 3 it ran out.",
-	}, chatLines(t, c, sid))
+	requireMoveLines(t, chatLines(t, c, sid), "Claude 2", "Claude 3", "Claude 2")
 }
 
 // Every chat owns its model (owner, 2026-10-24): when one chat runs out,

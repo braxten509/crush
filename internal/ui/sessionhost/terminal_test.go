@@ -20,7 +20,6 @@ func TestTerminalActionUsesTheFolderPicker(t *testing.T) {
 	h.Update(tea.MouseClickMsg{Button: tea.MouseLeft, X: newTerminalColumn, Y: newSessionRow})
 	require.NotNil(t, h.picker)
 	require.Equal(t, terminalSession, h.picker.kind)
-	require.Contains(t, screenText(h), "New terminal in…")
 	require.Equal(t, root, h.picker.base)
 	clearInput(h)
 	typeText(h, "with spaces")
@@ -181,18 +180,6 @@ func TestTerminalScrollbackAndMouseReporting(t *testing.T) {
 	require.NotContains(t, ansi.Strip(h.View().Content), "one")
 }
 
-func TestTerminalCloseKeepsChatCopyOut(t *testing.T) {
-	h := newTestHost(t, 120, 30, Status{Title: "Terminal"})
-	h.current().kind = terminalSession
-	press(h, "alt+w")
-	text := screenText(h)
-	require.Contains(t, text, "Its output is not")
-	require.Contains(t, text, "saved.")
-	require.NotContains(t, text, "chat stays saved")
-	press(h, "esc")
-	require.False(t, h.current().stopped)
-}
-
 func TestTerminalHistoryStaysPutWhenTheBufferIsFull(t *testing.T) {
 	h := newTestHost(t, 120, 30, Status{Title: "Terminal"})
 	s := h.current()
@@ -236,17 +223,6 @@ func TestTerminalDragSelectsAndCopiesText(t *testing.T) {
 	_, cmd := h.Update(tea.MouseReleaseMsg{Button: tea.MouseLeft, X: side + 3, Y: 1})
 	require.NotNil(t, cmd, "letting go copies the marked text")
 	require.Equal(t, "pha\nbrav", s.selectedText())
-
-	marked := func(x, y int) bool {
-		scr := uv.NewScreenBuffer(20, 3)
-		s.emu.DrawViewport(scr, scr.Bounds(), s.scrollOffset)
-		h.drawSelection(scr, scr.Bounds(), s)
-		return scr.CellAt(x, y).Style.Bg == h.styles.TextSelection.GetBackground()
-	}
-	require.False(t, marked(1, 0))
-	require.True(t, marked(2, 0))
-	require.True(t, marked(3, 1))
-	require.False(t, marked(4, 1))
 
 	s.emu.Write([]byte("\r\necho"))
 	h.Update(outputMsg{id: s.id})

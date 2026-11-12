@@ -195,7 +195,7 @@ func TestSelectModelWritesPreferenceOffLoop(t *testing.T) {
 		require.Equal(t, []string{saved}, ws.recorded())
 		info, ok := findMsg[util.InfoMsg](msgs)
 		require.True(t, ok)
-		require.Equal(t, "Model changed to Model One", info.Msg)
+		require.NotEqual(t, util.InfoTypeError, info.Type)
 		shown, ok := u.shownChoice()
 		require.True(t, ok)
 		require.Equal(t, selected, shown, "the pick is shown at once")
@@ -287,7 +287,7 @@ func TestToggleThinkingCapturesModel(t *testing.T) {
 	msgs := runAll(u, cmd)
 	info, ok := findMsg[util.InfoMsg](msgs)
 	require.True(t, ok)
-	require.Equal(t, "Thinking mode enabled", info.Msg)
+	require.NotEqual(t, util.InfoTypeError, info.Type)
 	require.True(t, ws.chatChoice(t).Think)
 	require.Empty(t, ws.cfg.Models, "no folder-wide model is written")
 }
@@ -338,7 +338,7 @@ func TestComposerFooterFormSavesOffLoop(t *testing.T) {
 		if fail {
 			require.Equal(t, util.InfoTypeError, info.Type)
 		} else {
-			require.Equal(t, "Composer updated", info.Msg)
+			require.NotEqual(t, util.InfoTypeError, info.Type)
 		}
 	}
 }

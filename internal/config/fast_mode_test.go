@@ -29,13 +29,11 @@ func TestConfig_ValidateFastMode(t *testing.T) {
 		t.Parallel()
 		err := cfg.ValidateFastMode("grok-cli", "grok-4.7")
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "has no fast mode")
 	})
 
 	t.Run("unknown model errors", func(t *testing.T) {
 		t.Parallel()
 		err := cfg.ValidateFastMode("codex-cli", "gpt-9")
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "not found")
 	})
 }

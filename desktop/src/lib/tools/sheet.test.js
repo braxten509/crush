@@ -7,7 +7,6 @@ import {
   callsFromChat,
   codeText,
   countNoun,
-  EXPIRED_TEXT,
   fileHead,
   FOOTER_KEYS,
   footerKeys,
@@ -140,7 +139,6 @@ describe("loading (DLG-294, DLG-311; reviews.go)", () => {
     expect(isExpired({ status: 404, message: "not found" })).toBe(true);
     expect(isExpired({ code: "not_found" })).toBe(true);
     expect(isExpired(new Error("connection refused"))).toBe(false);
-    expect(EXPIRED_TEXT).toBe("This saved diff has expired. Full diffs are kept for the latest five prompts; the chat is still here.");
   });
   it("reads the calls of the sheet from the chat's messages, in the sheet's order", () => {
     const byId = new Map([

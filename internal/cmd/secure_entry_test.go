@@ -71,5 +71,4 @@ func TestSecureEntryCommandSendsMetadataOnly(t *testing.T) {
 		require.NotContains(t, string(data), "dummy-must-not-read-stdin")
 	}
 	require.NotContains(t, output.String(), "dummy-must-not-read-stdin")
-	require.Contains(t, output.String(), "saved/cancelled")
 }

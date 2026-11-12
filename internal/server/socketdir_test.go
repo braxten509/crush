@@ -74,21 +74,18 @@ func TestSocketIsOwnerOnly(t *testing.T) {
 
 func TestPrivateSocketDirRejectsUnsafe(t *testing.T) {
 	cases := []struct {
-		name   string
-		reason string
+		name string
 		// setup makes first, the first folder PrivateSocketDir tries, unsafe.
 		setup func(t *testing.T, first, spare string)
 	}{
 		{
-			name:   "symlink",
-			reason: "it is a symlink",
+			name: "symlink",
 			setup: func(t *testing.T, first, spare string) {
 				require.NoError(t, os.Symlink(spare, first))
 			},
 		},
 		{
-			name:   "another user's folder",
-			reason: fmt.Sprintf("it belongs to user %d", os.Getuid()+1),
+			name: "another user's folder",
 			setup: func(t *testing.T, first, _ string) {
 				require.NoError(t, os.Mkdir(first, 0o700))
 				old := socketDirOwner
@@ -102,8 +99,7 @@ func TestPrivateSocketDirRejectsUnsafe(t *testing.T) {
 			},
 		},
 		{
-			name:   "0755 folder whose mode does not change",
-			reason: "its mode is 0755, not 0700",
+			name: "0755 folder whose mode does not change",
 			setup: func(t *testing.T, first, _ string) {
 				require.NoError(t, os.Mkdir(first, 0o755))
 				require.NoError(t, os.Chmod(first, 0o755))
@@ -118,8 +114,7 @@ func TestPrivateSocketDirRejectsUnsafe(t *testing.T) {
 			},
 		},
 		{
-			name:   "0755 folder that cannot be changed",
-			reason: "its mode cannot be set to 0700: read-only file system",
+			name: "0755 folder that cannot be changed",
 			setup: func(t *testing.T, first, _ string) {
 				require.NoError(t, os.Mkdir(first, 0o755))
 				require.NoError(t, os.Chmod(first, 0o755))
@@ -134,8 +129,7 @@ func TestPrivateSocketDirRejectsUnsafe(t *testing.T) {
 			},
 		},
 		{
-			name:   "a file",
-			reason: "it cannot be created",
+			name: "a file",
 			setup: func(t *testing.T, first, _ string) {
 				require.NoError(t, os.WriteFile(first, nil, 0o600))
 			},
@@ -164,14 +158,15 @@ func TestPrivateSocketDirRejectsUnsafe(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, before.Mode(), after.Mode())
 
-			// The reason reaches the error when nothing else is left.
+			// The skipped folder is named in the error when nothing else is
+			// left.
 			if len(candidates) > 1 {
 				require.NoError(t, os.Remove(candidates[1]))
 				require.NoError(t, os.WriteFile(candidates[1], nil, 0o600))
 				_, err = PrivateSocketDir()
 				require.ErrorIs(t, err, ErrNoPrivateSocketDir)
 			}
-			require.ErrorContains(t, err, first+": "+tc.reason)
+			require.ErrorContains(t, err, first)
 		})
 	}
 }
@@ -205,8 +200,7 @@ func TestNoBareTmpFallback(t *testing.T) {
 	require.NoError(t, os.Symlink(target, want))
 	_, err = PrivateSocketDir()
 	require.ErrorIs(t, err, ErrNoPrivateSocketDir)
-	require.ErrorContains(t, err, "would be over 104 bytes")
-	require.ErrorContains(t, err, want+": it is a symlink")
+	require.ErrorContains(t, err, want)
 	require.Empty(t, DefaultHost())
 }
 

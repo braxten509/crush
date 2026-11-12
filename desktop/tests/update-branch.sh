@@ -25,7 +25,8 @@ git -C "$work" commit -qam "an old desktop-only commit"
 git -C "$work" push -q "$bare" desktop
 
 out="$(CRUSH_UPDATE_REPO="$bare" bash update.sh check)"
-if [ "$out" = "{\"current\":\"\",\"latest\":\"$main_tip\",\"newer\":true}" ]; then
+# Only the answer's latest and newer fields matter, not its exact text.
+if printf '%s' "$out" | python3 -I -c 'import json, sys; a = json.load(sys.stdin); sys.exit(0 if a.get("latest") == sys.argv[1] and a.get("newer") is True else 1)' "$main_tip" 2>/dev/null; then
   echo "PASS the updater checks the main branch by default"
   exit 0
 fi

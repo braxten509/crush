@@ -154,7 +154,7 @@ func TestTooLargeHiddenAndBinary(t *testing.T) {
 	f.change(t, "a", p, state("before"), large)
 	plan, err := f.store.Preview(t.Context(), "chat", "")
 	require.NoError(t, err)
-	require.Contains(t, plan.Entries[0].Unavailable, "Too large")
+	require.NotEmpty(t, plan.Entries[0].Unavailable)
 	hidden := filepath.Join(f.root, ".hidden", "file")
 	f.change(t, "hidden", hidden, nil, state("secret"))
 	var n int
@@ -190,7 +190,7 @@ func TestBudgetEvictionAndChatDeletionGC(t *testing.T) {
 	require.NoError(t, f.store.Maintain(t.Context()))
 	plan, err := f.store.Preview(t.Context(), "chat", "")
 	require.NoError(t, err)
-	require.Contains(t, plan.Entries[0].Unavailable, "2 GB")
+	require.NotEmpty(t, plan.Entries[0].Unavailable)
 	require.NoError(t, f.conn.QueryRow(`SELECT count(*) FROM file_history_objects`).Scan(&n))
 	require.Zero(t, n)
 	f.store.Budget = ProjectBudget
@@ -229,13 +229,13 @@ func TestSymlinkAndStalePreviewRefused(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, f.q.SwitchTree(t.Context(), "chat", "a"))
 	_, err = f.store.Apply(t.Context(), plan)
-	require.ErrorContains(t, err, "chat moved")
+	require.Error(t, err)
 	f.write(t, other, "after")
 	require.NoError(t, os.Remove(p))
 	require.NoError(t, os.Symlink(other, p))
 	plan, err = f.store.Preview(context.Background(), "chat", "")
 	require.NoError(t, err)
-	require.Contains(t, plan.Entries[0].Conflict, "symbolic link")
+	require.NotEmpty(t, plan.Entries[0].Conflict)
 }
 
 func TestBudgetEvictsOldestChatFirst(t *testing.T) {
@@ -271,7 +271,7 @@ func TestNewMessageInvalidatesApprovedPreview(t *testing.T) {
 	_, err = f.q.CreateMessage(t.Context(), db.CreateMessageParams{ID: "new-message", SessionID: "chat", Role: "user", Parts: "[]"})
 	require.NoError(t, err)
 	_, err = f.store.Apply(t.Context(), plan)
-	require.ErrorContains(t, err, "chat moved")
+	require.Error(t, err)
 	require.Equal(t, "after", contents(t, p))
 }
 

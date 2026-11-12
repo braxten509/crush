@@ -134,7 +134,7 @@ func TestCLIInterruptWaitsForSteeringTransfer(t *testing.T) {
 	go func() { sa.Interrupt(sess.ID); close(interrupted) }()
 	s.steerMu.Unlock()
 	steerLocked = false
-	require.Equal(t, midTurnNote+"preserve this prompt", <-steered)
+	require.Contains(t, <-steered, "preserve this prompt")
 	select {
 	case <-interrupted:
 	case <-time.After(time.Second):
@@ -162,9 +162,10 @@ func TestCLIInterruptClaimsSteeredCallsBeforeLateAcknowledgement(t *testing.T) {
 	sa.steering.Set(s.sessionID, s)
 	sa.activeRequests.Set(s.sessionID, &activeCancel{cancel: cancel})
 	sa.messageQueue.Set(s.sessionID, []SessionAgentCall{{SessionID: s.sessionID, Prompt: "once"}})
-	require.Equal(t, midTurnNote+"once", s.steer())
+	text := s.steer()
+	require.Contains(t, text, "once")
 	sa.Interrupt(s.sessionID)
-	acknowledged := s.takeSteered(midTurnNote + "once")
+	acknowledged := s.takeSteered(text)
 	pending, _ := sa.interrupting.Get(s.sessionID)
 	sa.ClearQueue(s.sessionID)
 	sa.activeRequests.Del(s.sessionID)

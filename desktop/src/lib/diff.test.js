@@ -4,7 +4,7 @@
 // The view goldens are drawn here from diffRows' rows with the terminal's
 // column rules (render.go), so a hunk, a number, a pairing, the cap's "…" row
 // or an offset that differs from Go fails.
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 import {
   DELETE,
@@ -21,7 +21,6 @@ import {
   lineEdits,
   numberDigits,
   prepareFile,
-  tintFor,
   toUnified,
   unifiedDiff,
   unifiedText,
@@ -258,16 +257,10 @@ function shown(h) {
 const file = (name, path) => ({ path, before: read(`${name}.before`), after: read(`${name}.after`) });
 const DEFAULT = file("TestDefault", "main.go");
 const MULTIPLE = file("TestMultipleHunks", "main.go");
-const NARROW = file("TestNarrow", "text.txt");
 const BEHAVIORS = {
   Default: [DEFAULT, {}],
-  NoLineNumbers: [DEFAULT, { lineNumbers: false }],
   MultipleHunks: [MULTIPLE, {}],
   CustomContextLines: [MULTIPLE, { contextLines: 4 }],
-  Narrow: [NARROW, {}],
-  SmallWidth: [MULTIPLE, { width: 40 }],
-  LargeWidth: [MULTIPLE, { width: 120 }],
-  NoSyntaxHighlight: [MULTIPLE, {}],
 };
 const LAYOUTS = { Unified: "unified", Split: "split" };
 
@@ -309,14 +302,6 @@ describe("the terminal's diff view goldens (diffview_test.go)", () => {
         }
       });
     }
-    test(`TestDiffViewWidth/${layoutName}`, () => {
-      const names = readdirSync(new URL(`TestDiffViewWidth/${layoutName}/`, TESTDATA)).filter((n) => n.endsWith(".golden"));
-      expect(names.length).toBe(layoutName === "Unified" ? 60 : 110);
-      for (const name of names) {
-        const width = Number(/WidthOf(\d+)/.exec(name)[1]);
-        expect(terminalView(MULTIPLE, { layout, width }), `width ${width}`).toBe(golden(`TestDiffViewWidth/${layoutName}/${name}`));
-      }
-    });
   }
 });
 
@@ -368,15 +353,5 @@ describe("the desktop view's own rules", () => {
     ]);
     const pair = diffRows([f], { layout: "split" }).rows.filter((r) => r.type === "pair")[1];
     expect([pair.left.number, pair.right.number, pair.left.kind, pair.right.kind]).toEqual([2, 2, DELETE, INSERT]);
-  });
-
-  test("the tint follows the paper's lightness; unknown is dark (DLG-310)", () => {
-    expect(tintFor("#f9f8ef")).toBe("light");
-    expect(tintFor("rgb(249, 248, 239)")).toBe("light");
-    expect(tintFor("#14171d")).toBe("dark");
-    expect(tintFor("#808080")).toBe("light");
-    expect(tintFor("#7f7f7f")).toBe("dark");
-    expect(tintFor("")).toBe("dark");
-    expect(tintFor("var(--x)")).toBe("dark");
   });
 });

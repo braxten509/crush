@@ -24,9 +24,12 @@ func TestBashCtrlBLeavesCommandRunning(t *testing.T) {
 	tool := newBashToolForTest(t.TempDir())
 	ctx, cancel := context.WithCancel(context.WithValue(t.Context(), tools.SessionIDContextKey, "background-test"))
 	defer cancel()
+	// The command keeps running until the test opens its gate.
+	gate := filepath.Join(t.TempDir(), "gate")
+	t.Cleanup(func() { _ = os.WriteFile(gate, nil, 0o600) })
 	finished := make(chan fantasy.ToolResponse, 1)
 	go func() {
-		finished <- runBashTool(t, tool, ctx, tools.BashParams{Command: "sleep 3 && echo survived", Description: "background test"})
+		finished <- runBashTool(t, tool, ctx, tools.BashParams{Command: "while [ ! -e " + gate + " ]; do sleep 0.05; done; echo survived", Description: "background test"})
 	}()
 	require.Eventually(t, func() bool { return tools.BackgroundShell("background-test") }, time.Second, 10*time.Millisecond)
 	var response fantasy.ToolResponse
@@ -42,6 +45,7 @@ func TestBashCtrlBLeavesCommandRunning(t *testing.T) {
 	cancel()
 	job, ok := shell.GetBackgroundShellManager().Get(metadata.ShellID)
 	require.True(t, ok)
+	require.NoError(t, os.WriteFile(gate, nil, 0o600))
 	job.Wait()
 	stdout, _, _, err := job.GetOutput()
 	require.NoError(t, err)
@@ -104,39 +108,25 @@ func TestBashTool_DefaultAutoBackgroundThreshold(t *testing.T) {
 	require.Contains(t, meta.Output, "done")
 }
 
+// A requested wait under the foreground limit is raised to it, so a command
+// a little longer than the request still finishes in the foreground.
 func TestBashTool_WaitBackgroundThreshold(t *testing.T) {
-	for _, tt := range []struct {
-		command    string
-		background bool
-	}{
-		{"sleep 1.5 && echo done", false},
-		{"sleep 10 && echo done", false},
-		{"sleep 11 && echo done", true},
-	} {
-		t.Run(tt.command, func(t *testing.T) {
-			tool := newBashToolForTest(t.TempDir())
-			ctx := context.WithValue(context.Background(), tools.SessionIDContextKey, "test-session")
-			resp := runBashTool(t, tool, ctx, tools.BashParams{
-				Description:         "wait threshold",
-				Command:             tt.command,
-				AutoBackgroundAfter: 1,
-			})
-			require.False(t, resp.IsError)
-			var meta tools.BashResponseMetadata
-			require.NoError(t, json.Unmarshal([]byte(resp.Metadata), &meta))
-			if meta.ShellID != "" {
-				t.Cleanup(func() { _ = shell.GetBackgroundShellManager().Kill(meta.ShellID) })
-			}
-			require.Equal(t, tt.background, meta.Background)
-			if tt.background {
-				require.NotEmpty(t, meta.ShellID)
-				require.Contains(t, resp.Content, "longer than 10 seconds")
-			} else {
-				require.Empty(t, meta.ShellID)
-				require.Contains(t, meta.Output, "done")
-			}
-		})
+	tool := newBashToolForTest(t.TempDir())
+	ctx := context.WithValue(context.Background(), tools.SessionIDContextKey, "test-session")
+	resp := runBashTool(t, tool, ctx, tools.BashParams{
+		Description:         "wait threshold",
+		Command:             "sleep 1.5 && echo done",
+		AutoBackgroundAfter: 1,
+	})
+	require.False(t, resp.IsError)
+	var meta tools.BashResponseMetadata
+	require.NoError(t, json.Unmarshal([]byte(resp.Metadata), &meta))
+	if meta.ShellID != "" {
+		t.Cleanup(func() { _ = shell.GetBackgroundShellManager().Kill(meta.ShellID) })
 	}
+	require.False(t, meta.Background)
+	require.Empty(t, meta.ShellID)
+	require.Contains(t, meta.Output, "done")
 }
 
 type recordingPermissionService struct {
@@ -241,7 +231,7 @@ func TestBashTool_ChainedCommandsDenied(t *testing.T) {
 	})
 
 	require.Equal(t, 1, perms.requestCount)
-	require.Contains(t, resp.Content, "User denied permission")
+	require.True(t, resp.IsError)
 }
 
 func TestIsDangerousCommand(t *testing.T) {
@@ -369,7 +359,7 @@ func TestTruncateOutputValidUTF8(t *testing.T) {
 
 	out := TruncateOutput(content, t.TempDir())
 	require.True(t, utf8.ValidString(out), "truncated output must stay valid UTF-8")
-	require.Contains(t, out, "lines truncated")
+	require.Less(t, len(out), len(content))
 }
 
 func TestTruncateOutputShortContent(t *testing.T) {
@@ -385,7 +375,7 @@ func TestTruncateOutputEmoji(t *testing.T) {
 
 	out := TruncateOutput(content, t.TempDir())
 	require.True(t, utf8.ValidString(out), "truncated output must stay valid UTF-8")
-	require.Contains(t, out, "lines truncated")
+	require.Less(t, len(out), len(content))
 }
 
 // The commit record names Crush only: the tool is built once for every
@@ -477,8 +467,7 @@ func TestBashTool_ApprovedDangerousCommandRuns(t *testing.T) {
 	require.Equal(t, 1, perms.requestCount, "a dangerous command must be prompted for")
 	require.Equal(t, "ifconfig", perms.lastDanger,
 		"the prompt must name what tripped the check")
-	require.NotContains(t, resp.Content, "is a dangerous command",
-		"an approved command must not be re-blocked at exec time")
+	require.False(t, resp.IsError, "an approved command must not be re-blocked at exec time: %s", resp.Content)
 }
 
 // TestBashTool_UnflaggedCommandKeepsBlockList is the other side of that rule.
@@ -504,7 +493,7 @@ func TestBashTool_UnflaggedCommandKeepsBlockList(t *testing.T) {
 	})
 
 	require.Empty(t, perms.lastDanger, "the static check cannot see through a glob")
-	require.Contains(t, resp.Content, "is a dangerous command")
+	require.True(t, resp.IsError, "the block list stops it at exec time: %s", resp.Content)
 }
 
 // TestBashTool_SysadminModeSkipsBlockList pins sysadmin mode as the deliberate
@@ -527,7 +516,7 @@ func TestBashTool_SysadminModeSkipsBlockList(t *testing.T) {
 		Command:     "ifconf?g --help",
 	})
 
-	require.NotContains(t, resp.Content, "is a dangerous command")
+	require.False(t, resp.IsError, "sysadmin mode blocks nothing: %s", resp.Content)
 }
 
 // TestBashTool_DeniedDangerousCommandDoesNotRun is the other half: denial at
@@ -595,24 +584,22 @@ func TestBashTool_YoloModeDoesNotPromptForDangerousCommands(t *testing.T) {
 	// Run it off the test goroutine so a regression that reinstates the
 	// prompt fails here in a few seconds rather than hanging until the
 	// whole package times out.
-	content := make(chan string, 1)
+	responses := make(chan fantasy.ToolResponse, 1)
 	go func() {
-		resp := runBashTool(t, tool, ctx, tools.BashParams{
+		responses <- runBashTool(t, tool, ctx, tools.BashParams{
 			Description: "dangerous command in yolo mode",
 			Command:     "ifconfig --help",
 		})
-		content <- resp.Content
 	}()
 
-	var got string
+	var got fantasy.ToolResponse
 	select {
-	case got = <-content:
+	case got = <-responses:
 	case <-time.After(30 * time.Second):
 		t.Fatal("yolo mode blocked waiting for a permission prompt that should never have been raised")
 	}
 
-	require.NotContains(t, got, "is a dangerous command",
-		"a dangerous command must not be blocked in yolo mode")
+	require.False(t, got.IsError, "a dangerous command must not be blocked in yolo mode: %s", got.Content)
 
 	select {
 	case p := <-prompts:
@@ -665,6 +652,7 @@ func TestBlockedCommandErrorNamesTheCommand(t *testing.T) {
 		Command:     "ifconf?g --help",
 	})
 
-	require.Contains(t, resp.Content, "ifconfig is a dangerous command",
-		"the error must name the command, not the spelling that reached it")
+	require.True(t, resp.IsError, resp.Content)
+	require.Contains(t, resp.Content, "ifconfig", "the error must name the command")
+	require.NotContains(t, resp.Content, "ifconf?g", "not the spelling that reached it")
 }

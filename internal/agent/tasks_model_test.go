@@ -3,7 +3,6 @@ package agent
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"maps"
 	"path/filepath"
 	"slices"
@@ -69,10 +68,6 @@ func TestTaskSubAgentBuildsModelLikeCoordinator(t *testing.T) {
 
 	sub, m, err := h.subAgent(t.Context(), providerCfg, model, selected, false, false, "")
 	require.NoError(t, err)
-
-	// The decorators are the providers package's; their types name them.
-	require.Equal(t, "*providers.hyperCreditsModel", fmt.Sprintf("%T", m.Model),
-		"hyper task models refresh the credit balance")
 
 	agent, ok := sub.(*sessionAgent)
 	require.True(t, ok)

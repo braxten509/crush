@@ -3,7 +3,6 @@ package agent
 import (
 	"context"
 	"errors"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -16,45 +15,29 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// titleFailModel answers chat turns but fails every title request, so a
-// chat it titles falls back to DefaultSessionName.
+// titleFailModel is a model used only for titles: it counts every request
+// and fails it.
 type titleFailModel struct {
 	finishStreamModel
 	titleCalls atomic.Int32
 }
 
-func (m *titleFailModel) title(call fantasy.Call) bool {
-	for _, msg := range call.Prompt {
-		for _, part := range msg.Content {
-			if text, ok := part.(fantasy.TextPart); ok && strings.Contains(text.Text, "Generate a concise title") {
-				m.titleCalls.Add(1)
-				return true
-			}
-		}
-	}
-	return false
+func (m *titleFailModel) Generate(context.Context, fantasy.Call) (*fantasy.Response, error) {
+	m.titleCalls.Add(1)
+	return nil, errors.New("title generation failed")
 }
 
-func (m *titleFailModel) Generate(ctx context.Context, call fantasy.Call) (*fantasy.Response, error) {
-	if m.title(call) {
-		return nil, errors.New("title generation failed")
-	}
-	return m.finishStreamModel.Generate(ctx, call)
-}
-
-func (m *titleFailModel) Stream(ctx context.Context, call fantasy.Call) (fantasy.StreamResponse, error) {
-	if m.title(call) {
-		return nil, errors.New("title generation failed")
-	}
-	return m.finishStreamModel.Stream(ctx, call)
+func (m *titleFailModel) Stream(context.Context, fantasy.Call) (fantasy.StreamResponse, error) {
+	m.titleCalls.Add(1)
+	return nil, errors.New("title generation failed")
 }
 
 // The first send in a branch keeps the title the branch was made with, even
-// when title generation fails and would rename any other chat.
+// when titling would rename any other chat.
 func TestBranchTitleNeverAutoReplaced(t *testing.T) {
 	env := testEnv(t)
-	model := &titleFailModel{finishStreamModel: finishStreamModel{text: "Sure."}}
-	sa := testSessionAgent(env, model, model, "system").(*sessionAgent)
+	model := &titleFailModel{}
+	sa := testSessionAgent(env, &finishStreamModel{text: "Sure."}, model, "system").(*sessionAgent)
 	ctx := t.Context()
 
 	// A chat that opens with the assistant's greeting holds no user text,
@@ -77,11 +60,11 @@ func TestBranchTitleNeverAutoReplaced(t *testing.T) {
 		return chat.Title
 	}
 
-	// The control: the same chat, not a branch, gets the fallback name.
+	// The control: the same chat, not a branch, gets renamed.
 	control, _ := greeted("Control")
 	_, err := sa.Run(ctx, SessionAgentCall{SessionID: control, Prompt: "Plan a trip", NonInteractive: true})
 	require.NoError(t, err)
-	require.Eventually(t, func() bool { return titleOf(control) == DefaultSessionName }, 5*time.Second, 10*time.Millisecond)
+	require.Eventually(t, func() bool { return titleOf(control) != "Control" }, 5*time.Second, 10*time.Millisecond)
 	tried := model.titleCalls.Load()
 	require.Positive(t, tried, "the control asked for a title")
 
@@ -109,8 +92,8 @@ func TestBranchTitleNeverAutoReplaced(t *testing.T) {
 func TestTitleUsesTheHelperModel(t *testing.T) {
 	env := testEnv(t)
 	ctx := t.Context()
-	other := &titleFailModel{finishStreamModel: finishStreamModel{text: "Another chat's"}}
-	helper := &titleFailModel{finishStreamModel: finishStreamModel{text: "Helper"}}
+	other := &titleFailModel{}
+	helper := &titleFailModel{}
 	sa := testSessionAgent(env, other, helper, "system").(*sessionAgent)
 	own := &finishStreamModel{text: "Trip to Lisbon"}
 	sa.chatModels.build = func(_ context.Context, selection config.SelectedModel) (Model, error) {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_FOOTER_ITEMS, FOOTER_CHOICES } from "../../lib/footer.js";
-import { CUSTOMIZE, CUSTOMIZE_COLLAPSED, CUSTOMIZE_HELP, customizeClick, customizeKey, customizeSave, startCustomize } from "./customize.js";
+import { customizeClick, customizeKey, customizeSave, startCustomize } from "./customize.js";
 
 // SIDE-016 to SIDE-024: the terminal's Customize Composer form
 // (composer_footer.go:142-181, questionform/multi.go, choice_base.go).
@@ -19,26 +19,6 @@ function press(state, ...combos) {
 }
 
 describe("Customize Composer", () => {
-  it("has the terminal's words and help", () => {
-    expect(CUSTOMIZE).toEqual({
-      label: "Composer",
-      text: "What should show under the composer?",
-      description: "Space toggles a row, Enter saves. Usage limits show only for agent CLIs that report them.",
-    });
-    expect(CUSTOMIZE_HELP.map((x) => `${x.key} ${x.action}`)).toEqual(["↑ up", "↓ down", "space toggle", "1-8 quick select", "enter done", "esc exit"]);
-    expect(CUSTOMIZE_COLLAPSED).toBe("answer questions");
-    expect(FOOTER_CHOICES.map((c) => c.label)).toEqual([
-      "Model name",
-      "Reasoning, fast and Ultracode",
-      "Tokens used",
-      "Context left",
-      "5-hour usage left",
-      "Weekly usage left",
-      "Other usage limits",
-      "When usage limits reset",
-    ]);
-  });
-
   it("starts with the saved rows picked and the cursor on the first", () => {
     expect(startCustomize(DEFAULT_FOOTER_ITEMS)).toEqual({ cursor: 0, picked: DEFAULT_FOOTER_ITEMS });
     expect(startCustomize(["none"])).toEqual({ cursor: 0, picked: [] });

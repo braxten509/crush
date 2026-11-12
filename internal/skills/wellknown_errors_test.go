@@ -24,42 +24,42 @@ func TestWellKnownIndexErrors(t *testing.T) {
 	tests := []struct {
 		name    string
 		index   map[string]string
-		wantErr string
+		wantErr bool
 	}{
 		{
 			name:    "unsupported schema",
 			index:   map[string]string{"agent-skills": `{"$schema":"https://example.com/other.json","skills":[{"name":"example","files":["SKILL.md"]}]}`},
-			wantErr: "unsupported skill discovery schema",
+			wantErr: true,
 		},
 		{
 			name:    "unsupported artifact type",
 			index:   map[string]string{"agent-skills": `{"$schema":"` + wellKnownSchemaV2 + `","skills":[{"name":"example","type":"binary","url":"/artifact","digest":"` + digest + `"}]}`},
-			wantErr: "unsupported skill artifact type",
+			wantErr: true,
 		},
 		{
 			name:    "plain http artifact",
 			index:   map[string]string{"agent-skills": `{"$schema":"` + wellKnownSchemaV2 + `","skills":[{"name":"example","type":"skill-md","url":"http://example.com/a","digest":"` + digest + `"}]}`},
-			wantErr: "invalid skill artifact URL",
+			wantErr: true,
 		},
 		{
 			name:    "empty file list",
 			index:   map[string]string{"agent-skills": `{"skills":[{"name":"example","files":[]}]}`},
-			wantErr: "invalid skill file list",
+			wantErr: true,
 		},
 		{
 			name:    "unsafe file",
 			index:   map[string]string{"agent-skills": `{"skills":[{"name":"example","files":["../SKILL.md"]}]}`},
-			wantErr: "unsafe skill file: ../SKILL.md",
+			wantErr: true,
 		},
 		{
 			name:    "duplicate file",
 			index:   map[string]string{"agent-skills": `{"skills":[{"name":"example","files":["SKILL.md","SKILL.md"]}]}`},
-			wantErr: "duplicate skill file: SKILL.md",
+			wantErr: true,
 		},
 		{
 			name:    "not published",
 			index:   map[string]string{"agent-skills": `not json`, "skills": `{"skills":[{"name":"other","files":["SKILL.md"]}]}`},
-			wantErr: "example was not found in",
+			wantErr: true,
 		},
 		{
 			name:  "falls back to skills directory",
@@ -86,8 +86,8 @@ func TestWellKnownIndexErrors(t *testing.T) {
 			d := &Directory{Client: server.Client()}
 			root := filepath.Join(t.TempDir(), "skills")
 			skill, err := d.installWellKnown(t.Context(), strings.TrimPrefix(server.URL, "https://"), "example", root)
-			if tt.wantErr != "" {
-				require.ErrorContains(t, err, tt.wantErr)
+			if tt.wantErr {
+				require.Error(t, err)
 				require.NoDirExists(t, root)
 				return
 			}

@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/crush/internal/agent"
 	"github.com/charmbracelet/crush/internal/backend"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/session"
@@ -215,13 +216,12 @@ func helperModel(t *testing.T, parentHash *atomic.Value, release <-chan struct{}
 	})
 }
 
-// handedOver reports whether chat holds a helper's result.
-func handedOver(t *testing.T, ws *backend.Workspace, chatID string) bool {
+// handedOver reports whether a helper of chat had its result handed over
+// to the chat.
+func handedOver(t *testing.T, chatID string) bool {
 	t.Helper()
-	msgs, err := ws.Messages.List(t.Context(), chatID)
-	require.NoError(t, err)
-	for _, m := range msgs {
-		if strings.Contains(m.Content().String(), "crush-task-result") {
+	for _, task := range agent.SessionTasks(chatID) {
+		if task.Delivered {
 			return true
 		}
 	}
@@ -237,38 +237,10 @@ func waitForHelper(t *testing.T, helperRunning <-chan struct{}) {
 	}
 }
 
-// TestAgentSessionHasUnfinishedWork: the agent session route reports
-// unfinished work while a helper of the chat runs, and none once its
-// result has been handed over to the chat.
-func TestAgentSessionHasUnfinishedWork(t *testing.T) {
-	h := modelHarness(t)
-	var parentHash atomic.Value
-	parentHash.Store("")
-	release := make(chan struct{})
-	helperRunning := make(chan struct{}, 4)
-	m := helperModel(t, &parentHash, release, helperRunning)
-	ws, _ := newModelWorkspace(t, h, m, t.TempDir())
-	ctx := t.Context()
-
-	chat, err := ws.Sessions.Create(ctx, "chat")
-	require.NoError(t, err)
-	parentHash.Store(session.HashID(chat.ID))
-	path := "/v1/workspaces/" + ws.ID + "/agent/sessions/" + chat.ID
-	require.False(t, callAPI[proto.AgentSession](t, h, http.MethodGet, path, nil).HasUnfinishedWork)
-
-	spawnTestHelper(t, chat.ID)
-	waitForHelper(t, helperRunning)
-	require.True(t, callAPI[proto.AgentSession](t, h, http.MethodGet, path, nil).HasUnfinishedWork, "a helper runs")
-
-	close(release)
-	require.Eventually(t, func() bool {
-		return !callAPI[proto.AgentSession](t, h, http.MethodGet, path, nil).HasUnfinishedWork
-	}, 30*time.Second, 50*time.Millisecond, "the work is done once the result is handed over")
-	require.True(t, handedOver(t, ws, chat.ID), "the chat got the helper's result")
-}
-
 // TestSessionListHasUnfinishedWork: the list route fills the flag per
-// chat: true for the chat whose helper runs, false for another chat.
+// chat: true for the chat whose helper runs, false for another chat, and
+// none once the result has been handed over. The agent session route
+// reports the same.
 func TestSessionListHasUnfinishedWork(t *testing.T) {
 	h := modelHarness(t)
 	var parentHash atomic.Value
@@ -290,11 +262,13 @@ func TestSessionListHasUnfinishedWork(t *testing.T) {
 	chats := sessionsByID(t, h, ws.ID)
 	require.True(t, chats[chatC.ID].HasUnfinishedWork, "C's helper runs")
 	require.False(t, chats[chatD.ID].HasUnfinishedWork)
+	require.True(t, callAPI[proto.AgentSession](t, h, http.MethodGet,
+		"/v1/workspaces/"+ws.ID+"/agent/sessions/"+chatC.ID, nil).HasUnfinishedWork, "the agent session route agrees")
 
 	close(release)
 	require.Eventually(t, func() bool {
 		return !sessionsByID(t, h, ws.ID)[chatC.ID].HasUnfinishedWork
 	}, 30*time.Second, 50*time.Millisecond)
-	require.True(t, handedOver(t, ws, chatC.ID))
+	require.True(t, handedOver(t, chatC.ID), "the chat got the helper's result")
 	require.False(t, sessionsByID(t, h, ws.ID)[chatD.ID].HasUnfinishedWork)
 }

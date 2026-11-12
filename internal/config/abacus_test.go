@@ -75,7 +75,7 @@ func TestAbacusDiscoveryUsesFreshControlsWithDefaultProvidersDisabled(t *testing
 	variables := env.NewFromMap(map[string]string{})
 	_, err = cfg.configureProviders(t.Context(), variables, NewShellVariableResolver(variables), providers)
 	require.NoError(t, err)
-	require.Equal(t, []string{"/v3/providers", "/v1/models"}, requests)
+	require.ElementsMatch(t, []string{"/v3/providers", "/v1/models"}, requests)
 	_, enabled := cfg.Providers.Get("anthropic")
 	require.False(t, enabled, "native catalogue metadata must not enable default providers")
 	abacus, ok := cfg.Providers.Get(AbacusProviderID)

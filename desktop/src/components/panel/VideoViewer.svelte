@@ -532,7 +532,7 @@
         <div class="controls">
           <button type="button" class="box" aria-label="Back {BIG_STEP} frames" title="Back {BIG_STEP} frames (Shift+←)" data-video-back disabled={at === 0} onclick={() => step(-BIG_STEP)}>◀◀</button>
           <button type="button" class="box" aria-label="Previous frame" title="Previous frame (←)" data-video-prev disabled={at === 0} onclick={() => step(-1)}>◀</button>
-          <p class="where" data-video-frame>Frame {at + 1} of {frames.length} · {clockTime(time)}</p>
+          <p class="where" data-video-frame={at}>Frame {at + 1} of {frames.length} · {clockTime(time)}</p>
           <button type="button" class="box" aria-label="Next frame" title="Next frame (→)" data-video-next disabled={at >= frames.length - 1} onclick={() => step(1)}>▶</button>
           <button type="button" class="box" aria-label="Forward {BIG_STEP} frames" title="Forward {BIG_STEP} frames (Shift+→)" data-video-forward disabled={at >= frames.length - 1} onclick={() => step(BIG_STEP)}>▶▶</button>
           <button type="button" class="box" title="Play or pause (Space)" data-video-play onclick={togglePlay}>{playing ? "Pause" : "Play"}</button>
@@ -560,7 +560,7 @@
           <ul>
             {#each marks as mark (mark.frame)}
               <li class:here={mark.frame === at}>
-                <button type="button" class="jump" onclick={() => show(mark.frame)}>Frame {mark.frame + 1} · {clockTime(mark.time)}</button>
+                <button type="button" class="jump" data-frame={mark.frame} onclick={() => show(mark.frame)}>Frame {mark.frame + 1} · {clockTime(mark.time)}</button>
                 <button type="button" class="unmark" aria-label="Unmark frame {mark.frame + 1}" onclick={() => unmark(mark.frame)}>×</button>
               </li>
             {/each}

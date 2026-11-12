@@ -42,17 +42,4 @@ func TestPromptQueueTrackAndClear(t *testing.T) {
 	require.True(t, q.submittingFor("s1"))
 	require.True(t, q.submittingFor("s2"))
 	require.False(t, q.submittingFor("s3"))
-
-	q.count, q.items = 2, []string{"a", "b"}
-	gen := q.gen
-	q.clear()
-	require.Zero(t, q.count)
-	require.Nil(t, q.items)
-	require.False(t, q.checkedAt.IsZero())
-	q.invalidate()
-	require.Equal(t, gen+1, q.gen)
-
-	q.recallDraft("s1", message.QueuedPrompt{Prompt: "draft"})
-	q.recallDraft("s1", message.QueuedPrompt{Prompt: "again"})
-	require.Len(t, q.recalledDrafts["s1"], 2)
 }

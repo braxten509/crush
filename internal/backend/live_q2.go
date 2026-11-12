@@ -366,7 +366,11 @@ func (b *Backend) liveGone(ws *Workspace, clientID string, reason GoneReason, wo
 	l := &ws.live
 	l.mu.Lock()
 	delete(l.nonInteractiveApps, clientID)
+	onGone := l.onGone
 	l.mu.Unlock()
+	if onGone != nil {
+		onGone(clientID, reason, workspaceEmpty)
+	}
 	if reason == GoneFolderSwitch {
 		// Folder switches leave chats working: no departure cleanup, now or
 		// at a later join. The next app to join takes the work over.

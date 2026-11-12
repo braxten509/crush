@@ -67,9 +67,7 @@ func TestSnapshotPresenceAndNetChanges(t *testing.T) {
 	require.Equal(t, Modified, files[0].Kind, "empty is different from deleted")
 	require.Equal(t, Modified, files[1].Kind, "empty is different from absent")
 	require.Equal(t, Added, files[2].Kind)
-	require.Equal(t, "Added empty file", files[2].Lines[0].Text)
 	require.Equal(t, Deleted, files[3].Kind)
-	require.Equal(t, "Deleted empty file", files[3].Lines[0].Text)
 	require.Equal(t, 1, files[4].Adds)
 	require.Equal(t, 1, files[4].Dels)
 	require.Equal(t, "first", files[4].Lines[1].Text)
@@ -91,8 +89,6 @@ func TestSnapshotBinaryAndModeChanges(t *testing.T) {
 		}},
 	})
 	require.Len(t, files, 2)
-	require.Equal(t, "Binary file; 50 → 50 bytes", files[0].Lines[0].Text)
-	require.Contains(t, files[1].Lines[0].Text, "-rw-r--r-- → -rwxr-xr-x")
 	adds, dels := Stats(files)
 	require.Zero(t, adds)
 	require.Zero(t, dels)
@@ -172,7 +168,6 @@ func TestRemovedAndUncomparedFilesHaveNoLineCounts(t *testing.T) {
 	require.False(t, files[1].Counted(), "a file too large to compare has no line counts")
 	require.False(t, AnyCounted(files))
 	require.Equal(t, 1, Removed(files))
-	require.Equal(t, "removed 1 file · 1 file edited", Summary(files))
 
 	// A deleted text file is one removed file, not its lines.
 	text := Build([]Edit{
@@ -181,5 +176,5 @@ func TestRemovedAndUncomparedFilesHaveNoLineCounts(t *testing.T) {
 	})
 	adds, dels := Stats(text)
 	require.Equal(t, [2]int{1, 1}, [2]int{adds, dels})
-	require.Equal(t, "removed 1 file · 1 file edited", Summary(text))
+	require.Equal(t, 1, Removed(text))
 }

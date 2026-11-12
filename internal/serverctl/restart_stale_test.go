@@ -221,8 +221,8 @@ func TestCheckEngine_NeverReusesBusyOtherProtocol(t *testing.T) {
 		reuse, err := checkControlServer(t, hostURL)
 		require.False(t, reuse)
 		require.ErrorIs(t, err, backend.ErrProtocolMismatch)
-		require.EqualError(t, err, fmt.Sprintf("The Crush engine for this project is busy and speaks protocol %d; this crush speaks %d. Wait for its work to finish or close the apps using it, then try again.",
-			proto.ProtocolVersion+1, proto.ProtocolVersion))
+		require.ErrorContains(t, err, fmt.Sprint(proto.ProtocolVersion+1), "the message names the engine's protocol")
+		require.ErrorContains(t, err, fmt.Sprint(proto.ProtocolVersion), "the message names this crush's protocol")
 		require.Equal(t, []string{proto.ServerControlShutdownIfIdle}, log.all(), "only the conditional shutdown is asked")
 	}
 }

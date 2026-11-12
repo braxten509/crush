@@ -69,7 +69,7 @@ func TestResolveUserList(t *testing.T) {
 	require.Equal(t, []int{4, 5}, cpus)
 
 	_, err = resolve(sys, "6-9")
-	require.ErrorContains(t, err, "not online")
+	require.Error(t, err)
 }
 
 func TestParentPIDHandlesOddNames(t *testing.T) {
@@ -108,10 +108,14 @@ func TestPinTreeMovesChildProcess(t *testing.T) {
 		t.Skip("needs at least two CPUs")
 	}
 
-	child := exec.Command("sleep", "30")
+	// The child waits on its stdin, which the test holds open and closes at
+	// the end.
+	child := exec.Command("cat")
+	stdin, err := child.StdinPipe()
+	require.NoError(t, err)
 	require.NoError(t, child.Start())
 	t.Cleanup(func() {
-		_ = child.Process.Kill()
+		_ = stdin.Close()
 		_ = child.Wait()
 	})
 

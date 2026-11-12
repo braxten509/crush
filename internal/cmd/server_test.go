@@ -29,9 +29,9 @@ func TestServerJoinsMemoryBox(t *testing.T) {
 	oldHost := serverHost
 	serverHost = "not-a-url"
 	t.Cleanup(func() { serverHost = oldHost })
-	require.ErrorContains(t, serverCmd.RunE(serverCmd, nil), "invalid server host")
+	require.Error(t, serverCmd.RunE(serverCmd, nil))
 	require.Equal(t, []string{memlimit.Slice}, joined, "crush server joins first")
 
-	require.EqualError(t, engineServeCmd.RunE(engineServeCmd, nil), "--data-dir is required")
+	require.Error(t, engineServeCmd.RunE(engineServeCmd, nil))
 	require.Equal(t, []string{memlimit.Slice, memlimit.Slice}, joined, "crush engine serve joins first")
 }

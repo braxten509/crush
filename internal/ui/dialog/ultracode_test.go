@@ -22,40 +22,33 @@ func ultracodeCommon(sty *styles.Styles, kind catwalk.Type, levels []string, on 
 	return chatCommon(cfg, sty, config.SelectedModel{Provider: "cli", Model: "m", ReasoningEffort: "high", Ultracode: on})
 }
 
+// ultracodeCommand returns the Ultracode toggle offered for a chat, or nil
+// when none is offered.
+func ultracodeCommand(kind catwalk.Type, levels []string, on bool) *CommandItem {
+	sty := styles.CharmtonePantera()
+	commands := &Commands{com: ultracodeCommon(&sty, kind, levels, on)}
+	var item *CommandItem
+	for _, it := range commands.defaultCommands() {
+		if it.ID() == "toggle_ultracode" {
+			item = it
+		}
+	}
+	return item
+}
+
 func TestUltracodeCommand(t *testing.T) {
 	t.Parallel()
 	efforts := []string{"low", "high", "max"}
-	for _, tc := range []struct {
-		name   string
-		kind   catwalk.Type
-		levels []string
-		on     bool
-		title  string
-	}{
-		{"claude off", config.TypeClaudeCode, efforts, false, "Turn On Ultracode"},
-		{"claude on", config.TypeClaudeCode, efforts, true, "Turn Off Ultracode"},
-		{"claude without effort", config.TypeClaudeCode, nil, false, ""},
-		{"codex", config.TypeCodexCLI, efforts, false, ""},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			sty := styles.CharmtonePantera()
-			commands := &Commands{com: ultracodeCommon(&sty, tc.kind, tc.levels, tc.on)}
-			var item *CommandItem
-			for _, it := range commands.defaultCommands() {
-				if it.ID() == "toggle_ultracode" {
-					item = it
-				}
-			}
-			if tc.title == "" {
-				require.Nil(t, item)
-				return
-			}
-			require.NotNil(t, item)
-			require.Equal(t, tc.title, item.title)
-			require.IsType(t, ActionToggleUltracode{}, item.Action())
-		})
-	}
+	off := ultracodeCommand(config.TypeClaudeCode, efforts, false)
+	on := ultracodeCommand(config.TypeClaudeCode, efforts, true)
+	require.NotNil(t, off)
+	require.NotNil(t, on)
+	require.IsType(t, ActionToggleUltracode{}, off.Action())
+	require.IsType(t, ActionToggleUltracode{}, on.Action())
+	require.NotEqual(t, off.title, on.title, "the title tells on from off")
+
+	require.Nil(t, ultracodeCommand(config.TypeClaudeCode, nil, false), "claude without effort levels")
+	require.Nil(t, ultracodeCommand(config.TypeCodexCLI, efforts, false), "codex")
 }
 
 func TestReasoningDialogUltracodeSwitch(t *testing.T) {

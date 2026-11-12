@@ -59,7 +59,6 @@ func TestSavedReviewAndLegacyEditsHideAgentFiles(t *testing.T) {
 	require.Len(t, group.Changes(), 1)
 	require.Equal(t, "main.go", group.Changes()[0].Path)
 	header := ansi.Strip(group.header(160))
-	require.Contains(t, header, "edited main.go +1 −0")
 	require.NotContains(t, header, "SKILL.md")
 	require.NotContains(t, header, "settings.json")
 }

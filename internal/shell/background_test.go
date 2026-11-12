@@ -436,3 +436,75 @@ func TestBackgroundShellManager_PruneDropsOldestFinished(t *testing.T) {
 
 	require.NoError(t, manager.Kill(bgShell.ID))
 }
+
+func TestBackgroundShell_ExitCode(t *testing.T) {
+	t.Parallel()
+
+	manager := newBackgroundShellManager()
+	bgShell, err := manager.Start(t.Context(), t.TempDir(), nil, "echo 'failing' && exit 42", "", testMaxJobs)
+	require.NoError(t, err)
+	defer manager.Kill(bgShell.ID)
+	bgShell.Wait()
+
+	stdout, _, done, execErr := bgShell.GetOutput()
+	require.True(t, done)
+	require.Contains(t, stdout, "failing")
+	require.Error(t, execErr)
+	require.Equal(t, 42, ExitCode(execErr))
+}
+
+func TestBackgroundShell_StdoutAndStderr(t *testing.T) {
+	t.Parallel()
+
+	manager := newBackgroundShellManager()
+	bgShell, err := manager.Start(t.Context(), t.TempDir(), nil, "echo 'stdout message' && echo 'stderr message' >&2", "", testMaxJobs)
+	require.NoError(t, err)
+	defer manager.Kill(bgShell.ID)
+	bgShell.Wait()
+
+	stdout, stderr, done, err := bgShell.GetOutput()
+	require.NoError(t, err)
+	require.True(t, done)
+	require.Contains(t, stdout, "stdout message")
+	require.Contains(t, stderr, "stderr message")
+}
+
+func TestBackgroundShell_ConcurrentAccess(t *testing.T) {
+	t.Parallel()
+
+	manager := newBackgroundShellManager()
+	bgShell, err := manager.Start(t.Context(), t.TempDir(), nil, "for i in 1 2 3 4 5; do echo \"line $i\"; sleep 0.05; done", "", testMaxJobs)
+	require.NoError(t, err)
+	defer manager.Kill(bgShell.ID)
+
+	// Read the output from several goroutines while the job writes it.
+	done := make(chan struct{})
+	errors := make(chan error, 10)
+	for range 10 {
+		go func() {
+			for {
+				select {
+				case <-done:
+					return
+				default:
+					_, _, _, err := bgShell.GetOutput()
+					if err != nil {
+						errors <- err
+					}
+					if bgShell.WorkingDir == "" {
+						errors <- err
+					}
+					time.Sleep(10 * time.Millisecond)
+				}
+			}
+		}()
+	}
+	time.Sleep(300 * time.Millisecond)
+	close(done)
+
+	select {
+	case err := <-errors:
+		t.Fatalf("Concurrent access caused error: %v", err)
+	default:
+	}
+}

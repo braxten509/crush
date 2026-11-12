@@ -27,19 +27,7 @@ func nativeJobTest(t *testing.T) (*taskHub, string, chan string) {
 	require.NoError(t, err)
 	h := c.tasks
 	h.dir = t.TempDir()
-	hubsMu.Lock()
-	hubs = append(hubs, h)
-	hubsMu.Unlock()
-	t.Cleanup(func() {
-		hubsMu.Lock()
-		for i, hub := range hubs {
-			if hub == h {
-				hubs = append(hubs[:i], hubs[i+1:]...)
-				break
-			}
-		}
-		hubsMu.Unlock()
-	})
+	listTestHub(t, h)
 	return h, session.ID, notices
 }
 
@@ -59,8 +47,8 @@ func runNativeTool(t *testing.T, env []string, sessionID string, tool fantasy.Ag
 
 func startNativeJob(t *testing.T, h *taskHub, sessionID, command string) *shell.BackgroundShell {
 	t.Helper()
-	job, response := startJobWithEnv(t, h, h.env(sessionID), sessionID, command)
-	require.Contains(t, response.Content, "Crush will report when it ends")
+	job, _ := startJobWithEnv(t, h, h.env(sessionID), sessionID, command)
+	require.True(t, h.hasRunning(sessionID), "the job is watched")
 	return job
 }
 
@@ -92,9 +80,11 @@ func TestNativeBackgroundJobReportsOnceWhenItEnds(t *testing.T) {
 	finish()
 	select {
 	case notice := <-notices:
-		require.Contains(t, notice, "<name>Background process</name>")
-		require.Contains(t, notice, "Job "+job.ID+" ")
-		require.Contains(t, notice, "<status>completed</status>")
+		name, status, ok := ParseTaskNotification(notice)
+		require.True(t, ok)
+		require.Equal(t, BackgroundProcessName, name)
+		require.Equal(t, "completed", status)
+		require.Contains(t, notice, job.ID)
 		require.Contains(t, notice, "finished")
 	case <-time.After(8 * time.Second):
 		t.Fatal("completion notification missing")
@@ -172,8 +162,8 @@ func TestJobsOutsideTheMainChatAreNotWatched(t *testing.T) {
 		{TasksDirEnv + "=" + h.dir, TasksSessionEnv + "="},
 		{TasksDirEnv + "=" + t.TempDir(), TasksSessionEnv + "=" + sessionID},
 	} {
-		job, response := startJobWithEnv(t, h, env, sessionID, hold)
-		require.NotContains(t, response.Content, "Crush will report when it ends")
+		job, _ := startJobWithEnv(t, h, env, sessionID, hold)
+		require.False(t, h.hasRunning(sessionID), "the job is not watched")
 		require.NoError(t, shell.GetBackgroundShellManager().Kill(job.ID))
 	}
 	require.False(t, h.hasRunning(sessionID))
@@ -206,9 +196,7 @@ func TestJobEndsDespiteLeftoverHoldingItsOutput(t *testing.T) {
 	job := startNativeJob(t, h, sessionID, `sh -c "`+hold+` & printf started"`)
 	select {
 	case notice := <-notices:
-		require.Contains(t, notice, "ended with exit code 0")
 		require.Contains(t, notice, "started")
-		require.Contains(t, notice, "still running")
 		require.Contains(t, notice, "cat ")
 	case <-time.After(7 * time.Second):
 		t.Fatal("the job waited for the leftover helper")

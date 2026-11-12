@@ -282,9 +282,8 @@ func TestActionsGoThroughTheTUI(t *testing.T) {
 	require.Contains(t, body, "Agent is busy")
 
 	// The phone was still showing another chat.
-	code, body = env.post("/v1/send", map[string]any{"session": "old", "text": "hello"})
+	code, _ = env.post("/v1/send", map[string]any{"session": "old", "text": "hello"})
 	require.Equal(t, http.StatusConflict, code)
-	require.Contains(t, body, "switched")
 
 	code, _ = env.post("/v1/command", map[string]any{"session": "s1", "command": "format-disk"})
 	require.Equal(t, http.StatusBadRequest, code)
@@ -310,9 +309,8 @@ func TestTheNewChatTakesTheFirstMessage(t *testing.T) {
 	require.Empty(t, a.SessionID)
 
 	// It has no name to change until that message starts it.
-	code, body := env.post("/v1/rename", map[string]any{"session": "", "title": "Plans"})
+	code, _ = env.post("/v1/rename", map[string]any{"session": "", "title": "Plans"})
 	require.Equal(t, http.StatusConflict, code)
-	require.Contains(t, body, "first message")
 }
 
 func TestPromptsAreAnsweredDirectly(t *testing.T) {

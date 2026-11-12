@@ -2,7 +2,9 @@
 crush it should ask me if I want to restart the engine or not"). In the
 sandbox with the real engine, the page does what the update button does when
 its run ends, once for each answer:
-- Keep engines running: the app starts again and joins the same engine;
+- Keep engines running: the app starts again and joins the same engine, and
+  a chat listed open stays open (without the restart hold, the last app out
+  empties the list);
 - Restart engines: the engine stops first (engines_stop), and the app that
   starts next starts a new one.
 
@@ -15,6 +17,7 @@ import harness as H
 from harness import check, finish, probe_eval, wait_for
 
 probe_path, out_dir = sys.argv[1], sys.argv[2]
+KEPT = {"id": "relaunch-kept-0001", "dir": "/tmp/home/proj", "title": "Kept across the restart"}
 
 
 def run(script):
@@ -42,7 +45,7 @@ def restart(stop_engines):
     old = (H.probe_section(probe_path, "connection") or {}).get("client_id")
     run(("await window.crushBridge.invoke('engines_stop', { dirs: [''] });" if stop_engines else "") + """
       await window.crushBridge.invoke('app_restart_hold');
-      setTimeout(() => window.crushBridge.window('relaunch'), 1500);
+      setTimeout(() => window.crushBridge.window('relaunch'), 500);
       return true;
     """)
     # The probe hands its last script to every app that starts: the new app
@@ -70,13 +73,15 @@ def restart(stop_engines):
 
 
 wait_for(probe_path, lambda p: (p.get("connection") or {}).get("state") == "connected", 60)
-time.sleep(1)
 first = engine()
 check(bool(first[0]) and bool(first[1]), f"the app's engine runs ({first})")
 
+H.list_open_chat(KEPT)
 check(restart(False), "Keep engines running: the app starts again")
 kept = engine()
 check(kept == first, f"and joins the same engine ({first} → {kept})")
+ids = H.open_chat_ids()
+check(KEPT["id"] in ids, f"the listed chat is still open after the restart ({ids})")
 
 check(restart(True), "Restart engines: the app starts again")
 new = engine()

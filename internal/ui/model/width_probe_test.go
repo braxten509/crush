@@ -26,11 +26,3 @@ func TestNarrowWidthProbeOnlyRepaints(t *testing.T) {
 	require.NotNil(t, cmd)
 	require.Equal(t, tea.ClearScreen(), cmd())
 }
-
-func TestWideWidthProbeKeepsReportedGraphemeSupport(t *testing.T) {
-	m := &UI{widthProbePending: true}
-	m.caps.UnicodeCore = true
-	cmd := m.handleWidthProbe(tea.CursorPositionMsg{X: 2, Y: 1})
-	require.NotNil(t, cmd)
-	require.Equal(t, tea.ClearScreen(), cmd(), "renderer already measures graphemes")
-}

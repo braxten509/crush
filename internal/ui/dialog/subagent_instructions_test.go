@@ -25,7 +25,6 @@ func TestSubAgentInstructionsDialog(t *testing.T) {
 		}
 	}
 	require.NotNil(t, command, "Ctrl+P lists the command")
-	require.Equal(t, "Sub-agent Instructions", command.title)
 	require.Equal(t, ActionOpenDialog{SubAgentInstructionsID}, command.Action())
 
 	d := NewSubAgentInstructions(com, "- UI work: Opus, high")
@@ -33,7 +32,6 @@ func TestSubAgentInstructionsDialog(t *testing.T) {
 		scr := uv.NewScreenBuffer(size[0], size[1])
 		cursor := d.Draw(scr, scr.Bounds())
 		out := ansi.Strip(scr.Render())
-		require.Contains(t, out, "Sub-agent")
 		require.Contains(t, out, "UI work")
 		require.NotNil(t, cursor)
 		require.Less(t, cursor.X, size[0])

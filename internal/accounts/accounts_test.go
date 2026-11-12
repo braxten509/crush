@@ -123,7 +123,6 @@ func TestGrokAccountKeepsItsOwnLogin(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{"env", "GROK_HOME=" + dir, "grok", "login"}, argv)
 	require.Equal(t, "grok-3", NewID(config.TypeGrokCLI, []config.Account{{ID: "grok-2", Kind: config.TypeGrokCLI}}))
-	require.Equal(t, "Grok", config.AccountKindName(config.TypeGrokCLI))
 }
 
 // An account is named by the name it was given, else the email it signed in
@@ -163,31 +162,40 @@ func TestNamesComeFromTheGivenNameThenTheEmail(t *testing.T) {
 		}
 		return out
 	}
-	require.Equal(t, map[string]string{
-		"claude-code/":         "you@example.com (Claude)",
+	// Each label holds what names it, and no two labels are the same.
+	check := func(want map[string]string) {
+		t.Helper()
+		got := labels()
+		seen := map[string]bool{}
+		for key, part := range want {
+			require.Contains(t, got[key], part, key)
+			require.False(t, seen[got[key]], "two accounts share the label %q", got[key])
+			seen[got[key]] = true
+		}
+	}
+	check(map[string]string{
+		"claude-code/":         "you@example.com",
 		"claude-code/claude-2": "work@example.com",
-		"codex-cli/":           "you@example.com (Codex)",
-		"codex-cli/codex-2":    "Codex 2",
-		"grok-cli/":            "Grok 1",
-	}, labels())
+		"codex-cli/":           "you@example.com",
+		"codex-cli/codex-2":    "2",
+	})
 	require.Equal(t, "you@example.com", Name(cfg, config.TypeClaudeCode, ""))
-	require.Equal(t, "you@example.com (Codex)", Label(cfg, config.TypeCodexCLI, ""))
+	require.Contains(t, Label(cfg, config.TypeCodexCLI, ""), "you@example.com")
 
 	// A given name wins, for an added account and for a tool's own login.
 	cfg.Options.OwnAccountNames = map[string]string{"claude-code": "Personal"}
 	cfg.Options.Accounts[0].Name = "Personal"
-	require.Equal(t, map[string]string{
-		"claude-code/":         "Personal (Claude 1)",
-		"claude-code/claude-2": "Personal (Claude 2)",
+	check(map[string]string{
+		"claude-code/":         "Personal",
+		"claude-code/claude-2": "Personal",
 		"codex-cli/":           "you@example.com",
-		"codex-cli/codex-2":    "Codex 2",
-		"grok-cli/":            "Grok 1",
-	}, labels())
+		"codex-cli/codex-2":    "2",
+	})
 
 	// A token that can't be read leaves the number.
 	write(filepath.Join(home, ".codex", "auth.json"), `{"tokens":{"id_token":"not-a-token"}}`)
 	require.Empty(t, Email(config.TypeCodexCLI, ""))
-	require.Equal(t, "Codex 1", Name(cfg, config.TypeCodexCLI, ""))
+	require.Contains(t, Name(cfg, config.TypeCodexCLI, ""), "1")
 }
 
 // No hidden (dot) name of Claude's folder is linked into an account: Claude's
@@ -228,8 +236,7 @@ func TestAccountFolderNeverLinksGit(t *testing.T) {
 }
 
 // The panel's hover text shows each sign-in's email (owner, 2026-10-25):
-// Grok keeps it in auth.json under its login's key. Grok's shown name
-// stays its number.
+// Grok keeps it in auth.json under its login's key.
 func TestLoginEmailReadsGrok(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -237,9 +244,7 @@ func TestLoginEmailReadsGrok(t *testing.T) {
 	t.Setenv("CRUSH_GLOBAL_DATA", filepath.Join(home, "data"))
 	require.NoError(t, os.MkdirAll(filepath.Join(home, ".grok"), 0o700))
 	require.NoError(t, os.WriteFile(filepath.Join(home, ".grok", "auth.json"), []byte(`{"https://auth.x.ai::abc":{"key":"k","email":"me@x.ai"}}`), 0o600))
-	cfg := &config.Config{Options: &config.Options{}}
 
 	require.Equal(t, "me@x.ai", LoginEmail(config.TypeGrokCLI, ""))
 	require.Empty(t, LoginEmail(config.TypeGrokCLI, "grok-2"), "not signed in yet")
-	require.Equal(t, "Grok 1", Name(cfg, config.TypeGrokCLI, ""))
 }

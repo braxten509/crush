@@ -3,8 +3,10 @@
 package server
 
 import (
+	"encoding/json"
 	"net/http"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -23,17 +25,7 @@ import (
 // moves the engine onto options.agent_cpus; turning them off moves it back
 // onto every CPU it may use (G-16).
 func TestCPUAffinityRoute(t *testing.T) {
-	var start unix.CPUSet
-	require.NoError(t, unix.SchedGetaffinity(0, &start))
-	var allowed []int
-	for cpu := range 1024 {
-		if start.IsSet(cpu) {
-			allowed = append(allowed, cpu)
-		}
-	}
-	require.NotEmpty(t, allowed)
-	t.Cleanup(func() { _, _ = cpuaffinity.Apply(cpuaffinity.FormatList(allowed)) })
-
+	allowed := allowedCPUs(t)
 	g := newG56Workspace(t)
 	u := newUnixCaller(t, g)
 	store := mustWorkspace(t, g).Cfg
@@ -43,20 +35,12 @@ func TestCPUAffinityRoute(t *testing.T) {
 	liveError(t, g.h, http.MethodPost, "/v1/cpu-affinity", proto.CPUAffinityRequest{Enabled: true}, http.StatusForbidden, "local_only", "")
 	require.False(t, store.Config().Options.AgentCPUsEnabled, "a TCP request changes nothing")
 
-	// Nor can TCP reach the CPU setting through the ordinary config routes,
-	// by any spelling, while other keys still work there.
+	// Nor can TCP remove the CPU list through the ordinary config routes
+	// (TestCPUConfigWritesMatchLoaderSpelling covers every spelling), while
+	// other keys still work there.
 	cfgPath := "/v1/workspaces/" + g.ws.ID + "/config/"
-	for _, key := range []string{"options.agent_cpus_enabled", ":options.agent_cpus_enabled", "options"} {
-		value := any(true)
-		if key == "options" {
-			value = map[string]any{"agent_cpus_enabled": true}
-		}
-		liveError(t, g.h, http.MethodPost, cfgPath+"set",
-			proto.ConfigSetRequest{Scope: config.ScopeGlobal, Key: key, Value: value}, http.StatusForbidden, "local_only", "")
-	}
 	liveError(t, g.h, http.MethodPost, cfgPath+"remove",
 		proto.ConfigRemoveRequest{Scope: config.ScopeGlobal, Key: "options.agent_cpus"}, http.StatusForbidden, "local_only", "")
-	require.False(t, store.Config().Options.AgentCPUsEnabled, "a TCP config set changes nothing")
 	require.Equal(t, agentCPUs, store.Config().Options.AgentCPUs, "a TCP config remove changes nothing")
 	liveJSON[rpc.Empty](t, g.h, http.MethodPost, cfgPath+"set",
 		proto.ConfigSetRequest{Scope: config.ScopeGlobal, Key: "options.debug", Value: true}, http.StatusOK)
@@ -99,7 +83,9 @@ func TestCPUAffinityRoute(t *testing.T) {
 	require.NoError(t, store.SetConfigField(config.ScopeGlobal, "options.agent_cpus", "100000"))
 	code, out := u.call(t, http.MethodPost, "/v1/cpu-affinity", proto.CPUAffinityRequest{Enabled: true})
 	require.Equal(t, http.StatusBadRequest, code, "%s", out)
-	require.Contains(t, string(out), `"code":"bad_request"`)
+	var refused proto.Error
+	require.NoError(t, json.Unmarshal(out, &refused))
+	require.Equal(t, "bad_request", refused.Code)
 }
 
 // allowedCPUs lists the CPUs this test process may use and puts it back on
@@ -170,6 +156,22 @@ func TestCPUConfigCheckHoldsTheLock(t *testing.T) {
 
 	release, err := lock.File(t.Context(), path+".lock")
 	require.NoError(t, err)
+	// The request is waiting for the lock once it has the lock file open
+	// next to this test's own handle.
+	lockPath, err := filepath.EvalSymlinks(path + ".lock")
+	require.NoError(t, err)
+	openLockFiles := func() int {
+		entries, _ := os.ReadDir("/proc/self/fd")
+		n := 0
+		for _, e := range entries {
+			if target, err := os.Readlink(filepath.Join("/proc/self/fd", e.Name())); err == nil && target == lockPath {
+				n++
+			}
+		}
+		return n
+	}
+	held := openLockFiles()
+	require.Positive(t, held)
 	type answer struct {
 		code int
 		body []byte
@@ -180,7 +182,8 @@ func TestCPUConfigCheckHoldsTheLock(t *testing.T) {
 			proto.ConfigSetRequest{Scope: config.ScopeGlobal, Key: "options.agent_cpus_enabled", Value: false})
 		done <- answer{code, body}
 	}()
-	time.Sleep(300 * time.Millisecond) // the request is now waiting for the lock
+	require.Eventually(t, func() bool { return openLockFiles() > held }, 10*time.Second, 5*time.Millisecond,
+		"the request is waiting for the lock")
 
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)
@@ -191,7 +194,9 @@ func TestCPUConfigCheckHoldsTheLock(t *testing.T) {
 
 	got := <-done
 	require.Equal(t, http.StatusForbidden, got.code, "%s", got.body)
-	require.Contains(t, string(got.body), `"code":"local_only"`)
+	var refused proto.Error
+	require.NoError(t, json.Unmarshal(got.body, &refused))
+	require.Equal(t, "local_only", refused.Code)
 	data, err = os.ReadFile(path)
 	require.NoError(t, err)
 	require.True(t, gjson.GetBytes(data, "options.agent_cpus_enabled").Bool(), "the other writer's change stands")

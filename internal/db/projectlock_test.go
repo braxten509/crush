@@ -83,15 +83,15 @@ func TestEngineWaitsForPreviousEngine(t *testing.T) {
 
 	previous, err := LockProject(t.Context(), dataDir, ProjectLockEngine, 0)
 	require.NoError(t, err)
-	time.AfterFunc(time.Second, func() { _ = previous() })
+	time.AfterFunc(200*time.Millisecond, func() { _ = previous() })
 
 	start := time.Now()
-	release, err := LockProject(t.Context(), dataDir, ProjectLockEngine, 5*time.Second)
+	release, err := LockProject(t.Context(), dataDir, ProjectLockEngine, 2*time.Second)
 	require.NoError(t, err, "the second engine must get the lock once the first lets go")
 	t.Cleanup(func() { _ = release() })
 	elapsed := time.Since(start)
-	require.GreaterOrEqual(t, elapsed, 900*time.Millisecond, "it got the lock only after the holder let go")
-	require.Less(t, elapsed, 5*time.Second)
+	require.GreaterOrEqual(t, elapsed, 150*time.Millisecond, "it got the lock only after the holder let go")
+	require.Less(t, elapsed, 2*time.Second)
 }
 
 // TestEngineOwnerInfoHasKind proves the engine records itself with

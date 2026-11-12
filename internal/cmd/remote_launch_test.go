@@ -56,5 +56,5 @@ func TestLauncherTargetDesktop(t *testing.T) {
 	setTarget("desktop")
 	require.NoError(t, os.Remove(desktop))
 	_, err = launch("launch-4")
-	require.EqualError(t, err, "The Crush desktop app isn't installed on this computer")
+	require.Error(t, err)
 }

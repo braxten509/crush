@@ -337,7 +337,7 @@
           <Icon name="folder-filled" size={12} class="folder-icon" />
           <span class="folder-name" title={group.dir}>{group.label}</span>
           {#if group.rows.length === 0 && group.terminals.length === 0 && todosIn(group.dir).length === 0}
-            <button class="folder-button folder-drop" type="button" aria-label="Remove {group.label}" title="Remove folder" onclick={() => dropFolder(group.dir)}>
+            <button class="folder-button folder-drop" type="button" data-folder-drop={group.dir} aria-label="Remove {group.label}" title="Remove folder" onclick={() => dropFolder(group.dir)}>
               <Icon name="close" size={12} frame={30} />
             </button>
           {/if}
@@ -424,7 +424,7 @@
   {/if}
 
   <!-- Settings without the Ctrl+P menu (owner, 2026-10-19). -->
-  <button class="settings" type="button" onclick={() => openDialog("settings")}>
+  <button class="settings" type="button" data-testid="open-settings" onclick={() => openDialog("settings")}>
     <Icon name="gear" size={16} />
     <span class="label">Settings</span>
   </button>

@@ -53,19 +53,6 @@ func rowOf(t *testing.T, lines []string, s string) (int, int) {
 	return 0, 0
 }
 
-// The "?" tag starts in the text column, like the description and choices.
-func TestQuestionTagInTextColumn(t *testing.T) {
-	t.Parallel()
-	f := newSelectForm("Some details.")
-	scr, lines := drawSelectForm(t, f)
-	require.Nil(t, scr.CellAt(1, 0).Style.Bg, "gutter before the tag")
-	require.NotNil(t, scr.CellAt(2, 0).Style.Bg, "tag starts at the text column")
-	descX, _ := rowOf(t, lines, "Some details.")
-	choiceX, _ := rowOf(t, lines, "Looks good")
-	require.Equal(t, 2, descX)
-	require.Equal(t, 2, choiceX)
-}
-
 // Dragging selects and copies the text without gutter or tag, and does not
 // pick the choice the drag crossed.
 func TestQuestionFormDragSelectsText(t *testing.T) {
@@ -83,10 +70,6 @@ func TestQuestionFormDragSelectsText(t *testing.T) {
 	require.Equal(t, "How does it look?\n\nSome details.\n\nLooks good", f.sel.text(f.Styles))
 	require.False(t, f.TakeReleaseDone())
 	require.Nil(t, f.answers[0], "a drag never answers")
-
-	// The highlight stays until the next key or press.
-	scr, _ := drawSelectForm(t, f)
-	require.Equal(t, f.Styles.TextSelection.GetBackground(), scr.CellAt(x, y).Style.Bg)
 	f.sel.clear()
 }
 

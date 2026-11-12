@@ -379,11 +379,6 @@ func role(t *testing.T, msgs []message.Message, r message.MessageRole, n int) me
 	return message.Message{}
 }
 
-const (
-	writtenCopyIntro = "This conversation started before you joined"
-	resumeIntro      = "Since your last reply"
-)
-
 // The first send in a branch of a Claude chat forks Claude's session at the
 // cut reply's own ID, and later sends resume the fork.
 func TestClaudeForkArgs(t *testing.T) {
@@ -399,7 +394,7 @@ func TestClaudeForkArgs(t *testing.T) {
 	require.Equal(t, []string{"--resume cs1 --fork-session --resume-session-at u1"}, forkFlags(argv(calls)))
 	prompt := promptText(t, calls)
 	require.Contains(t, prompt, "Third")
-	require.NotContains(t, prompt, writtenCopyIntro, "the fork needs no written copy")
+	require.NotContains(t, prompt, handoffWrittenCopyIntro, "the fork needs no written copy")
 	require.NotContains(t, prompt, "Second", "the fork keeps nothing after the cut")
 	require.Equal(t, "cfork2", r.model.Links.Get(branch, config.TypeClaudeCode).Native)
 
@@ -457,11 +452,10 @@ func TestCodexForkAtLastWholeTurn(t *testing.T) {
 	note := prompt[strings.Index(prompt, branchNoteIntro):]
 	require.Equal(t, 1, strings.Count(note, "Second"), "the cut turn's prompt goes in once")
 	require.Equal(t, 1, strings.Count(note, "Checking 2."), "the cut reply goes in once")
-	require.Equal(t, 1, strings.Count(note, "<- bash"), "the cut reply's command result goes in once")
 	require.NotContains(t, note, "First", "the whole turn is in the fork, not the note")
 	require.NotContains(t, prompt, "Reply 1.")
 	require.NotContains(t, prompt, "Reply 2.", "the source's later reply is not the branch's")
-	require.NotContains(t, prompt, writtenCopyIntro)
+	require.NotContains(t, prompt, handoffWrittenCopyIntro)
 	require.Equal(t, "thf2", r.model.Links.Get(branch, config.TypeCodexCLI).Native)
 }
 
@@ -489,7 +483,7 @@ func TestGrokForkPromptIndex(t *testing.T) {
 	require.Empty(t, requests(t, calls, "session/new"))
 	prompt := promptText(t, calls)
 	require.NotContains(t, prompt, branchNoteIntro, "a cut at a turn's end needs no note")
-	require.NotContains(t, prompt, writtenCopyIntro)
+	require.NotContains(t, prompt, handoffWrittenCopyIntro)
 	require.NotContains(t, prompt, "Third")
 
 	// The branch counts the fork's prompts on: its reply's marker is 3.
@@ -536,7 +530,7 @@ func TestMissingMarkerForksAtLastMarked(t *testing.T) {
 	calls = r.calls()
 	require.Empty(t, requests(t, calls, "_x.ai/session/fork"))
 	require.Len(t, requests(t, calls, "session/new"), 1)
-	require.Contains(t, promptText(t, calls), writtenCopyIntro)
+	require.Contains(t, promptText(t, calls), handoffWrittenCopyIntro)
 }
 
 // OpenCode's fork could not be checked live, so it has none: its branch
@@ -556,7 +550,7 @@ func TestOpenCodeForkOrNone(t *testing.T) {
 	require.Empty(t, requests(t, calls, "_x.ai/session/fork"))
 	require.Empty(t, requests(t, calls, "session/fork"))
 	prompt := promptText(t, calls)
-	require.Contains(t, prompt, writtenCopyIntro)
+	require.Contains(t, prompt, handoffWrittenCopyIntro)
 	require.Contains(t, prompt, "Reply 1.")
 	require.NotContains(t, prompt, "Second")
 }
@@ -576,7 +570,7 @@ func TestAGYWrittenCopy(t *testing.T) {
 	require.Len(t, args, 1)
 	require.NotContains(t, args[0], "--conversation", "no session is resumed or forked")
 	prompt := promptText(t, calls)
-	require.Contains(t, prompt, writtenCopyIntro)
+	require.Contains(t, prompt, handoffWrittenCopyIntro)
 	require.Contains(t, prompt, "Reply 1.")
 	require.NotContains(t, prompt, "Second")
 }
@@ -596,7 +590,7 @@ func TestAGYLostConversationKeepsTurnNotes(t *testing.T) {
 	require.Len(t, argv(calls), 2, "the resume fails, then a fresh conversation runs")
 	retry := slices.IndexFunc(calls[1:], func(c forkCall) bool { return c.Args != nil }) + 1
 	prompt := promptText(t, calls[retry:])
-	require.Contains(t, prompt, writtenCopyIntro)
+	require.Contains(t, prompt, handoffWrittenCopyIntro)
 	require.Contains(t, prompt, "<crush_memory_warning>")
 }
 
@@ -615,7 +609,7 @@ func TestForkFailureFallsBack(t *testing.T) {
 	require.Len(t, requests(t, calls, "thread/start"), 1, "the written copy starts a new thread")
 	require.Empty(t, requests(t, calls, "thread/resume"))
 	prompt := promptText(t, calls)
-	require.Contains(t, prompt, writtenCopyIntro)
+	require.Contains(t, prompt, handoffWrittenCopyIntro)
 	require.Contains(t, prompt, "Reply 1.")
 	require.NotContains(t, prompt, "Second")
 

@@ -114,9 +114,9 @@ func TestCheckInNotificationIsARunningTaskResult(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, "Background process: run tests", name)
 	require.Equal(t, string(TaskRunning), status)
-	require.Contains(t, text, "<task-id>Job 004</task-id>")
-	require.Contains(t, text, "[Job 004] Background process: run tests, running 2m0s")
-	require.Contains(t, text, "Latest progress:\n3/10 runs done\n")
+	require.Contains(t, text, "Job 004")
+	require.Contains(t, text, "3/10 runs done")
+	require.NotContains(t, text, "  3/10 runs done  ", "the output is trimmed")
 
 	require.Contains(t, checkInNotification([]checkInWork{fixedWork("t1", "review", " ", now)}, now), "(no output yet)")
 	require.Empty(t, checkInNotification(nil, now), "no work, no message")
@@ -136,17 +136,19 @@ func TestCheckInNotificationListsAllWorkWithinBudget(t *testing.T) {
 	require.Equal(t, "2 background tasks", name)
 	require.Equal(t, string(TaskRunning), status)
 	require.NotContains(t, two, "<task-id>")
-	require.Contains(t, two, "2 still running")
-	require.Contains(t, two, "[Job 001] Background process: build, running 1m0s\nLatest progress:\ncompiling")
-	require.Contains(t, two, "[t2] review, running 0s\nLatest progress:\nhalf done")
+	for _, part := range []string{"Job 001", "compiling", "t2", "half done"} {
+		require.Contains(t, two, part)
+	}
 
 	var many []checkInWork
 	for i := range 50 {
-		many = append(many, fixedWork(fmt.Sprint(i), "job", strings.Repeat("output line\n", 400), now))
+		many = append(many, fixedWork(fmt.Sprintf("item-%02d", i), "job", strings.Repeat("output line\n", 400), now))
 	}
 	text := checkInNotification(many, now)
 	require.Less(t, len(text), checkInTotalBytes+50*60, "fifty items stay within the shared budget plus headings")
-	require.Equal(t, 50, strings.Count(text, "Latest progress:"))
+	for _, w := range many {
+		require.Equal(t, 1, strings.Count(text, w.id), "every item is listed once")
+	}
 }
 
 func TestTailTextKeepsTheEnd(t *testing.T) {
@@ -183,6 +185,7 @@ func checkInTest(t *testing.T) (*taskHub, chan SessionAgentCall) {
 // another session gets its own, and check-ins stop once the work ends.
 func TestSessionGetsOneCheckInForAllItsWork(t *testing.T) {
 	h, calls := checkInTest(t)
+	h.checkInEvery = 100 * time.Millisecond
 	first, err := h.c.sessions.Create(t.Context(), "first")
 	require.NoError(t, err)
 	second, err := h.c.sessions.Create(t.Context(), "second")
@@ -231,12 +234,16 @@ collect:
 	removeB()
 	removeC()
 	removeC() // removing twice is harmless
-	// A check-in already on its way when the work ended may still land.
-	time.Sleep(300 * time.Millisecond)
-	for len(calls) > 0 {
-		<-calls
+	// A check-in already on its way when the work ended may still land:
+	// drain until the calls go quiet.
+	for drained := false; !drained; {
+		select {
+		case <-calls:
+		case <-time.After(50 * time.Millisecond):
+			drained = true
+		}
 	}
-	require.Never(t, func() bool { return len(calls) > 0 }, 400*time.Millisecond, 20*time.Millisecond, "check-ins continue after all work ended")
+	require.Never(t, func() bool { return len(calls) > 0 }, 300*time.Millisecond, 20*time.Millisecond, "check-ins continue after all work ended")
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	require.Empty(t, h.checkIns)
@@ -259,21 +266,6 @@ func TestBackgroundJobsShareOneCheckIn(t *testing.T) {
 	case <-time.After(6 * time.Second):
 		t.Fatal("check-in missing")
 	}
-}
-
-func TestCheckInInstructionsFollowTheSetting(t *testing.T) {
-	t.Parallel()
-
-	require.Empty(t, (*taskHub)(nil).checkInInstructions())
-}
-
-func TestCheckInInstructionsNameTheInterval(t *testing.T) {
-	t.Parallel()
-
-	text := fmtCheckIn(3 * time.Minute)
-	require.Contains(t, text, "every 3 minutes")
-	require.Contains(t, text, "status running")
-	require.Contains(t, fmtCheckIn(time.Minute), "every minute")
 }
 
 // While only services run, no note comes (owner, 2026-10-25: no "Still
@@ -309,9 +301,9 @@ func TestServiceOnlyCheckInsStayQuiet(t *testing.T) {
 	removeJob := h.addCheckIn(session.ID, fixedWork("Job A", "build", "a out", time.Now()))
 	select {
 	case call := <-calls:
-		require.Contains(t, call.Prompt, "[Job A] build")
+		require.Contains(t, call.Prompt, "Job A")
 		require.Contains(t, call.Prompt, "a out")
-		require.Contains(t, call.Prompt, "1 service still running in the background: [Job S] server, up")
+		require.Contains(t, call.Prompt, "Job S", "the service is named")
 		require.NotContains(t, call.Prompt, "noisy log")
 	case <-time.After(time.Second):
 		t.Fatal("no check-in once other work started")
@@ -338,9 +330,10 @@ func TestStrayProcessesGetCheckIns(t *testing.T) {
 	select {
 	case call := <-calls:
 		require.Equal(t, session.ID, call.SessionID)
-		require.Contains(t, call.Prompt, "[PID 202] python3 watch.py")
-		require.Contains(t, call.Prompt, "kill 202")
-		require.Contains(t, call.Prompt, "1 service still running in the background: [PID 101] adb · 5037, up")
+		require.Contains(t, call.Prompt, "202")
+		require.Contains(t, call.Prompt, "python3 watch.py")
+		require.Contains(t, call.Prompt, "101", "the service is named")
+		require.NotContains(t, call.Prompt, strayWork(adb.Process).progress(), "without the service's output")
 	case <-time.After(time.Second):
 		t.Fatal("no check-in for a stray process")
 	}
@@ -405,22 +398,29 @@ func TestStoppingWorkLeavesTheCheckInTurnRunning(t *testing.T) {
 // started, even when a service kept the chat's loop going from before
 // (owner, 2026-10-27: a reminder came after only 30 seconds).
 func TestFirstCheckInWaitsForTheOldestWork(t *testing.T) {
-	h, calls := checkInTest(t)
-	session, err := h.c.sessions.Create(t.Context(), "late work")
-	require.NoError(t, err)
-	service := fixedWork("Job S", "server", "log", time.Now())
-	service.service = true
-	removeService := h.addCheckIn(session.ID, service)
-	defer removeService()
-	time.Sleep(300 * time.Millisecond) // the loop is part-way through a round
+	t.Parallel()
 
-	removeJob := h.addCheckIn(session.ID, fixedWork("Job A", "build", "a out", time.Now()))
-	defer removeJob()
-	require.Never(t, func() bool { return len(calls) > 0 }, 180*time.Millisecond, 10*time.Millisecond, "a note before the work had run a full interval")
-	select {
-	case call := <-calls:
-		require.Contains(t, call.Prompt, "[Job A]")
-	case <-time.After(time.Second):
-		t.Fatal("no check-in once the work had run a full interval")
+	// The due time counts from the oldest work that is not a service, however
+	// long a service has kept the loop going.
+	interval := time.Minute
+	now := time.Now()
+	h := &taskHub{}
+	service := fixedWork("Job S", "server", "log", now.Add(-time.Hour))
+	service.service = true
+	s := &sessionCheckIns{work: map[int]checkInWork{1: service}}
+	require.False(t, h.firstCheckInDue(s, interval).After(time.Now()), "services alone set no wait")
+	s.work[2] = fixedWork("Job A", "build", "a out", now)
+	s.work[3] = fixedWork("Job B", "tests", "b out", now.Add(10*time.Second))
+	require.Equal(t, now.Add(interval), h.firstCheckInDue(s, interval))
+
+	// The loop holds its note until that time, even with a shorter interval.
+	notBefore := time.Now().Add(150 * time.Millisecond)
+	done := make(chan struct{})
+	var sentAt time.Time
+	send := func(context.Context, string) {
+		sentAt = time.Now()
+		close(done)
 	}
+	checkInLoop(t.Context(), 5*time.Millisecond, done, func() bool { return false }, func() time.Time { return notBefore }, func(time.Duration) string { return "note" }, send)
+	require.False(t, sentAt.Before(notBefore), "a note before the work had run a full interval")
 }

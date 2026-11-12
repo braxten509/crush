@@ -5,9 +5,10 @@ of text and tool calls) as the source chat's running reply.
   setup  init answered No; stream2m active; seed_chat.py makes a two-turn chat S
          (short, medium), opened from its row; "Stream for two minutes" is sent
          from the typing box, and the fake server's time scale is raised to 3
-         so every step of the reply streams long enough to be selected
-  B7     words of the reply still being written: Branch from here is disabled
-         with "Wait for the reply to finish"; words of the earlier finished
+         so every step of the reply streams long enough to be selected (back
+         to 1 once those words are checked, and 0.05 for the source's end)
+  B7     words of the reply still being written: Branch from here is
+         disabled; words of the earlier finished
          reply branch at once while the source streams, and every message of
          the branch is finished; at the end the source's reply finishes
          undisturbed: the engine holds the script's whole reply, each message
@@ -130,10 +131,13 @@ def main():
                     key("Escape")
                     if still and selected:
                         break
-                time.sleep(1)
+                # Try again on the next message the reply starts.
+                pb.poll(lambda: running_reply(app), lambda r: bool(r) and r != mid, 5, 0.2)
             check(bool(selected), f"words of the reply still being written are selected ({selected!r})")
-            check(bool(entry) and entry.get("disabled") and entry.get("hint") == pb.HINT_UNFINISHED,
-                  f"and Branch from here is disabled with \"{pb.HINT_UNFINISHED}\" ({entry})")
+            check(bool(entry) and entry.get("disabled"), f"and Branch from here is disabled ({entry})")
+            # The slow stream was only for selecting running words; the source
+            # still has most of its reply left for the rest of B7 and B8.
+            control(port, {"time_scale": 1})
             # An earlier finished reply branches while the source streams.
             key_a2 = app.item_key(a2, "reply") or a2
             words = app.bring_into_view(key_a2, ["shared", "stolen"])

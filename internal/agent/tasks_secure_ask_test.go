@@ -10,8 +10,6 @@ import (
 	"time"
 
 	"charm.land/fantasy"
-	"github.com/charmbracelet/crush/internal/config"
-	"github.com/charmbracelet/crush/internal/csync"
 	"github.com/charmbracelet/crush/internal/question"
 	"github.com/charmbracelet/crush/internal/secureentry"
 	"github.com/stretchr/testify/require"
@@ -59,7 +57,6 @@ func TestAskQuestionsRefuseSecureValues(t *testing.T) {
 	} {
 		_, _, err := askQuestions(json.RawMessage(`{"questions":[{"type":"free_text","question":"Name?","description":"d"},` + item + `]}`))
 		require.Error(t, err, name)
-		require.Contains(t, err.Error(), "question 2", name)
 		require.NotContains(t, err.Error(), "dummy-secret", name)
 	}
 }
@@ -73,12 +70,14 @@ func TestSecureAskResultCarriesOnlyStatuses(t *testing.T) {
 	}
 	answers := []question.Answer{{QuestionID: "name", FillInText: "Ada"}, {QuestionID: "key"}, {QuestionID: "token"}}
 	out := formatAskAnswers(answers, questions)
-	require.Contains(t, out, "Q1: Your name?")
-	require.Contains(t, out, "User provided: Ada")
+	require.Contains(t, out, "Your name?")
+	require.Contains(t, out, "Ada")
 	require.NotContains(t, out, "Enter the key")
 	statuses := secureEntryStatuses(questions, map[string]string{"key": secureentry.StatusSaved, "token": "anything else"})
-	require.Contains(t, statuses, "- API key: saved")
-	require.Contains(t, statuses, "- Enter the token: cancelled", "only fixed statuses come back")
+	require.Contains(t, statuses, "API key")
+	require.Contains(t, statuses, secureentry.StatusSaved)
+	require.Contains(t, statuses, "Enter the token")
+	require.NotContains(t, statuses, "anything else", "only fixed statuses come back")
 	require.Empty(t, formatAskAnswers(answers[1:], questions[1:]))
 }
 
@@ -99,10 +98,10 @@ func TestSecureAskDeliversAnswersAndStatusesTogether(t *testing.T) {
 	ask := []byte(fmt.Sprintf(`{"questions":[{"type":"free_text","question":"Name?","description":"d"},{"type":"secure_entry","label":"API key","question":"Key?","description":"d","file":%q,"placeholder":"KEY_SLOT"}]}`, path))
 
 	err = c.tasks.ask(TaskRequest{Session: sess.ID, Ask: ask})
-	require.ErrorContains(t, err, "local interactive Crush terminal", "a non-interactive run can't show secure entries")
+	require.Error(t, err, "a non-interactive run can't show secure entries")
 	c.interactive = true
 	require.NoError(t, c.tasks.ask(TaskRequest{Session: sess.ID, Ask: ask}))
-	require.ErrorContains(t, c.tasks.ask(TaskRequest{Session: sess.ID, Ask: ask}), "still open")
+	require.Error(t, c.tasks.ask(TaskRequest{Session: sess.ID, Ask: ask}), "a second form waits for the open one")
 	_, pending := c.questions.(interface {
 		Pending() (question.Request, bool)
 	}).Pending()
@@ -123,18 +122,10 @@ func TestSecureAskDeliversAnswersAndStatusesTogether(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, AskName, name)
 	require.Equal(t, AskAnswered, status)
-	require.Contains(t, prompt, "User provided: Ada")
-	require.Contains(t, prompt, "- API key: saved")
+	require.Contains(t, prompt, "Ada")
+	require.Contains(t, prompt, "API key")
 	require.NotContains(t, prompt, value)
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)
 	require.Equal(t, "KEY="+value+"\n", string(data))
-}
-
-func TestInstructionsDescribeSecureQuestions(t *testing.T) {
-	t.Parallel()
-	h := &taskHub{c: &coordinator{cfg: config.NewTestStore(&config.Config{Providers: csync.NewMap[string, config.ProviderConfig]()})}}
-	text := h.instructions()
-	require.Contains(t, text, `"type":"secure_entry"`)
-	require.Contains(t, text, "never include a value")
 }

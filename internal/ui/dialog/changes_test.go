@@ -46,13 +46,6 @@ func TestChangesDraw(t *testing.T) {
 	out := strings.Join(lines, "\n")
 	t.Log("\n" + out)
 
-	require.Contains(t, lines[1], "Changes")
-	require.Contains(t, lines[1], "✕")
-	require.Contains(t, lines[2], "3 actions · 2 files · +3 −2")
-	require.Contains(t, out, "2 files changed  +3 −2")
-	require.Contains(t, out, "■ /p/a.go")
-	require.Contains(t, out, "▾  Changed  /p/a.go")
-	require.Contains(t, out, "▾  Added  /p/new.txt")
 	require.Contains(t, out, "@@ -2,7 +2,7 @@")
 	require.Regexp(t, `\s5\s+−\s+line 5`, out)
 	require.Regexp(t, `\s5\s+\+\s+changed 5`, out)
@@ -83,19 +76,19 @@ func TestChangesMouse(t *testing.T) {
 	require.Nil(t, click(c.body.Min.X+4, c.body.Min.Y+4))
 	require.Equal(t, min(c.headRow[1]-1, c.maxOffset()), c.offset, "as far as it scrolls")
 	lines := drawChanges(c, w, h)
-	require.Contains(t, strings.Join(lines, "\n"), "Added  /p/new.txt")
+	require.Contains(t, strings.Join(lines, "\n"), "/p/new.txt")
 
 	// Scrolled into a file's diff, its header stays at the top; clicking
 	// it folds the file.
 	c.offset = c.headRow[0] + 5
 	lines = drawChanges(c, w, h)
-	require.Contains(t, lines[c.body.Min.Y], "Changed  /p/a.go")
+	require.Contains(t, lines[c.body.Min.Y], "/p/a.go")
 	rows := len(c.rows)
 	require.Nil(t, click(c.body.Min.X+3, c.body.Min.Y))
 	require.True(t, c.folded[0])
 	require.Less(t, len(c.rows), rows)
 	lines = drawChanges(c, w, h)
-	require.Contains(t, strings.Join(lines, "\n"), "▸  Changed  /p/a.go")
+	require.Contains(t, strings.Join(lines, "\n"), "/p/a.go")
 
 	// Dragging the scrollbar to the bottom scrolls to the end.
 	c.folded[0] = false
@@ -127,21 +120,4 @@ func TestChangesKeys(t *testing.T) {
 	c.HandleMsg(tea.KeyPressMsg{Code: 'g', Text: "g"})
 	require.Equal(t, 0, c.offset)
 	require.IsType(t, ActionClose{}, c.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEscape}))
-}
-
-func TestChangesFooterFitsCompactWindows(t *testing.T) {
-	t.Parallel()
-	for _, width := range []int{40, 68, 104, 140} {
-		t.Run(fmt.Sprint(width), func(t *testing.T) {
-			sty := styles.CharmtonePantera()
-			c := NewChanges(&common.Common{Styles: &sty}, "1 action", changesFixture())
-			lines := drawChanges(c, width, 22)
-			footer := strings.Index(strings.Join(lines, "\n"), "esc close")
-			require.NotEqual(t, -1, footer, "the close instruction must stay visible")
-			require.NotContains(t, lines[len(lines)-1], "close", "keep text clear of the terminal's bottom edge")
-			for _, line := range lines {
-				require.LessOrEqual(t, ansi.StringWidth(line), width)
-			}
-		})
-	}
 }

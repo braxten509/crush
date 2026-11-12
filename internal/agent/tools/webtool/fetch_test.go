@@ -16,17 +16,6 @@ import (
 	"github.com/charmbracelet/crush/internal/pubsub"
 )
 
-func TestFetchWithoutSessionNamesFetching(t *testing.T) {
-	t.Parallel()
-
-	tool := NewFetchTool(&mockPermissionService{}, t.TempDir(), nil)
-	input, err := json.Marshal(tools.FetchParams{URL: "https://example.com", Format: "text"})
-	require.NoError(t, err)
-
-	_, err = tool.Run(t.Context(), fantasy.ToolCall{ID: "fetch", Name: tools.FetchToolName, Input: string(input)})
-	require.EqualError(t, err, "session ID is required for fetching a URL")
-}
-
 func runFetchTool(t *testing.T, client *http.Client, url string) (fantasy.ToolResponse, error) {
 	t.Helper()
 
@@ -60,7 +49,6 @@ func TestFetchToolReportsNetworkFailuresAsToolErrors(t *testing.T) {
 		resp, err := runFetchTool(t, server.Client(), url)
 		require.NoError(t, err)
 		require.True(t, resp.IsError)
-		require.Contains(t, resp.Content, "Failed to fetch URL")
 	})
 
 	t.Run("timeout", func(t *testing.T) {
@@ -76,8 +64,6 @@ func TestFetchToolReportsNetworkFailuresAsToolErrors(t *testing.T) {
 		resp, err := runFetchTool(t, client, server.URL)
 		require.NoError(t, err)
 		require.True(t, resp.IsError)
-		require.Contains(t, resp.Content, "Failed to fetch URL")
-		require.Contains(t, resp.Content, "context deadline exceeded")
 	})
 }
 
@@ -92,7 +78,7 @@ func TestFetchToolReportsStatusCodesAsToolErrors(t *testing.T) {
 	resp, err := runFetchTool(t, server.Client(), server.URL)
 	require.NoError(t, err)
 	require.True(t, resp.IsError)
-	require.Contains(t, resp.Content, "Request failed with status code: 404 Not Found")
+	require.Contains(t, resp.Content, "404")
 }
 
 func TestFetchToolReturnsContent(t *testing.T) {

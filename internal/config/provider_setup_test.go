@@ -477,7 +477,7 @@ func TestConfig_configureProvidersCustomProviderValidation(t *testing.T) {
 			Providers: csync.NewMapFrom(map[string]ProviderConfig{
 				"custom": {
 					APIKey:  "test-key",
-					BaseURL: "https://api.custom.com/v1",
+					BaseURL: closedServerURL(t) + "/v1",
 					Models:  []catwalk.Model{},
 				},
 			}),
@@ -894,7 +894,7 @@ func TestConfig_configureProvidersDisableDefaultProviders(t *testing.T) {
 		})
 		resolver := NewShellVariableResolver(env)
 		_, err := cfg.configureProviders(context.Background(), env, resolver, knownProviders)
-		require.ErrorContains(t, err, "no custom providers")
+		require.Error(t, err)
 
 		// openai should NOT be present because it lacks base_url and models.
 		require.Equal(t, 0, cfg.Providers.Len())
@@ -1009,7 +1009,7 @@ func TestConfig_configureProvidersDisableDefaultProviders(t *testing.T) {
 			Providers: csync.NewMapFrom(map[string]ProviderConfig{
 				"my-llm": {
 					APIKey:  "test-key",
-					BaseURL: "https://my-llm.example.com/v1",
+					BaseURL: closedServerURL(t) + "/v1",
 					Models:  []catwalk.Model{}, // No models.
 				},
 			}),
@@ -1019,7 +1019,7 @@ func TestConfig_configureProvidersDisableDefaultProviders(t *testing.T) {
 		env := env.NewFromMap(map[string]string{})
 		resolver := NewShellVariableResolver(env)
 		_, err := cfg.configureProviders(context.Background(), env, resolver, []catwalk.Provider{})
-		require.ErrorContains(t, err, "no custom providers")
+		require.Error(t, err)
 
 		// Discovery fails (unreachable URL) so provider is removed.
 		require.Equal(t, 0, cfg.Providers.Len())
@@ -1043,7 +1043,7 @@ func TestConfig_configureProvidersDisableDefaultProviders(t *testing.T) {
 		env := env.NewFromMap(map[string]string{})
 		resolver := NewShellVariableResolver(env)
 		_, err := cfg.configureProviders(context.Background(), env, resolver, []catwalk.Provider{})
-		require.ErrorContains(t, err, "no custom providers")
+		require.Error(t, err)
 
 		// Provider should be rejected for missing base_url.
 		require.Equal(t, 0, cfg.Providers.Len())

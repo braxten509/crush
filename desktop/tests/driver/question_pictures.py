@@ -44,8 +44,8 @@ def run(script):
 STATE = """
   const pic = document.querySelector('[data-probe="question-picture"]');
   const img = pic?.querySelector('img');
-  const rows = [...document.querySelectorAll('.choice')].map((c) => { const r = c.getBoundingClientRect();
-    return { text: c.innerText.trim().split('\\n')[0].toLowerCase(), x: r.x + 40, y: r.y + r.height / 2, cursor: c.classList.contains('cursor') }; });
+  const rows = [...document.querySelectorAll('[data-probe="question-form"] [role="option"]')].map((c) => { const r = c.getBoundingClientRect();
+    return { text: c.innerText.trim().split('\\n')[0].toLowerCase(), x: r.x + 40, y: r.y + r.height / 2, cursor: c.getAttribute('aria-selected') === 'true' }; });
   return { img: img ? img.alt.replace('.png', '') : null, rows };
 """
 
@@ -82,7 +82,7 @@ for step, color in enumerate(["green", "blue", "red", "green", "blue"]):
     got = shown(color)
     round_ = "back on it" if step >= 2 else "first visit"
     check(got.get("img") == color, f"hovering {color} ({round_}) shows its picture ({got.get('img')})")
-    time.sleep(0.6)
+    time.sleep(0.4)
     later = run(STATE) or {}
     check(later.get("img") == color, f"and {color}'s picture stays ({later.get('img')})")
 shot(out_dir, "hovered")

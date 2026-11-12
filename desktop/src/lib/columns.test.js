@@ -19,11 +19,11 @@ describe("columns", () => {
   });
 
   it("drags the left divider right to widen the chat list", () => {
-    expect(dragColumn(COLUMN_DEFAULTS, "left", 40)).toEqual({ left: 429, right: 453 });
+    expect(dragColumn(COLUMN_DEFAULTS, "left", 40)).toEqual({ left: COLUMN_DEFAULTS.left + 40, right: COLUMN_DEFAULTS.right });
   });
 
   it("drags the right divider left to widen the side panel", () => {
-    expect(dragColumn(COLUMN_DEFAULTS, "right", -40)).toEqual({ left: 389, right: 493 });
+    expect(dragColumn(COLUMN_DEFAULTS, "right", -40)).toEqual({ left: COLUMN_DEFAULTS.left, right: COLUMN_DEFAULTS.right + 40 });
   });
 
   it("never drags a side narrower than its words need", () => {
@@ -42,7 +42,7 @@ describe("columns", () => {
   });
 
   it("never squeezes the conversation below its minimum", () => {
-    const inner = 389 + 453 + COLUMN_LIMITS.middleMin + 20;
+    const inner = COLUMN_DEFAULTS.left + COLUMN_DEFAULTS.right + COLUMN_LIMITS.middleMin + 20;
     const wide = dragColumn(COLUMN_DEFAULTS, "left", 200, inner);
     expect(inner - wide.left - wide.right).toBeGreaterThanOrEqual(COLUMN_LIMITS.middleMin);
     const small = fitColumns(COLUMN_DEFAULTS, 1000);

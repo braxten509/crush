@@ -12,48 +12,46 @@ describe("input grace (DLG-119, the terminal's OpenDialogWithGrace)", () => {
     vi.useRealTimers();
   });
 
-  it("uses the terminal's values", () => {
-    expect([GRACE_QUIET_MS, GRACE_MAX_MS, REOPEN_MS]).toEqual([425, 1500, 500]);
-  });
-
-  it("absorbs keys until none has come for 425 ms", () => {
+  it("absorbs keys until none has come for the quiet time", () => {
     const grace = createGrace("quiet");
-    vi.advanceTimersByTime(424);
-    expect(grace.absorb(key())).toBe(true); // 424 ms after opening: still quiet-armed, and it restarts the quiet time
-    vi.advanceTimersByTime(424);
+    vi.advanceTimersByTime(GRACE_QUIET_MS - 1);
+    expect(grace.absorb(key())).toBe(true); // just inside the quiet time: still armed, and it restarts the quiet time
+    vi.advanceTimersByTime(GRACE_QUIET_MS - 1);
     expect(grace.absorb(key())).toBe(true);
-    vi.advanceTimersByTime(425);
-    expect(grace.absorb(key())).toBe(false); // 425 ms without a key: the prompt takes keys
+    vi.advanceTimersByTime(GRACE_QUIET_MS);
+    expect(grace.absorb(key())).toBe(false); // a whole quiet time without a key: the prompt takes keys
     expect(grace.active()).toBe(false);
   });
 
-  it("ends 425 ms after opening when no key comes at all", () => {
+  it("ends the quiet time after opening when no key comes at all", () => {
     const grace = createGrace("idle");
-    vi.advanceTimersByTime(425);
+    vi.advanceTimersByTime(GRACE_QUIET_MS);
     expect(grace.absorb(key())).toBe(false);
   });
 
-  it("restarts the quiet time with each absorbed key, but never past 1.5 s", () => {
+  it("restarts the quiet time with each absorbed key, but never past the longest grace", () => {
     const grace = createGrace("cap");
+    const step = 100; // shorter than the quiet time, so only the cap ends it
     const absorbed = [];
-    for (let at = 100; at <= 1600; at += 100) {
-      vi.advanceTimersByTime(100);
+    for (let at = step; at <= GRACE_MAX_MS + step; at += step) {
+      vi.advanceTimersByTime(step);
       absorbed.push([at, grace.absorb(key())]);
     }
-    // Keys every 100 ms keep it absorbing until 1.5 s after opening, then it stops.
-    expect(absorbed.filter(([, taken]) => taken).map(([at]) => at)).toEqual([100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400]);
-    expect(absorbed.find(([at]) => at === 1500)[1]).toBe(false);
+    // Keys every step keep it absorbing until the longest grace, then it stops.
+    expect(absorbed.filter(([, taken]) => taken).map(([at]) => at)).toEqual(absorbed.map(([at]) => at).filter((at) => at < GRACE_MAX_MS));
+    expect(absorbed.find(([at]) => at >= GRACE_MAX_MS)[1]).toBe(false);
   });
 
   it("does not count modifier keys", () => {
     const grace = createGrace("modifiers");
-    vi.advanceTimersByTime(300);
+    const first = Math.floor(GRACE_QUIET_MS / 2);
+    vi.advanceTimersByTime(first);
     expect(grace.absorb(key("Shift"))).toBe(false); // not absorbed, and the quiet time is not restarted
-    vi.advanceTimersByTime(130);
-    expect(grace.absorb(key("a"))).toBe(false); // 430 ms since opening
+    vi.advanceTimersByTime(GRACE_QUIET_MS - first + 5);
+    expect(grace.absorb(key("a"))).toBe(false); // just past the quiet time since opening
   });
 
-  it("has no grace when the same prompt closed less than 500 ms ago", () => {
+  it("has no grace when the same prompt closed a moment ago", () => {
     const first = createGrace("permission");
     expect(first.absorb(key())).toBe(true);
     first.close();
@@ -65,7 +63,7 @@ describe("input grace (DLG-119, the terminal's OpenDialogWithGrace)", () => {
     expect(createGrace("other").absorb(key())).toBe(true);
   });
 
-  it("has a grace again once 500 ms have passed since the close", () => {
+  it("has a grace again once the reopen time has passed since the close", () => {
     noteClosed("later");
     vi.advanceTimersByTime(REOPEN_MS);
     expect(createGrace("later").absorb(key())).toBe(true);

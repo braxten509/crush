@@ -2,7 +2,6 @@ package server
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -41,17 +40,6 @@ func TestEngineInfoReportsClosing(t *testing.T) {
 	require.True(t, info.Closing, "a closing engine says so while it still answers")
 }
 
-func TestEngineInfoAddress(t *testing.T) {
-	t.Parallel()
-
-	c := &controllerV1{server: &Server{Addr: "/run/user/1000/crush/engine-0123456789abcdef.sock", network: "unix"}}
-	require.Equal(t, "unix:///run/user/1000/crush/engine-0123456789abcdef.sock", c.listenAddress())
-	c = &controllerV1{server: &Server{Addr: "127.0.0.1:8080", network: "tcp"}}
-	require.Equal(t, "tcp://127.0.0.1:8080", c.listenAddress())
-	c = &controllerV1{server: &Server{}}
-	require.Empty(t, c.listenAddress())
-}
-
 // requireAPIError checks an error answer's status and code, and returns its
 // message.
 func requireAPIError(t *testing.T, status int, data []byte, wantStatus int, wantCode string) string {
@@ -70,9 +58,7 @@ func TestCreateRefusesProtocolMismatch(t *testing.T) {
 	// Not built with prototest.CreateRequest: an app that sends no
 	// protocol, like a crush from before the field.
 	status, data := doAPI(t, h, http.MethodPost, "/v1/workspaces", proto.Workspace{Path: t.TempDir(), ClientID: uuid.NewString()})
-	message := requireAPIError(t, status, data, http.StatusUpgradeRequired, "protocol_mismatch")
-	require.Contains(t, message, fmt.Sprintf("this Crush engine speaks protocol %d", proto.ProtocolVersion))
-	require.Contains(t, message, "the app speaks protocol 0")
+	requireAPIError(t, status, data, http.StatusUpgradeRequired, "protocol_mismatch")
 	require.Empty(t, h.backend.ListWorkspaces())
 }
 

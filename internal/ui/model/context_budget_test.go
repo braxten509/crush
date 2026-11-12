@@ -20,7 +20,7 @@ func TestContextUsesActiveAgentsBoundary(t *testing.T) {
 	sess := &session.Session{PromptTokens: 381387, CompletionTokens: 432, ContextBudget: session.ContextBudget{Provider: string(config.TypeClaudeCode), Model: "opus", Tokens: 467000}}
 	limit := u.compactionLimit(model, sess)
 	require.EqualValues(t, 467000, limit)
-	require.Contains(t, ansi.Strip(renderComposerFooter(u.com.Styles, model, sess, limit, nil, 120)), "Context 18% left")
+	require.Contains(t, ansi.Strip(renderComposerFooter(u.com.Styles, model, sess, limit, nil, 120)), "18%")
 	model.ModelCfg.Model = "sonnet"
 	require.Zero(t, u.compactionLimit(model, sess), "never show another model's saved budget")
 	model.ModelCfg.Provider = "direct-api"

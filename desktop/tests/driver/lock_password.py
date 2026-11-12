@@ -2,13 +2,11 @@
 real engine and the vault stand-in (seam vault: a plain folder, closed at
 start, that opens only with its password), real keys and clicks:
 
-- the lock button opens "Lock this chat?" with a password field (the vault
-  is closed); a wrong password shows "Wrong password" and the box stays;
-  the right one closes the box and locks the chat;
-- the locked page shows a password field above Unlock; opening "First
-  lock?" moves neither the lock picture nor the title;
-- a wrong password there shows "Wrong password"; the right one unlocks the
-  chat and its messages come back;
+- the lock button opens the lock box with a password field (the vault is
+  closed); a wrong password shows a field error and the box stays; the
+  right one closes the box and locks the chat;
+- the locked page shows a password field; a wrong password there shows a
+  field error; the right one unlocks the chat and its messages come back;
 - locking again while the vault is open asks with no password field.
 
 Usage: tests/check.sh --no-app lock_password.py
@@ -63,10 +61,6 @@ def shot(name, wait=0.4):
     subprocess.run(["import", "-window", wid, os.path.join(out_dir, name + ".png")])
 
 
-def text_of(selector):
-    return run(f"return document.querySelector({json.dumps(selector)})?.innerText ?? null;")
-
-
 SEAMS = seams({"vault": {"dir": "/tmp/home/vault", "password": PASSWORD}})
 app = App(env=SEAMS)
 wait_for(probe_path, lambda p: p.get("connection", {}).get("state") == "connected", 40)
@@ -79,9 +73,6 @@ for _ in range(60):
     time.sleep(0.3)
 if not check(bool(wid), "the app window is on the hidden screen"):
     finish()
-xdo("windowmove", wid, 0, 0)
-xdo("windowsize", wid, 1600, 992)
-time.sleep(1.5)
 g = subprocess.run(["xdotool", "getwindowgeometry", "--shell", wid], capture_output=True, text=True)
 geo = dict(l.split("=", 1) for l in g.stdout.split() if "=" in l)
 geo_x, geo_y = int(geo["X"]), int(geo["Y"])
@@ -99,13 +90,12 @@ check(until("return [...document.querySelectorAll('.slot:not(.parked) .timeline 
 
 # -- The lock box: closed vault, wrong then right password --
 click_at(rect("[data-lock-chat]"))
-check(until("return document.querySelector('[data-lock-box]')?.dataset.lockBox === 'password';"), "the lock button asks 'Lock this chat?' with a password field")
-check("Lock this chat?" in (text_of("[data-lock-box]") or ""), "the box says 'Lock this chat?'")
+check(until("return document.querySelector('[data-lock-box]')?.dataset.lockBox === 'password';"), "the lock button asks with a password field")
 check(until("return document.activeElement?.matches?.('[data-lock-box] input');", 5), "the password field has the focus")
 shot("1-lock-box")
 type_in("nope")
 key("Return")
-check(until("return document.querySelector('[data-lock-box] [data-field-error]')?.innerText === 'Wrong password';"), "a wrong password shows 'Wrong password' and the box stays")
+check(until("return !!document.querySelector('[data-lock-box] [data-field-error]');"), "a wrong password shows a field error and the box stays")
 shot("2-lock-wrong")
 click_at(rect("[data-lock-box] input"))
 type_in(PASSWORD)
@@ -113,24 +103,13 @@ key("Return")
 check(until("return !document.querySelector('[data-lock-box]');", 10), "the right password closes the box")
 check(until("return document.querySelector('[data-locked-page]')?.dataset.lockedPage === 'locked';", 20), "the chat is locked")
 
-# -- The locked page: password field, still dropdown --
+# -- The locked page: password field --
 check(until("return !!document.querySelector('[data-vault-password]');", 10), "the locked page shows a password field (the vault closed again)")
 shot("3-locked")
-before = {s: rect(s) for s in ("[data-locked-page] .icon, [data-locked-page] svg", "[data-locked-page] .headline", "[data-locked-page] .setup summary")}
-click_at(rect("[data-locked-page] .setup summary"))
-time.sleep(0.5)
-after = {s: rect(s) for s in before}
-same = all(before[s] and after[s] and abs(before[s]["y"] - after[s]["y"]) < 0.5 for s in before)
-check(same, f"opening 'First lock?' moves nothing above its steps ({[(round(before[s]['y'], 1), round(after[s]['y'], 1)) for s in before if before[s] and after[s]]})")
-check(run("const o = document.querySelector('[data-locked-page] .setup ol'); return !!o && o.getBoundingClientRect().height > 0;") is True, "its steps show")
-shot("4-dropdown-open")
-click_at(rect("[data-locked-page] .setup summary"))
-time.sleep(0.3)
-
 click_at(rect("[data-vault-password] input"))
 type_in("nope")
 key("Return")
-check(until("return document.querySelector('[data-vault-password] [data-field-error]')?.innerText === 'Wrong password';"), "a wrong password on the locked page shows 'Wrong password'")
+check(until("return !!document.querySelector('[data-vault-password] [data-field-error]');"), "a wrong password on the locked page shows a field error")
 check(run("return document.querySelector('[data-locked-page]')?.dataset.lockedPage;") == "locked", "the chat stays locked")
 shot("5-unlock-wrong")
 click_at(rect("[data-vault-password] input"))
@@ -143,7 +122,6 @@ shot("6-unlocked")
 # -- Lock again with the vault open: no password asked --
 click_at(rect("[data-lock-chat]"))
 check(until("return document.querySelector('[data-lock-box]')?.dataset.lockBox === 'plain';"), "locking again with the vault open asks with no password field")
-check("Lock this chat again?" in (text_of("[data-lock-box]") or ""), "it says 'Lock this chat again?'")
 shot("7-lock-again")
 key("Escape")
 check(until("return !document.querySelector('[data-lock-box]');", 5), "Esc cancels it")

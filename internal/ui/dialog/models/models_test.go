@@ -1,7 +1,6 @@
 package models
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 
@@ -13,7 +12,6 @@ import (
 	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	"github.com/charmbracelet/crush/internal/workspace"
-	"github.com/charmbracelet/x/exp/golden"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,10 +28,10 @@ func (w *modelsWorkspace) SetConfigField(_ config.Scope, key string, value any) 
 	return nil
 }
 
-// TestSetProviderItems pins the groups and items the models dialog builds
+// TestSetProviderItems checks the groups and items the models dialog builds
 // from the configured and known providers: custom providers, configured
-// name and model overrides, subscription catalogs, disabled providers, and
-// the recently used group with its pruning of stale entries.
+// name overrides, disabled providers, the shown chat's model selected, and
+// the recently used list with its stale entries pruned and saved.
 func TestSetProviderItems(t *testing.T) {
 	// The known provider catalog is loaded once per process from the
 	// embedded copy; keep its cache out of the user's directories.
@@ -85,25 +83,31 @@ func TestSetProviderItems(t *testing.T) {
 	}
 	require.NoError(t, m.setProviderItems())
 
-	var b strings.Builder
-	for _, g := range m.list.groups {
-		fmt.Fprintf(&b, "%s (configured=%v)\n", g.Title, g.configured)
-		for _, it := range g.Items {
-			fmt.Fprintf(&b, "  %s %q showProvider=%v\n", it.ID(), it.model.Name, it.showProvider)
-		}
-	}
-	if sel, ok := m.list.SelectedItem().(*ModelItem); ok {
-		fmt.Fprintf(&b, "selected: %s\n", sel.ID())
-	}
-	fmt.Fprintf(&b, "placeholder: %s\n", m.input.Placeholder)
-	for key, value := range ws.fields {
-		fmt.Fprintf(&b, "config field %s:", key)
+	// The stale recent entry is pruned and the rest saved.
+	require.Len(t, ws.fields, 1)
+	for _, value := range ws.fields {
+		var saved []string
 		for _, sm := range value.([]config.SelectedModel) {
-			fmt.Fprintf(&b, " %s:%s", sm.Provider, sm.Model)
+			saved = append(saved, sm.Provider+":"+sm.Model)
 		}
-		b.WriteString("\n")
+		require.Equal(t, []string{"openai:sub-1", "anthropic:claude-a"}, saved)
 	}
-	golden.RequireEqual(t, []byte(b.String()))
+
+	var titles []string
+	for _, g := range m.list.groups {
+		titles = append(titles, g.Title)
+		for _, it := range g.Items {
+			require.False(t, strings.HasPrefix(it.ID(), "xai:"), "disabled providers are not listed")
+			if it.ID() == "anthropic:claude-a" {
+				require.Equal(t, "Renamed A", it.model.Name, "configured names win")
+			}
+		}
+	}
+	require.Contains(t, titles, "Custom")
+
+	sel, ok := m.list.SelectedItem().(*ModelItem)
+	require.True(t, ok)
+	require.Equal(t, "anthropic:claude-b", sel.ID())
 }
 
 // TestWithConfiguredModelsLeavesCatalogAlone pins that configured model

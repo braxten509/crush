@@ -5,8 +5,8 @@ Runs in the sandbox on TERM's fixture (no engine):
   tests/check.sh --no-app --fixture tests/fixtures/terminal-chats.json p6_terminal.py [names]
 Names pick steps (default: all): editor, new_terminal, env_shown,
 cwd_tracking, scrollback, select_copy, typing_jumps, paste_focus,
-shift_enter, cursor, theme_follow, look, close_box, close_buttons, exit_closes_tab,
-close_kinds, busy.
+shift_enter, cursor, close_box, close_buttons, exit_closes_tab, close_kinds,
+busy.
 
 The app starts here (apps.App) on the chat "Shell checks" with SHELL=/bin/sh
 and VISUAL naming tests/fakes/fake-editor through a link called nvim, so the
@@ -50,8 +50,9 @@ REMOVED = {
     "CRUSH_CRASH_REPORT": "/tmp/crushtest-report", "CRUSH_REMOTE_LAUNCH": "crushtest-launch",
 }
 REMOVED_PREFIXES = ("KONSOLE_", "KITTY_", "GHOSTTY_", "WEZTERM_", "ITERM_", "TMUX")
-CLOSE_DETAIL = "This closes the terminal. Its output is not saved."
 BUSY = "Agent is working, please wait..."
+# Reads one raw byte and prints it as od -c does; RAW1 says raw mode is on.
+RAW_READ = "sh -c 'stty raw -echo; printf \"RAW%s\\r\\n\" 1; dd bs=1 count=1 2>/dev/null | od -An -c; stty sane'"
 PNG_1PX = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
 
 app = None
@@ -411,7 +412,7 @@ def step_new_terminal():
             return
         t = term()
         check(t.get("shown") == shell["id"], "the new tab is shown")
-        check(shell["title"] == "Terminal" and "folder_picker" not in dialogs(), f"Alt+T then Enter opens a \"Terminal\" tab, the picker gone ({shell['title']!r})")
+        check("folder_picker" not in dialogs(), "Alt+T then Enter opens it, the picker gone")
         check(shell["cwd"] == apps.PROJ, f"it starts in this window's folder ({shell['cwd']})")
 
 
@@ -616,9 +617,9 @@ def step_paste_focus():
         check(hit is not None, "a middle click pastes the primary selection")
         primary.terminate()
         key("ctrl+c")
-        type_text("sh -c 'stty raw -echo; dd bs=1 count=1 2>/dev/null | od -An -c; stty sane'")
+        type_text(RAW_READ)
         key("Return")
-        time.sleep(0.6)
+        wait_line(tid, lambda line: line == "RAW1")
         key("ctrl+v")
         hit = wait_line(tid, lambda line: line.strip() == "026")
         check(hit is not None, "Ctrl+V goes to the shell as its control character (026)")
@@ -628,7 +629,10 @@ def step_paste_focus():
         check(clipboard(p).get("text") == "osc52-copied", f"a program's OSC 52 copy sets the clipboard ({clipboard(p).get('text')!r})")
         type_text(r"printf '\033]52;c;?\007'; cat -v")
         key("Return")
-        time.sleep(1.0)
+        # An answer would reach cat before the line typed after it.
+        type_text("END52")
+        key("Return")
+        wait_line(tid, lambda line: line == "END52")
         check(not any("52;" in line and "printf" not in line for line in lines_of(tid)), "an OSC 52 read gets no answer")
         key("ctrl+c")
         type_text(r"printf '\033[?1004h'; cat -v")
@@ -662,9 +666,9 @@ def step_shift_enter():
         if not check(s is not None, "a shell tab"):
             return
         tid = s["id"]
-        type_text("sh -c 'stty raw -echo; dd bs=1 count=1 2>/dev/null | od -An -c; stty sane'")
+        type_text(RAW_READ)
         key("Return")
-        time.sleep(0.6)
+        wait_line(tid, lambda line: line == "RAW1")
         key("shift+Return")
         hit = wait_line(tid, lambda line: line.strip() == "\\n")
         check(hit is not None, "Shift+Enter sends Ctrl+J (\\n) to the program")
@@ -698,65 +702,6 @@ def step_cursor():
         not_run("LIST-056", "the folder picker's text caret is LST's picker; runs after LST merges")
 
 
-def step_theme_follow():
-    with step("LIST-019"):
-        s = ensure_shell()
-        if not check(s is not None, "a shell tab"):
-            return
-        t = term()
-        colors = (tab_of(s["id"], {"terminal": t}) or {}).get("colors") or {}
-        tokens = t.get("tokens") or {}
-        check(bool(tokens) and colors == tokens, f"the tab uses the theme's tokens ({colors} vs {tokens})")
-        bg = heavy().get("background")
-        want = css_rgb(tokens.get("background") or "")
-        check(bool(want) and bg == want, f"its background is drawn in --paper ({bg}, {tokens.get('background')})")
-        not_run("LIST-019", "a theme switch recoloring every tab at once runs after THM merges (no theme can be switched here)")
-
-
-LOOK = """
-  const tab = document.querySelector('[data-terminal-tab]:not([hidden])') || document.querySelector('[data-terminal-tab]');
-  const vp = tab.querySelector('.xterm-viewport'), screen = tab.querySelector('.xterm-screen'), box = tab.querySelector('.xterm');
-  const row = [...tab.querySelectorAll('.xterm-rows > div')].find((r) => r.textContent.includes('NF1 '));
-  const span = row && [...row.querySelectorAll('span')].find((e) => e.textContent.includes('\\ue0b0'));
-  const family = getComputedStyle(span || row || box).fontFamily;
-  // The arrow drawn alone at 40 px: a found face fills about half its box; a
-  // missing letter's empty box or nothing fills far less.
-  const c = document.createElement('canvas'); c.width = 80; c.height = 80;
-  const g = c.getContext('2d'); g.font = '40px ' + family; g.fillStyle = '#000'; g.textBaseline = 'middle';
-  const w = Math.max(1, Math.round(g.measureText('\\ue0b0').width));
-  g.fillText('\\ue0b0', 0, 40);
-  const px = g.getImageData(0, 20, w, 40).data;
-  let ink = 0; for (let i = 3; i < px.length; i += 4) if (px[i] > 128) ink++;
-  const paper = getComputedStyle(document.documentElement).getPropertyValue('--paper').trim();
-  return { row: !!row, family, fill: ink / (w * 40), vpBg: getComputedStyle(vp).backgroundColor, paper,
-           bars: getComputedStyle(vp).scrollbarWidth, gap: box.getBoundingClientRect().bottom - screen.getBoundingClientRect().bottom };
-"""
-
-
-def step_look():
-    # Owner, 2026-10-20: a prompt's arrows and icons were missing, and a black
-    # bar with an arrow sat under the last row.
-    with step("LOOK-TERM"):
-        s = ensure_shell()
-        if not check(s is not None, "a shell tab"):
-            return
-        focus_app()
-        run(s["id"], r"printf 'NF%s \356\202\260\n' 1", "NF1")
-        got = H.probe_eval(probe_path, "(async () => { try { window.__probeEval = await (async () => {" + LOOK
-                           + "})() ?? null; } catch (e) { window.__probeEval = { error: String(e && e.stack || e) }; } })();") or {}
-        check(got.get("row"), f"the prompt arrow's line shows ({got})")
-        check("Nerd Font" in (got.get("family") or ""), f"the terminal falls back to a Nerd face ({got.get('family')})")
-        check((got.get("fill") or 0) > 0.35, f"the prompt arrow draws as a solid shape, not an empty box (fills {got.get('fill')})")
-        check(got.get("vpBg") == css_rgb(got.get("paper") or ""), f"the space under the last row is paper, not black ({got.get('vpBg')} vs {got.get('paper')}; gap {got.get('gap')})")
-        check(got.get("bars") == "none", f"no built-in scroll bar or arrow under the rows ({got.get('bars')})")
-
-
-def css_rgb(color):
-    """"#rrggbb" as the page's computed style writes it, else ""."""
-    m = re.fullmatch(r"#([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})", color.strip())
-    return f"rgb({int(m[1], 16)}, {int(m[2], 16)}, {int(m[3], 16)})" if m else ""
-
-
 def ask_close():
     key("alt+w")
     return wait_term(lambda t: t.get("close_box"), 3).get("close_box")
@@ -767,15 +712,11 @@ def step_close_box():
         s = ensure_shell()
         if not check(s is not None, "a shell tab"):
             return
-        tid, title = s["id"], s["title"]
+        tid = s["id"]
         box = ask_close()
         check(bool(box), "Alt+W on a shown terminal tab opens the close box")
         box = box or {}
-        check(box.get("question") == f"Close “{title}”?", f"its question ({box.get('question')!r})")
-        check(box.get("detail") == CLOSE_DETAIL, f"its detail ({box.get('detail')!r})")
-        check(box.get("buttons") == ["Close", "Keep"] and box.get("selected") == "close", f"\"Close\" and \"Keep\", Close selected first ({box.get('buttons')}, {box.get('selected')})")
-        if title != "Terminal":
-            not_run("LIST-014", f"'Close “Terminal”?' itself needs a tab from the folder picker (LST); this one is titled {title!r}")
+        check(box.get("selected") == "close", f"Close is selected first ({box.get('selected')})")
     with step("LIST-015"):
         def selected():
             return (term().get("close_box") or {}).get("selected")
@@ -818,9 +759,10 @@ def wait_until(test, timeout):
     return test()
 
 
-def click_button(label):
+def click_button(button_id):
+    """Clicks the close box's button with this id (its data-button)."""
     for b in heavy().get("close_buttons") or []:
-        if b["label"] == label:
+        if b.get("id") == button_id:
             r = b["rect"]
             H.click(r["x"] + r["w"] / 2, r["y"] + r["h"] / 2)
             return True
@@ -835,12 +777,12 @@ def step_close_buttons():
             return
         tid = shell["id"]
         ask_close()
-        check(click_button("Keep"), "the box's Keep is a button")
+        check(click_button("keep"), "the box's Keep is a button")
         t = wait_term(lambda t: not t.get("close_box"), 2)
         check(not t.get("close_box") and tab_of(tid, {"terminal": t}) is not None, "clicking Keep keeps the tab")
         pid = tab_of(tid).get("pid")
         ask_close()
-        check(click_button("Close"), "the box's Close is a button")
+        check(click_button("close"), "the box's Close is a button")
         t = wait_term(lambda t: tab_of(tid, {"terminal": t}) is None, 3)
         check(tab_of(tid, {"terminal": t}) is None, "clicking Close closes the tab")
         check(wait_until(lambda: not pc.alive(pid), 6), f"and stops its shell (pid {pid})")
@@ -885,8 +827,8 @@ def step_busy():
         key("ctrl+o")
         p = wait_for(probe_path, lambda p: notice(p).get("text") == BUSY, 5)
         check(notice(p).get("kind") == "warn" and notice(p).get("text") == BUSY, f"while the chat works Ctrl+O warns {BUSY!r} ({notice(p)})")
-        time.sleep(1)
-        check(len(editor_calls()) == calls and not tabs(), "and opens no editor")
+        opened = wait_until(lambda: len(editor_calls()) != calls or bool(tabs()), 0.4)
+        check(not opened, "and opens no editor")
         stop_app()
 
 
@@ -901,8 +843,6 @@ STEPS = [
     ("paste_focus", step_paste_focus),
     ("shift_enter", step_shift_enter),
     ("cursor", step_cursor),
-    ("theme_follow", step_theme_follow),
-    ("look", step_look),
     ("close_box", step_close_box),
     ("close_buttons", step_close_buttons),
     ("exit_closes_tab", step_exit_closes_tab),

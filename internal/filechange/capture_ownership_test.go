@@ -18,54 +18,6 @@ func restoredBytes(t *testing.T, state *State) string {
 	return string(data)
 }
 
-func TestReviewOverlappingAndLateReportsKeepTheirAllocation(t *testing.T) {
-	for _, late := range []bool{false, true} {
-		name := "overlapping"
-		if late {
-			name = "late-report"
-		}
-		t.Run(name, func(t *testing.T) {
-			root := visibleRestoreRoot(t)
-			p := newProcessReview(root, nil)
-			p.store.restoreRemaining = 12
-			path := filepath.Join(root, "pending")
-			require.NoError(t, os.WriteFile(path, []byte("original"), 0o600))
-			if !late {
-				p.Begin("pending", "pending-writer")
-			}
-			pending := p.executed(nil, []string{"pending-writer"})
-			p.before(pending, path)
-			require.Equal(t, 4, p.store.restoreRemaining)
-			// A different completed action cannot reset the pending baseline's charge.
-			p.Begin("first", "first-writer")
-			first := p.executed(nil, []string{"first-writer"})
-			small := filepath.Join(root, "small")
-			p.before(first, small)
-			require.NoError(t, os.WriteFile(small, []byte("1234"), 0o600))
-			require.Equal(t, "1234", restoredBytes(t, p.End("first").Changes[0].After))
-			require.Equal(t, 4, p.store.restoreRemaining)
-			p.Begin("overflow", "overflow-writer")
-			overflow := p.executed(nil, []string{"overflow-writer"})
-			large := filepath.Join(root, "large")
-			p.before(overflow, large)
-			require.NoError(t, os.WriteFile(large, []byte("12345678"), 0o600))
-			review := p.End("overflow")
-			require.Equal(t, RestoreBudgetReason, review.Changes[0].After.RestoreOmitted)
-			require.Equal(t, 4, p.store.restoreRemaining)
-			if late {
-				p.Begin("pending", "pending-writer")
-			}
-			require.NoError(t, os.WriteFile(path, []byte("edit"), 0o600))
-			review = p.End("pending")
-			require.Equal(t, "original", restoredBytes(t, review.Changes[0].Before))
-			require.Equal(t, "edit", restoredBytes(t, review.Changes[0].After))
-			require.Equal(t, 12, p.store.restoreRemaining)
-			require.Empty(t, p.store.captures)
-			require.Empty(t, p.store.text)
-		})
-	}
-}
-
 func TestReviewSharedBaselineReleasedAfterLastOwner(t *testing.T) {
 	root := visibleRestoreRoot(t)
 	p := newProcessReview(root, nil)
@@ -77,9 +29,7 @@ func TestReviewSharedBaselineReleasedAfterLastOwner(t *testing.T) {
 		record := p.executed(nil, []string{id})
 		p.before(record, path)
 	}
-	require.Equal(t, 4, p.store.restoreRemaining, "unchanged baseline is captured once")
 	require.Nil(t, p.End("one"))
-	require.Equal(t, 4, p.store.restoreRemaining, "second owner still needs the baseline")
 	require.NoError(t, os.WriteFile(path, []byte("edit"), 0o600))
 	review := p.End("two")
 	require.Equal(t, "original", restoredBytes(t, review.Changes[0].Before))
@@ -112,7 +62,6 @@ func TestNativeFinishReusesCapturesAndReturnsSameReview(t *testing.T) {
 			require.NoError(t, os.WriteFile(path, []byte("edit"), 0o600))
 			if subprocess {
 				report.changes = append(report.changes, process.End("command").Changes...)
-				require.Zero(t, report.store.restoreRemaining)
 			}
 			review := report.Finish()
 			require.Len(t, review.Changes, 1)

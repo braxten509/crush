@@ -28,7 +28,7 @@ probe_path, out_dir = sys.argv[1], sys.argv[2]
 
 
 def app_window(timeout=20):
-    """The largest visible window of the app, found by its class (as look_align.py)."""
+    """The largest visible window of the app, found by its class."""
     end = time.time() + timeout
     while time.time() < end:
         r = subprocess.run(["xdotool", "search", "--onlyvisible", "--class", "crush-desktop"], capture_output=True, text=True)
@@ -73,6 +73,16 @@ def calls(since, path):
     return [c for c in lines[since:] if c.get("method") == "POST" and c.get("path") == path]
 
 
+def wait_calls(since, path, timeout=5):
+    """Polls for the recorded POSTs to path after since."""
+    end = time.time() + timeout
+    got = calls(since, path)
+    while time.time() < end and not got:
+        time.sleep(0.05)
+        got = calls(since, path)
+    return got
+
+
 def api_count():
     try:
         with open(probe_path + ".api.jsonl") as f:
@@ -98,7 +108,15 @@ def open_menu():
 
 
 def shown_rows():
-    return run("return [...document.querySelectorAll('[data-menu=\"model\"] .rows button')].map((b) => b.textContent.trim());")
+    """The group's saved model names, and whether "Add model" shows under them."""
+    return run("""const m = document.querySelector('[data-menu="model"]');
+      return { models: [...m.querySelectorAll('[data-testid="model-row"] .name')].map((b) => b.textContent.trim()),
+               add: Boolean(m.querySelector('[data-testid="add-model"]')) };""")
+
+
+def sheet_provider():
+    """The provider whose catalog sheet is open, or None."""
+    return run("""return document.querySelector('[data-sheet="openrouter_add"] [data-provider]')?.getAttribute('data-provider') ?? null;""")
 
 
 def snap(name):
@@ -109,9 +127,6 @@ wait_for(probe_path, lambda p: p.get("connection", {}).get("state") == "connecte
 wid = app_window()
 if not check(wid is not None, "the app window is on the hidden screen"):
     finish()
-xdo("windowmove", wid, 0, 0)
-xdo("windowsize", wid, 1600, 992)
-time.sleep(1.5)
 g = subprocess.run(["xdotool", "getwindowgeometry", "--shell", wid], capture_output=True, text=True)
 geo = dict(l.split("=", 1) for l in g.stdout.split() if "=" in l)
 geo_x, geo_y = int(geo["X"]), int(geo["Y"])
@@ -124,9 +139,8 @@ groups = run(f"return [...document.querySelectorAll({json.dumps(GROUP)})].map((b
 check("OpenRouter" in (groups or []), f"the agents column lists OpenRouter ({groups})")
 since = api_count()
 click_at(center(ROW, "Sonnet 5.5"))
-time.sleep(1.0)
 # A pick is saved with the open chat (POST sessions/{sid}/model).
-got = calls(since, "sessions/7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f01/model")
+got = wait_calls(since, "sessions/7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f01/model")
 model = (got[0].get("body") or {}).get("model", {}) if got else {}
 check(model.get("model") == "sonnet" and model.get("reasoning_effort") == "low", f"Sonnet is saved with its remembered effort, Low ({model})")
 
@@ -134,8 +148,8 @@ check(model.get("model") == "sonnet" and model.get("reasoning_effort") == "low",
 open_menu()
 click_at(center(GROUP, "OpenRouter"))
 time.sleep(0.3)
-rows = shown_rows()
-check(rows == ["Moonshot: Kimi K3", "Add model"], f"OpenRouter lists its saved model, then Add model ({rows})")
+rows = shown_rows() or {}
+check(rows.get("models") == ["Moonshot: Kimi K3"] and rows.get("add"), f"OpenRouter lists its saved model, then Add model ({rows})")
 snap("saved")
 
 # 2b. In OpenRouter (the model in use is not there): no Effort row, and the
@@ -148,8 +162,7 @@ check(look and not look["effort"], f"OpenRouter without the model in use shows n
 check(look and look["cheapest"] == "true", f"the Cheapest host switch shows, on by default ({look})")
 since = api_count()
 click_at(center('[data-menu="model"] [data-column="route"] [role=switch]'))
-time.sleep(1.0)
-got = calls(since, "config/set")
+got = wait_calls(since, "config/set")
 body = got[0].get("body") if got else {}
 check(body.get("key") == "providers.openrouter.cheapest_host" and body.get("value") is False, f"a click saves Cheapest host off ({body})")
 
@@ -161,8 +174,7 @@ floors = run("""const m = document.querySelector('[data-menu="model"]');
 check(floors == {"switches": 2, "floor": "true"}, f"the FP8 floor switch shows under Cheapest host, on by default ({floors})")
 since = api_count()
 click_at(center('[data-menu="model"] [aria-label="FP8 floor"]'))
-time.sleep(1.0)
-got = calls(since, "config/set")
+got = wait_calls(since, "config/set")
 body = got[0].get("body") if got else {}
 check(body.get("key") == "providers.openrouter.quality_floor" and body.get("value") is False, f"a click saves FP8 floor off ({body})")
 
@@ -183,8 +195,7 @@ snap("remove")
 if remove:
     since = api_count()
     click_at(remove)
-    time.sleep(1.0)
-    got = calls(since, "config/set")
+    got = wait_calls(since, "config/set")
     body = got[0].get("body") if got else {}
     check(body.get("key") == "providers.openrouter.models" and body.get("value") == [], f"Remove saves the list without it ({body})")
 
@@ -193,21 +204,23 @@ if not menu_open():
     open_menu()
     click_at(center(GROUP, "OpenRouter"))
     time.sleep(0.3)
-click_at(center(ROW, "Add model"))
-time.sleep(1.0)
+click_at(center('[data-menu="model"] [data-testid="add-model"]'))
 SHEET_ROWS = "[role=dialog] [role=checkbox]"
+end = time.time() + 5
+while time.time() < end and sheet_provider() is None:
+    time.sleep(0.05)
 sheet = run(f"""
   const boxes = [...document.querySelectorAll({json.dumps(SHEET_ROWS)})];
   return {{ menu: Boolean(document.querySelector('[data-menu="model"]')),
-           title: [...document.querySelectorAll('h1, h2, [role=dialog] *')].map((e) => e.textContent.trim()).find((t) => t.startsWith('Add OpenRouter models')) ?? null,
            rows: boxes.map((b) => ({{ name: b.getAttribute('aria-label'), on: b.getAttribute('aria-checked') === 'true',
-                                      info: b.closest('.line')?.querySelector('.info')?.textContent.trim() }})) }};
+                                      info: b.closest('.line')?.querySelector('.info')?.textContent.trim() ?? '' }})) }};
 """)
-check(sheet and sheet["title"] and not sheet["menu"], f"Add model closes the menu and opens the catalog sheet ({sheet and sheet['title']})")
+provider = sheet_provider()
+check(provider == "openrouter" and sheet and not sheet["menu"], f"Add model closes the menu and opens OpenRouter's catalog sheet ({provider})")
 rows = (sheet or {}).get("rows") or []
 check([r["name"] for r in rows] == ["Moonshot: Kimi K3", "Z.ai: GLM 5.3", "Free Coder"], f"the sheet lists the catalog ({rows})")
-check(rows and rows[0]["on"] and rows[0]["info"].startswith("saved · $0.6 / $2.5"), f"the saved model shows ticked and saved, with its price ({rows[:1]})")
-check(len(rows) > 2 and rows[2]["info"] == "free · 1M", f"a free model says free with its context ({rows[2:3]})")
+check(rows and rows[0]["on"] and "0.6" in rows[0]["info"] and "2.5" in rows[0]["info"], f"the saved model shows ticked, with its price ({rows[:1]})")
+check(len(rows) > 2 and "free" in rows[2]["info"].lower(), f"a free model says free ({rows[2:3]})")
 snap("sheet")
 type_text("glm")
 time.sleep(0.4)
@@ -219,8 +232,7 @@ ticked = run(f"return [...document.querySelectorAll({json.dumps(SHEET_ROWS)})].m
 check(ticked == ["true"], f"a click ticks it ({ticked})")
 since = api_count()
 click_at(center("[role=dialog] button", "Done"))
-time.sleep(1.5)
-got = calls(since, "config/set")
+got = wait_calls(since, "config/set")
 body = got[0].get("body") if got else {}
 ids = [m.get("id") for m in (body.get("value") or [])]
 check(body.get("key") == "providers.openrouter.models" and ids == ["moonshot/kimi-k3", "z-ai/glm-5.3"], f"Done saves the saved model plus the ticked one ({ids})")
@@ -234,16 +246,16 @@ if not menu_open():
     open_menu()
 click_at(center(GROUP, "OrcaRouter"))
 time.sleep(0.3)
-rows = shown_rows()
-check(rows == ["Add model"], f"OrcaRouter with nothing saved lists Add model alone ({rows})")
+rows = shown_rows() or {}
+check(rows.get("models") == [] and rows.get("add"), f"OrcaRouter with nothing saved lists Add model alone ({rows})")
 route = run("""return Boolean(document.querySelector('[data-menu="model"] [data-column="route"]'));""")
 check(route is False, f"OrcaRouter shows no host switches ({route})")
 snap("orcarouter")
-click_at(center(ROW, "Add model"))
-time.sleep(1.0)
-orca = run(f"""
-  return {{ title: [...document.querySelectorAll('[role=dialog] *')].map((e) => e.textContent.trim()).find((t) => t.startsWith('Add OrcaRouter models')) ?? null,
-           rows: [...document.querySelectorAll({json.dumps(SHEET_ROWS)})].map((b) => b.getAttribute('aria-label')) }};
-""")
-check(orca and orca["title"] and orca["rows"] == ["Claude Fable 5"], f"OrcaRouter's sheet lists its own catalog ({orca})")
+click_at(center('[data-menu="model"] [data-testid="add-model"]'))
+end = time.time() + 5
+while time.time() < end and sheet_provider() != "orcarouter":
+    time.sleep(0.05)
+orca = run(f"return [...document.querySelectorAll({json.dumps(SHEET_ROWS)})].map((b) => b.getAttribute('aria-label'));")
+provider = sheet_provider()
+check(provider == "orcarouter" and orca == ["Claude Fable 5"], f"OrcaRouter's sheet lists its own catalog ({provider}, {orca})")
 finish()

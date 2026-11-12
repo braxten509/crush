@@ -51,7 +51,7 @@ const reading = (kind, used, account = "") => ({
 // The folder's agent info: its state only; each chat owns its model.
 const agent = () => ({ is_ready: true, is_busy: false, agent: "coder" });
 
-const fiveHourText = (meters) => meters.find((m) => m.label === "5-HOUR")?.text;
+const fiveHourLeft = (meters) => meters.find((m) => m.id === "limit_5h")?.left;
 
 let limits;
 let workspace;
@@ -92,9 +92,9 @@ describe("the meters follow the shown chat's model after a change", () => {
     sessions.currentId = "child";
     helperChats.byId.child = { id: "child", parent: "parent", cli: "claude", model: "opus", account: "claude-2", running: true };
     startHelperChats();
-    expect(fiveHourText(panel.meterNow().meters)).toBe("40% left");
+    expect(fiveHourLeft(panel.meterNow().meters)).toBe(40);
     await deliver(ev("helper", "updated", { child_session_id: "child", status: "running", cli: "claude", model: "opus", account: "" }));
-    expect(fiveHourText(panel.meterNow().meters)).toBe("90% left");
+    expect(fiveHourLeft(panel.meterNow().meters)).toBe(90);
   });
   // A fallback saves the new model on the chat (every chat owns its model,
   // owner 2026-10-24); the chat's update event carries it.
@@ -112,18 +112,18 @@ describe("the meters follow the shown chat's model after a change", () => {
 
   it("a fallback to another provider shows that provider's usage", async () => {
     await showChat("claude-code");
-    expect(fiveHourText(panel.meterNow().meters)).toBe("90% left");
+    expect(fiveHourLeft(panel.meterNow().meters)).toBe(90);
 
     await deliver(ev("session", "updated", chat("codex-cli")));
-    expect(fiveHourText(panel.meterNow().meters)).toBe("20% left");
+    expect(fiveHourLeft(panel.meterNow().meters)).toBe(20);
   });
 
   it("a fallback to another account of the same provider shows that account's usage", async () => {
     await showChat("claude-code");
-    expect(fiveHourText(panel.meterNow().meters)).toBe("90% left");
+    expect(fiveHourLeft(panel.meterNow().meters)).toBe(90);
 
     await deliver(ev("session", "updated", chat("claude-code", "claude-2")));
-    expect(fiveHourText(panel.meterNow().meters)).toBe("40% left");
+    expect(fiveHourLeft(panel.meterNow().meters)).toBe(40);
   });
 
 
@@ -153,10 +153,10 @@ describe("the meters follow the shown chat's model after a change", () => {
     const { sessions } = await import("../../lib/stores/sessions.svelte.js");
     sessions.currentId = "chat-kimi";
     sessions.byId["chat-kimi"] = { id: "chat-kimi", model: { provider: "kimi-coding", model: "k3.1-pro" } };
-    expect(panel.meterNow().meters.map((m) => [m.label, m.text])).toEqual([
-      ["CONTEXT", "100% left"],
-      ["5-HOUR", "75% left"],
-      ["MONTHLY", "85% left"],
+    expect(panel.meterNow().meters.map((m) => [m.id, Math.round(m.left)])).toEqual([
+      ["context", 100],
+      ["limit_5h", 75],
+      ["limit_weekly", 85],
     ]);
   });
 
@@ -187,7 +187,7 @@ describe("the meters follow the shown chat's model after a change", () => {
     sessions.currentId = "chat-opencode";
     sessions.byId["chat-opencode"] = { id: "chat-opencode", model: { provider: "opencode-cli", model: "opencode-go/deepseek-v4.1-flash" } };
     const meters = panel.meterNow().meters;
-    expect(meters.map((m) => m.label)).toEqual(["CONTEXT", "5-HOUR", "WEEK", "MONTHLY"]);
+    expect(meters.map((m) => m.id)).toEqual(["context", "limit_5h", "limit_weekly", "limit_weekly:Monthly"]);
     expect(new Set(meters.map((m) => m.id)).size).toBe(meters.length);
   });
 });

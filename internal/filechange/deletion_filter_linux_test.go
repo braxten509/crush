@@ -3,11 +3,7 @@
 package filechange
 
 import (
-	"context"
-	"fmt"
-	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -71,44 +67,6 @@ func TestNoRepositoryDoesNotInstallReviewWatcher(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join(root, "source.txt"))
 	require.NoError(t, err)
 	require.Equal(t, "changed", string(data))
-}
-
-func BenchmarkDeleteBatch(b *testing.B) {
-	for _, observed := range []bool{false, true} {
-		b.Run(fmt.Sprintf("observed=%t/files=10000", observed), func(b *testing.B) {
-			root := visibleRestoreRoot(b)
-			directory := filepath.Join(root, "files")
-			for range b.N {
-				b.StopTimer()
-				if err := os.Mkdir(directory, 0o700); err != nil {
-					b.Fatal(err)
-				}
-				for index := range 10000 {
-					if err := os.WriteFile(filepath.Join(directory, fmt.Sprint(index)), []byte("fixture"), 0o600); err != nil {
-						b.Fatal(err)
-					}
-				}
-				ctx := context.Background()
-				var report *CommandReview
-				if observed {
-					ctx, report = WithCommandReview(ctx, root)
-				}
-				cmd := exec.CommandContext(ctx, "rm", "-rf", directory)
-				cmd.Dir, cmd.Stdout, cmd.Stderr = root, io.Discard, io.Discard
-				b.StartTimer()
-				observer, err := StartCommand(ctx, cmd)
-				if err != nil {
-					b.Fatal(err)
-				}
-				if err := observer.Wait(cmd); err != nil {
-					b.Fatal(err)
-				}
-				if report != nil && report.Finish() != nil {
-					b.Fatal("silent deletions must not create individual review records")
-				}
-			}
-		})
-	}
 }
 
 func TestRenameDoesNotClaimADeletion(t *testing.T) {

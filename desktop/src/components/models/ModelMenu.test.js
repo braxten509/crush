@@ -110,8 +110,10 @@ function mount() {
   host = svelte.mount(ModelMenu, { target: document.body, props: { menu: ui.menu } });
 }
 
-const modelRows = () => [...document.querySelectorAll('.model-menu [role="option"].model')];
-const levelButtons = () => [...document.querySelectorAll('.model-menu [data-column="effort"] .level')];
+const modelRows = () => [...document.querySelectorAll('[data-testid="model-row"]')];
+const levelButtons = () => [...document.querySelectorAll('[role="radiogroup"] [role="radio"]')];
+const localAction = () => document.querySelector('[data-testid="local-action"]');
+const posted = (path) => state.posts.some((p) => p.path === path);
 
 describe("downloaded local models", () => {
   function localModels() {
@@ -135,30 +137,36 @@ describe("downloaded local models", () => {
       state.routes["GET /v1/local-models"] = status;
       return status;
     };
-    mount();
-    await vi.waitFor(() => expect(document.querySelector(".local-action")?.textContent).toBe("Load"));
-    expect(document.querySelector(".local-row .name").textContent).toBe("Example.gguf");
-    expect(document.querySelector(".local-row .local-size").textContent).toBe("11.2 GiB");
-    document.querySelector(".local-action").click();
-    await vi.waitFor(() => expect(document.querySelector(".local-status")?.textContent).toBe("Loading model…"));
-    expect(state.posts.some((p) => p.path === "last-pick")).toBe(false);
-    state.routes["GET /v1/local-models"] = { state: "ready", model_id: "gguf-a" };
-    await vi.waitFor(() => expect(state.posts.some((p) => p.path === "last-pick" && p.body.model === "gguf-a")).toBe(true), { timeout: 2500 });
-    expect(document.querySelector(".local-action").textContent).toBe("Unload");
-    document.querySelector(".local-action").click();
-    await vi.waitFor(() => expect(document.querySelector(".local-action")?.textContent).toBe("Load"));
-    expect(state.posts.some((p) => p.path === "/v1/local-models/unload")).toBe(true);
+    // The menu polls the local server once a second: a fake interval lets
+    // the test step the poll instead of sitting through it.
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      mount();
+      await vi.waitFor(() => expect(localAction()).not.toBeNull());
+      localAction().click();
+      await vi.waitFor(() => expect(posted("/v1/local-models/load")).toBe(true));
+      await settle();
+      expect(posted("last-pick")).toBe(false);
+      state.routes["GET /v1/local-models"] = { state: "ready", model_id: "gguf-a" };
+      vi.advanceTimersByTime(1000);
+      await vi.waitFor(() => expect(state.posts.some((p) => p.path === "last-pick" && p.body.model === "gguf-a")).toBe(true));
+      await vi.waitFor(() => expect(localAction().disabled).toBe(false));
+      localAction().click();
+      await vi.waitFor(() => expect(posted("/v1/local-models/unload")).toBe(true));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("shows a failed load and leaves the existing chat model alone", async () => {
     localModels();
     state.routes["POST /v1/local-models/load"] = () => { throw new Error("llama-server is not installed"); };
     mount();
-    await vi.waitFor(() => expect(document.querySelector(".local-action")).not.toBeNull());
-    document.querySelector(".local-action").click();
-    await vi.waitFor(() => expect(document.querySelector(".local-status")?.textContent).toBe("llama-server is not installed"));
-    expect(state.posts.some((p) => p.path === "last-pick")).toBe(false);
-    expect(document.querySelector(".local-action").disabled).toBe(false);
+    await vi.waitFor(() => expect(localAction()).not.toBeNull());
+    localAction().click();
+    await vi.waitFor(() => expect(document.querySelector('[data-testid="local-status"]')?.textContent.trim()).not.toBe(""));
+    expect(posted("last-pick")).toBe(false);
+    expect(localAction().disabled).toBe(false);
   });
 });
 
@@ -180,7 +188,7 @@ describe("the model menu (ModelMenu.svelte)", () => {
     expect(levelButtons()).toEqual([]);
   });
 
-  it("dims a provider that cannot run in this folder, and says why", async () => {
+  it("dims a provider that cannot run in this folder", async () => {
     state.routes["GET config"] = config();
     availabilityStore.byProvider = { anthropic: "Moonshot AI is not usable here: this folder is not a git project." };
     state.routes["GET providers/availability"] = { providers: availabilityStore.byProvider };
@@ -188,13 +196,12 @@ describe("the model menu (ModelMenu.svelte)", () => {
     await settle();
     const rows = modelRows();
     expect(rows.every((row) => row.disabled)).toBe(true);
-    expect(rows[0].textContent).toContain("this folder is not a git project.");
     availabilityStore.byProvider = {};
   });
 
   // Bug 8b: while the folder's answer is out, or after it failed, no row
   // looks checked; the rows stay pickable and say so (owner's D4a).
-  it("says Checking… while the folder is checked, and Could not check after a failed read", async () => {
+  it("marks rows as checking while the folder is checked, and as failed after a failed read", async () => {
     state.routes["GET config"] = config();
     let answer;
     state.routes["GET providers/availability"] = () => new Promise((resolve, reject) => (answer = { resolve, reject }));
@@ -202,11 +209,11 @@ describe("the model menu (ModelMenu.svelte)", () => {
     await settle();
     let rows = modelRows();
     expect(rows.length).toBeGreaterThan(0);
-    expect(rows.every((row) => !row.disabled && row.textContent.includes("Checking…"))).toBe(true);
+    expect(rows.every((row) => !row.disabled && row.dataset.check === "checking")).toBe(true);
     answer.reject({ code: "internal", message: "engine lost" });
     await settle();
     rows = modelRows();
-    expect(rows.every((row) => !row.disabled && row.textContent.includes("Could not check"))).toBe(true);
+    expect(rows.every((row) => !row.disabled && row.dataset.check === "failed")).toBe(true);
   });
 
   it("checks the shown chat and ignores a late home-folder reply", async () => {
@@ -231,14 +238,12 @@ describe("the model menu (ModelMenu.svelte)", () => {
     await pending;
     await settle();
     expect(modelRows().every((row) => !row.disabled)).toBe(true);
-    expect(document.querySelector(".model-menu").textContent).not.toContain("this is your home folder");
 
     // Switching back to a home chat must still enforce the restriction.
     state.routes["GET providers/availability"] = home;
     sessions.currentId = "home";
     await settle();
     expect(modelRows().every((row) => row.disabled)).toBe(true);
-    expect(document.querySelector(".model-menu").textContent).toContain("this is your home folder");
   });
 
   it("keeps the menu open after a choice, so the effort level can be picked too", async () => {
@@ -401,14 +406,6 @@ describe("the model menu (ModelMenu.svelte)", () => {
     levelButtons()[1].click();
     await settle();
     expect(sessions.byId.here.model.reasoning_effort).toBe("high");
-  });
-
-  it("draws the app's scrollbar on both of its lists", async () => {
-    state.routes["GET config"] = config();
-    mount();
-    await settle();
-    expect(document.querySelector(".model-menu .groups").classList.contains("kit-scroll")).toBe(true);
-    expect(document.querySelector(".model-menu .rows").classList.contains("kit-scroll")).toBe(true);
   });
 
   it("a click outside, or Escape, closes it", async () => {

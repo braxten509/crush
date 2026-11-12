@@ -17,6 +17,13 @@ const (
 	handoffToolOutMax = 800
 )
 
+// The intros of a handoff: a resumed session gets only what it missed, a
+// fresh one the written copy of the whole conversation.
+const (
+	handoffResumeIntro      = "Since your last reply, the user continued this conversation with other AI agents. Here is what happened meanwhile:"
+	handoffWrittenCopyIntro = "This conversation started before you joined; earlier turns were handled by other AI agents. Here it is so far:"
+)
+
 // cliHandoff builds the prompt for a CLI turn and picks the native session
 // to resume. A native session that has seen the conversation up to some
 // point is resumed with only what happened since (turns by other agents);
@@ -35,13 +42,13 @@ func cliHandoffWithTranscript(history []message.Message, link cliagent.Link, pro
 			if len(missed) == 0 {
 				return prompt, link.Native
 			}
-			return handoffPromptWithTranscript("Since your last reply, the user continued this conversation with other AI agents. Here is what happened meanwhile:", missed, history, prompt, dataDir, sessionID), link.Native
+			return handoffPromptWithTranscript(handoffResumeIntro, missed, history, prompt, dataDir, sessionID), link.Native
 		}
 	}
 	if len(history) == 0 {
 		return prompt, ""
 	}
-	return handoffPromptWithTranscript("This conversation started before you joined; earlier turns were handled by other AI agents. Here it is so far:", history, history, prompt, dataDir, sessionID), ""
+	return handoffPromptWithTranscript(handoffWrittenCopyIntro, history, history, prompt, dataDir, sessionID), ""
 }
 
 func handoffPrompt(intro string, msgs []message.Message, prompt string) string {

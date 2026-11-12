@@ -60,9 +60,9 @@ export function accountGroups(cfg, catalog) {
   for (const entry of [...custom, ...api]) (entry.flatRate ? plans : perUse).push(entry);
 
   return [
-    { label: "Agent CLIs", rows: clis },
-    { label: "Subscriptions", rows: plans },
-    { label: "API providers", rows: perUse },
+    { id: "clis", label: "Agent CLIs", rows: clis },
+    { id: "plans", label: "Subscriptions", rows: plans },
+    { id: "api", label: "API providers", rows: perUse },
   ];
 }
 

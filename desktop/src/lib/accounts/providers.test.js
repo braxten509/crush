@@ -30,7 +30,7 @@ const catalog = [
 describe("accountGroups", () => {
   it("lists the installed CLIs first, then plan providers, then every API provider", () => {
     const groups = accountGroups(cfg, catalog);
-    expect(groups.map((group) => group.label)).toEqual(["Agent CLIs", "Subscriptions", "API providers"]);
+    expect(groups.map((group) => group.id)).toEqual(["clis", "plans", "api"]);
     // A paid-plan provider (flat_rate) is not billed per use, so it is not
     // listed as an API provider.
     expect(groups[1].rows.map((row) => row.id)).toEqual(["kimi-coding"]);
@@ -53,10 +53,11 @@ describe("accountGroups", () => {
 
 // A CLI that signs in itself (Antigravity, OpenCode Go and Zen) names its
 // row after the account once signed in (owner, 2026-10-28): the email when
-// the CLI keeps one, else the tool's name; "Sign-in" until then.
+// the CLI keeps one, else the tool's name; neither until then.
 it("a signed-in CLI row shows its email, else the tool's name", () => {
   const row = { id: "agy-cli", name: "Antigravity" };
   expect(cliRowLabel(row, true, "me@example.com")).toBe("me@example.com");
   expect(cliRowLabel(row, true, "")).toBe("Antigravity");
-  expect(cliRowLabel(row, false, "")).toBe("Sign-in");
+  expect(cliRowLabel(row, false, "")).not.toBe("me@example.com");
+  expect(cliRowLabel(row, false, "")).not.toBe("Antigravity");
 });

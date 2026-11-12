@@ -60,9 +60,19 @@ func TestOpenCodeGoNeedsConsoleSignIn(t *testing.T) {
 	dir := filepath.Join(data, "opencode")
 	require.NoError(t, os.MkdirAll(dir, 0o700))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.json"), []byte(`{"opencode-go":{"type":"api","key":"go-key"}}`), 0o600))
+	hits := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		http.Error(w, "unexpected request", http.StatusUnauthorized)
+	}))
+	defer server.Close()
+	restore := openCodeUsageURL
+	openCodeUsageURL = server.URL
+	t.Cleanup(func() { openCodeUsageURL = restore })
 
 	_, err := fetchOpenCodeLimits(context.Background())
-	require.ErrorContains(t, err, "OpenCode Console is not signed in")
+	require.Error(t, err)
+	require.Zero(t, hits, "the stale key must not be sent")
 }
 
 func TestOpenCodeGoLimitsRefreshDuringToolSteps(t *testing.T) {

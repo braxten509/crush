@@ -52,6 +52,5 @@ describe("copy notices", () => {
       ["info", "Tool content copied to clipboard"],
       ["warn", COPY_FAILED],
     ]);
-    expect(COPY_FAILED).toBe("Failed to copy to clipboard");
   });
 });

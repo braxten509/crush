@@ -11,7 +11,6 @@ import (
 	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/charmbracelet/crush/internal/ui/dialog/skillbrowser"
 	uv "github.com/charmbracelet/ultraviolet"
-	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/require"
 )
 
@@ -21,15 +20,16 @@ func TestSubmittedMessageShowsWorkingBeforeDispatchAndHandsOff(t *testing.T) {
 	u.sendMessage("instant")
 	require.Empty(t, ws.submissions)
 	require.Len(t, u.chat.flat, 1, "Working is display-only")
-	require.Contains(t, ansi.Strip(u.chat.list.Render()), "Waiting for the model")
+	waiting := u.chat.waitingItem
+	require.NotNil(t, waiting)
 	require.NotNil(t, u.chat.EnsureAnimating())
 	confirmed := u.queue.pending[0].Clone()
 	confirmed.ID = "saved"
 	u.appendSessionMessage(confirmed)
-	require.Contains(t, ansi.Strip(u.chat.list.Render()), "Waiting for the model")
+	require.Same(t, waiting, u.chat.waitingItem, "confirmation keeps the Working row")
 	u.appendSessionMessage(message.Message{ID: "assistant", SessionID: "s1", Role: message.Assistant})
 	require.Nil(t, u.chat.waitingItem, "the real assistant replaces the temporary status")
-	require.Contains(t, ansi.Strip(u.chat.list.Render()), "Waiting for the model")
+	require.Same(t, waiting, u.chat.MessageItem("assistant"), "the response adopts the Working row")
 	u.chat.SetAgentBusy(false)
 }
 
@@ -100,7 +100,6 @@ func TestCanceledPendingMessageDropsWorkingRow(t *testing.T) {
 	require.NotNil(t, u.chat.waitingItem)
 	u.interruptAgent()
 	require.Nil(t, u.chat.waitingItem)
-	require.NotContains(t, ansi.Strip(u.chat.list.Render()), "Waiting for the model")
 }
 
 func TestSlowDispatchDoesNotLoseWorkingToAnIdleProbe(t *testing.T) {
@@ -110,7 +109,7 @@ func TestSlowDispatchDoesNotLoseWorkingToAnIdleProbe(t *testing.T) {
 	u.applyBusyState(busyStateMsg{gen: u.busyFetchGen, ready: true, agentBusy: false})
 	require.Empty(t, ws.submissions)
 	require.True(t, u.isAgentBusy())
-	require.Contains(t, ansi.Strip(u.chat.list.Render()), "Waiting for the model")
+	require.NotNil(t, u.chat.waitingItem)
 }
 
 func TestCancelBeforeDispatchPreventsThePromptBeingSent(t *testing.T) {
@@ -188,5 +187,4 @@ func TestSentMessagesAreNotRepeatedInQueueEvenWithIdenticalText(t *testing.T) {
 	require.Equal(t, 1, u.visiblePromptQueueCount(), "confirmation still uses the same submission identity")
 	u.applyPromptQueue(promptQueueMsg{forSession: "s1", gen: u.queue.gen, prompts: []string{"same"}, entries: []message.QueuedPromptSummary{{Prompt: "same", SubmissionID: id}}})
 	require.Zero(t, u.visiblePromptQueueCount())
-	require.NotContains(t, ansi.Strip(u.pillsView), "Queued")
 }

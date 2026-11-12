@@ -2,7 +2,7 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
+	"strings"
 	"testing"
 
 	"charm.land/fantasy"
@@ -40,11 +40,15 @@ func TestNativeAgentReceivesSharedInstructionsAndTaskEnvironment(t *testing.T) {
 	require.NoError(t, err)
 	_, err = sa.Run(t.Context(), SessionAgentCall{SessionID: sess.ID, Prompt: "hello"})
 	require.NoError(t, err)
-	encoded, err := json.Marshal(probe.prompt)
-	require.NoError(t, err)
-	require.Contains(t, string(encoded), "crush_instruction_sources")
-	require.Contains(t, string(encoded), "crush_work_checks")
-	require.Contains(t, string(encoded), "crush_questions")
-	require.Contains(t, string(encoded), "crush_secure_entry")
+	var text strings.Builder
+	for _, m := range probe.prompt {
+		for _, part := range m.Content {
+			if tp, ok := fantasy.AsMessagePart[fantasy.TextPart](part); ok {
+				text.WriteString(tp.Text)
+			}
+		}
+	}
+	require.Contains(t, text.String(), sharedCLIInstructions)
+	require.Contains(t, text.String(), sa.tasks.instructions())
 	require.Equal(t, sa.tasks.env(sess.ID), probe.env)
 }

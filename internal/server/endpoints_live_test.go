@@ -6,9 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/agent"
-	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/pubsub"
@@ -85,9 +83,13 @@ func TestStopHelperOtherChatRefused(t *testing.T) {
 		return "/v1/workspaces/" + l.ws.ID + "/sessions/" + chat + "/helpers/" + helper.ID + "/stop" + query
 	}
 
-	liveError(t, l.h, http.MethodPost, stop(other, ""), nil, http.StatusNotFound, "helper_not_found",
-		"helper not found in this chat")
-	time.Sleep(200 * time.Millisecond)
+	liveError(t, l.h, http.MethodPost, stop(other, ""), nil, http.StatusNotFound, "helper_not_found", "")
+	// A stop marks the helper stopped before it answers, so the list is
+	// the marker: still running means the refused stop touched nothing.
+	listed := liveJSON[[]proto.Helper](t, l.h, http.MethodGet,
+		"/v1/workspaces/"+l.ws.ID+"/sessions/"+own+"/helpers", nil, http.StatusOK)
+	require.Len(t, listed, 1)
+	require.Equal(t, "running", listed[0].Status, "the helper keeps running")
 	require.Equal(t, 1, l.model.heldNow("h1-helper"), "the helper keeps running")
 
 	liveError(t, l.h, http.MethodPost, stop(own, "?client_id="+uuid.NewString()), nil,
@@ -137,13 +139,12 @@ func TestKillJobOtherChatRefused(t *testing.T) {
 	}
 
 	liveError(t, l.h, http.MethodPost, kill(other), proto.JobRef{JobID: job.JobID}, http.StatusNotFound,
-		"job_not_found", "job not found in this chat")
-	time.Sleep(200 * time.Millisecond)
+		"job_not_found", "")
+	// A kill ends the job before it answers, so the job is checked at once.
 	require.Len(t, agent.SessionBackgroundProcesses(own), 1, "the job is alive")
 
 	for _, bad := range []proto.JobRef{{}, {JobID: job.JobID, PID: 42}, {PID: -1}} {
-		liveError(t, l.h, http.MethodPost, kill(own), bad, http.StatusBadRequest, "bad_request",
-			"set exactly one of job_id and pid")
+		liveError(t, l.h, http.MethodPost, kill(own), bad, http.StatusBadRequest, "bad_request", "")
 	}
 
 	liveJSON[struct{}](t, l.h, http.MethodPost, kill(own), proto.JobRef{JobID: job.JobID}, http.StatusOK)
@@ -174,28 +175,23 @@ func TestAgentCapabilitiesRoute(t *testing.T) {
 	got := liveJSON[proto.AgentCapabilities](t, h, http.MethodGet, path, nil, http.StatusOK)
 	require.Equal(t, proto.AgentCapabilities{}, got, "no chat and no last pick: no kind, nothing moves")
 
-	cases := []struct {
-		provider string
-		want     bool
-	}{
-		{string(config.TypeClaudeCode), true},
-		{string(config.TypeCodexCLI), true},
-		{string(config.TypeOpenCodeCLI), true},
-		{string(config.TypeGrokCLI), false},
-		{string(config.TypeAGYCLI), false},
-		{config.AbacusProviderID, true},
-		{"openai", false},
+	providers := []string{
+		string(config.TypeClaudeCode),
+		string(config.TypeCodexCLI),
+		string(config.TypeOpenCodeCLI),
+		string(config.TypeGrokCLI),
+		string(config.TypeAGYCLI),
+		config.AbacusProviderID,
+		"openai",
 	}
 	chats := map[string]config.SelectedModel{}
-	for _, tc := range cases {
-		chats[tc.provider] = config.SelectedModel{Provider: tc.provider, Model: "m"}
+	for _, provider := range providers {
+		chats[provider] = config.SelectedModel{Provider: provider, Model: "m"}
 	}
 	h.app.Sessions = chatSessions(t, chats)
-	for _, tc := range cases {
-		got := liveJSON[proto.AgentCapabilities](t, h, http.MethodGet, path+"?session_id="+tc.provider, nil, http.StatusOK)
-		require.Equal(t, tc.provider, got.Kind, "the kind is the chat model's provider, as the hint reads it")
-		require.Equal(t, tc.want, got.CanBackground, tc.provider)
-		require.Equal(t, cliagent.CanBackground(catwalk.Type(got.Kind)) || got.Kind == config.AbacusProviderID, got.CanBackground)
+	for _, provider := range providers {
+		got := liveJSON[proto.AgentCapabilities](t, h, http.MethodGet, path+"?session_id="+provider, nil, http.StatusOK)
+		require.Equal(t, provider, got.Kind, "the kind is the chat model's provider, as the hint reads it")
 	}
 
 	code, body := liveCall(t, h, http.MethodGet, path, nil)

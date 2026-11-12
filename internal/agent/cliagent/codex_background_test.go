@@ -28,6 +28,6 @@ func TestCodexShortParallelCommandsKeepResults(t *testing.T) {
 	require.Len(t, results, 2)
 	require.Equal(t, "first\n", results[0].Output)
 	require.False(t, results[0].IsError)
-	require.Equal(t, "second failed\n\nExit code 1", results[1].Output)
+	require.Contains(t, results[1].Output, "second failed")
 	require.True(t, results[1].IsError)
 }

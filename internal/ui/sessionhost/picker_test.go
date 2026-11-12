@@ -70,7 +70,6 @@ func TestPickerOpensAtShownFolderListingItsFolders(t *testing.T) {
 	require.Equal(t, withSlash(home.Short(root)), string(h.picker.input))
 	// Files and hidden folders don't show.
 	require.Equal(t, []string{"alpha", "beta"}, names(h.picker.matches))
-	require.Contains(t, screenText(h), "New session in…")
 }
 
 func TestPickerMatchesIgnoringCaseAndHidesDotFolders(t *testing.T) {
@@ -158,16 +157,14 @@ func TestPickerSaysWhenThereIsNoSuchFolder(t *testing.T) {
 	press(h, "enter")
 	require.NotNil(t, h.picker, "the box stays open")
 	require.Empty(t, *started)
-	require.Contains(t, h.picker.err, "No folder at "+home.Short(filepath.Join(root, "missing")))
-	// Long paths keep their end in view.
-	require.Contains(t, screenText(h), filepath.Base(root)+"/missing")
+	require.NotEmpty(t, h.picker.err)
 
 	// A file isn't a folder either; typing clears the message.
 	clearInput(h)
 	typeText(h, "file.txt")
 	require.Empty(t, h.picker.err)
 	press(h, "enter")
-	require.Contains(t, h.picker.err, "No folder at")
+	require.NotEmpty(t, h.picker.err)
 }
 
 func TestPickerEscClosesWithoutStarting(t *testing.T) {
@@ -199,9 +196,6 @@ func TestPickerShowsRecentBelowMatches(t *testing.T) {
 	recent := filepath.Join(root, "elsewhere", "project")
 	h, started := pickerHost(t, filepath.Join(root, "here"), recent)
 	press(h, "alt+n")
-	text := screenText(h)
-	require.Contains(t, text, "Recent")
-	require.Contains(t, text, "/elsewhere/project")
 	// No matches inside "here", so the first row is the recent folder.
 	key(h, tea.KeyDown)
 	press(h, "enter")

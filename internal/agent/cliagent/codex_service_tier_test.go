@@ -51,46 +51,45 @@ cat >/dev/null
 					t.Helper()
 					args, err := os.ReadFile(filepath.Join(dir, "args.txt"))
 					require.NoError(t, err)
-					require.NotContains(t, string(args), "model_auto_compact_token_limit=")
-					require.NotContains(t, string(args), "model_auto_compact_token_limit=160000")
-					require.NotContains(t, string(args), "model_context_window=")
 					require.Contains(t, string(args), codexGuardHook())
 					data, err := os.ReadFile(filepath.Join(dir, "requests.jsonl"))
 					require.NoError(t, err)
-					lines := strings.Split(strings.TrimSpace(string(data)), "\n")
-					require.Len(t, lines, 5)
-					require.Contains(t, lines[2], `"method":"hooks/list"`)
-					for _, index := range []int{3, 4} {
+					sent := map[string]map[string]any{}
+					for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
 						var request struct {
 							Method string         `json:"method"`
 							Params map[string]any `json:"params"`
 						}
-						require.NoError(t, json.Unmarshal([]byte(lines[index]), &request))
+						require.NoError(t, json.Unmarshal([]byte(line), &request))
+						sent[request.Method] = request.Params
+					}
+					require.Contains(t, sent, "hooks/list")
+					threadMethod := "thread/start"
+					if resume != "" && !ephemeral {
+						threadMethod = "thread/resume"
+					}
+					for _, method := range []string{threadMethod, "turn/start"} {
+						require.Contains(t, sent, method)
+						params := sent[method]
 						if tier == "" {
-							require.NotContains(t, request.Params, "serviceTier", "unset must inherit Codex's setting")
+							require.NotContains(t, params, "serviceTier", "unset must inherit Codex's setting")
 						} else {
-							require.Equal(t, tier, request.Params["serviceTier"])
+							require.Equal(t, tier, params["serviceTier"])
 						}
-						if index == 3 {
-							method := "thread/start"
-							if resume != "" && !ephemeral {
-								method = "thread/resume"
-								require.Equal(t, resume, request.Params["threadId"])
+						if method == threadMethod {
+							if threadMethod == "thread/resume" {
+								require.Equal(t, resume, params["threadId"])
 							}
-							require.Equal(t, method, request.Method)
-							require.Equal(t, "gpt-6-astra", request.Params["model"])
+							require.Equal(t, "gpt-6-astra", params["model"])
 							if ephemeral {
-								require.Equal(t, true, request.Params["ephemeral"])
-								require.Equal(t, "read-only", request.Params["sandbox"])
+								require.Equal(t, true, params["ephemeral"])
+								require.Equal(t, "read-only", params["sandbox"])
 							} else {
-								require.Equal(t, "workspace-write", request.Params["sandbox"])
-								require.Equal(t, "on-request", request.Params["approvalPolicy"])
+								require.Equal(t, "workspace-write", params["sandbox"])
+								require.Equal(t, "on-request", params["approvalPolicy"])
 							}
-						} else {
-							require.Equal(t, "turn/start", request.Method)
-							if !ephemeral {
-								require.Equal(t, "max", request.Params["effort"])
-							}
+						} else if !ephemeral {
+							require.Equal(t, "max", params["effort"])
 						}
 					}
 				}

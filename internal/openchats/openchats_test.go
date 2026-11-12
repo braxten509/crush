@@ -12,16 +12,27 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// runningChild starts a child that runs until end closes its input, so the
+// test decides when it exits without waiting on a timer.
+func runningChild(t *testing.T) (pid int, end func()) {
+	t.Helper()
+	cmd := exec.Command("cat")
+	stdin, err := cmd.StdinPipe()
+	require.NoError(t, err)
+	require.NoError(t, cmd.Start())
+	end = func() { _ = stdin.Close(); _ = cmd.Wait() }
+	t.Cleanup(end)
+	return cmd.Process.Pid, end
+}
+
 // otherApp signs a running child process in as another app, the way the
 // desktop or a second terminal would, and returns a function that ends it.
 func otherApp(t *testing.T, l List) (end func()) {
 	t.Helper()
-	cmd := exec.Command("sleep", "60")
-	require.NoError(t, cmd.Start())
-	t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
-	app := App{PID: cmd.Process.Pid, Start: processStart(cmd.Process.Pid), Kind: "desktop"}
+	pid, end := runningChild(t)
+	app := App{PID: pid, Start: processStart(pid), Kind: "desktop"}
 	require.NoError(t, l.change(func(f *file) { f.Apps = append(f.Apps, app) }))
-	return func() { _ = cmd.Process.Kill(); _ = cmd.Wait() }
+	return end
 }
 
 func ids(chats []Chat) []string {
@@ -103,10 +114,8 @@ func TestAddRemoveAndSwapKeepTheOrder(t *testing.T) {
 func TestDesktopHearsOnlyItsFoldersWhileItRuns(t *testing.T) {
 	l := At(filepath.Join(t.TempDir(), "open-chats.json"))
 	heard, other := t.TempDir(), t.TempDir()
-	cmd := exec.Command("sleep", "60")
-	require.NoError(t, cmd.Start())
-	t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
-	desktop := App{PID: cmd.Process.Pid, Start: processStart(cmd.Process.Pid), Kind: "desktop", Dirs: []string{heard + "/"}}
+	pid, end := runningChild(t)
+	desktop := App{PID: pid, Start: processStart(pid), Kind: "desktop", Dirs: []string{heard + "/"}}
 	require.NoError(t, l.change(func(f *file) { f.Apps = append(f.Apps, desktop) }))
 	require.True(t, l.DesktopHears(heard))
 	require.False(t, l.DesktopHears(other))
@@ -116,8 +125,7 @@ func TestDesktopHearsOnlyItsFoldersWhileItRuns(t *testing.T) {
 	require.False(t, l.DesktopHears(heard))
 	require.False(t, l.DesktopOpen())
 	require.NoError(t, l.change(func(f *file) { f.Apps[0].Kind = "desktop" }))
-	_ = cmd.Process.Kill()
-	_ = cmd.Wait()
+	end()
 	require.False(t, l.DesktopHears(heard), "a closed desktop rings for nothing")
 	require.False(t, l.DesktopOpen())
 }

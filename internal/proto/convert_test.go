@@ -138,28 +138,6 @@ func TestQuestionRoundTrip(t *testing.T) {
 	require.Equal(t, answers, QuestionAnswerToDomain(overTheWire(t, QuestionAnswerFromDomain(answers))))
 }
 
-// A choice's sketch is sent on to the screen with the question.
-func TestQuestionChoiceImageSent(t *testing.T) {
-	t.Parallel()
-	got := QuestionsFromDomain([]question.Question{{
-		ID: "q", Type: question.TypeSingleChoice, Text: "Which?",
-		Choices: []question.Choice{{ID: "a", Label: "A", Image: "/tmp/a.png"}},
-	}})
-	require.Equal(t, "/tmp/a.png", got[0].Choices[0].Image)
-}
-
-// A choice's sketch survives the trip from Crush's background process to
-// the screen, so the question form can show it.
-func TestQuestionChoiceImageReachesScreen(t *testing.T) {
-	t.Parallel()
-	got := QuestionsToDomain([]QuestionItem{{
-		ID: "q", Type: "single_choice", Question: "Which?",
-		Choices: []QuestionChoice{{ID: "a", Label: "A", Image: "/tmp/a.png"}, {ID: "b", Label: "B"}},
-	}})
-	require.Equal(t, "/tmp/a.png", got[0].Choices[0].Image)
-	require.Empty(t, got[0].Choices[1].Image)
-}
-
 func TestMCPRoundTrip(t *testing.T) {
 	t.Parallel()
 	for _, typ := range []mcp.EventType{

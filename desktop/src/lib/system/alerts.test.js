@@ -38,6 +38,9 @@ describe("alerts (alerts.js)", () => {
   it("a finished chat's toast carries the chat and its folder", async () => {
     state.handlers.agent_event("created", { type: "agent_finished", session_id: "s1" });
     await settle();
-    expect(state.notified).toEqual([["Crush finished", '"Fix the toasts" is done', { sessionId: "s1", projectDir: "/home/me/proj" }]]);
+    expect(state.notified).toHaveLength(1);
+    const [, body, target] = state.notified[0];
+    expect(target).toEqual({ sessionId: "s1", projectDir: "/home/me/proj" });
+    expect(body).toContain("Fix the toasts");
   });
 });

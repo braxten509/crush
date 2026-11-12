@@ -21,13 +21,13 @@ func TestReadOnlyBashCantChangeProject(t *testing.T) {
 	if _, err := exec.LookPath("codex"); err != nil {
 		t.Skip("codex isn't installed")
 	}
-	home, err := os.UserHomeDir()
-	require.NoError(t, err)
 	// The lock always lets programs write in the temporary folder, so the
-	// project must live elsewhere.
-	project, err := os.MkdirTemp(home, ".crush-readonly-bash-test-")
+	// project lives in a folder of the test's own, next to this file.
+	project, err := os.MkdirTemp(".", "readonly-bash-fixture-")
 	require.NoError(t, err)
 	t.Cleanup(func() { os.RemoveAll(project) })
+	project, err = filepath.Abs(project)
+	require.NoError(t, err)
 
 	permissions := &mockBashPermissionService{Broker: pubsub.NewBroker[permission.PermissionRequest]()}
 	tool := NewReadOnlyBashTool(permissions, project, t.TempDir(), &config.Attribution{TrailerStyle: config.TrailerStyleNone}, config.DefaultMaxBackgroundJobs, nil, nil)

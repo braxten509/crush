@@ -55,7 +55,7 @@ func TestChatGroupRerendersAfterEmptyStepRemoved(t *testing.T) {
 		item.SetMessage(msg)
 		u.chat.Refold(item)
 	}
-	require.Contains(t, ansi.Strip(u.chat.list.Render()), "Thinking")
+	require.Contains(t, ansi.Strip(u.chat.list.Render()), chat.StatusThinking)
 
 	msg.Parts = append(msg.Parts, message.Finish{Reason: message.FinishReasonEndTurn})
 	item.SetMessage(msg)
@@ -65,7 +65,7 @@ func TestChatGroupRerendersAfterEmptyStepRemoved(t *testing.T) {
 	u.chat.RemoveMessage(msg.ID) // what updateSessionMessage does
 
 	require.Nil(t, u.chat.MessageItem("step"))
-	require.NotContains(t, ansi.Strip(u.chat.list.Render()), "Thinking")
+	require.NotContains(t, ansi.Strip(u.chat.list.Render()), chat.StatusThinking)
 }
 
 // Only the end of the chat shows a live status. A step still marked as
@@ -82,18 +82,18 @@ func TestChatShowsOneLiveStatus(t *testing.T) {
 	u.chat.SetMessages(step, done)
 
 	out := ansi.Strip(u.chat.list.Render())
-	require.Equal(t, 1, strings.Count(out, "Compacting conversation"), out)
-	require.NotContains(t, out, "Thinking")
+	require.Equal(t, 1, strings.Count(out, chat.StatusCompacting), out)
+	require.NotContains(t, out, chat.StatusThinking)
 	require.Contains(t, out, "All bridge tests pass so far.")
 	g, ok := u.chat.list.ItemAt(u.chat.Len() - 1).(*chat.ToolGroupItem)
 	require.True(t, ok)
-	require.Contains(t, ansi.Strip(g.Render(100)), "Compacting conversation")
+	require.Contains(t, ansi.Strip(g.Render(100)), chat.StatusCompacting)
 
 	// Compaction ends: the group goes back to "Thinking".
 	msg.IsCompacting = false
 	step.SetMessage(msg)
 	u.chat.Refold(step)
 	out = ansi.Strip(u.chat.list.Render())
-	require.NotContains(t, out, "Compacting conversation")
-	require.Equal(t, 1, strings.Count(out, "Thinking"), out)
+	require.NotContains(t, out, chat.StatusCompacting)
+	require.Equal(t, 1, strings.Count(out, chat.StatusThinking), out)
 }

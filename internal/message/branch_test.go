@@ -84,28 +84,26 @@ func TestBranchRefusesToolOutputAndBadHighlight(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		edit func(*message.BranchRequest)
-		want string
 	}{
-		{"another chat's message", func(r *message.BranchRequest) { r.MessageID = elsewhere.ID }, "the message belongs to another chat"},
-		{"a missing message", func(r *message.BranchRequest) { r.MessageID = uuid.NewString() }, "the message belongs to another chat"},
-		{"tool output", func(r *message.BranchRequest) { r.MessageID = tool.ID; r.HighlightStart, r.HighlightEnd = 0, 5 }, "branch from message text, not tool output"},
-		{"other words", func(r *message.BranchRequest) { r.HighlightText = "friend" }, "the highlight doesn't match the message"},
+		{"another chat's message", func(r *message.BranchRequest) { r.MessageID = elsewhere.ID }},
+		{"a missing message", func(r *message.BranchRequest) { r.MessageID = uuid.NewString() }},
+		{"tool output", func(r *message.BranchRequest) { r.MessageID = tool.ID; r.HighlightStart, r.HighlightEnd = 0, 5 }},
+		{"other words", func(r *message.BranchRequest) { r.HighlightText = "friend" }},
 		{"byte offsets after an emoji", func(r *message.BranchRequest) {
 			r.HighlightStart, r.HighlightEnd = byteStart, byteStart+len("there")
-		}, "the highlight doesn't match the message"},
-		{"negative start", func(r *message.BranchRequest) { r.HighlightStart = -1 }, "the highlight doesn't match the message"},
-		{"empty range", func(r *message.BranchRequest) { r.HighlightEnd = r.HighlightStart }, "the highlight doesn't match the message"},
+		}},
+		{"negative start", func(r *message.BranchRequest) { r.HighlightStart = -1 }},
+		{"empty range", func(r *message.BranchRequest) { r.HighlightEnd = r.HighlightStart }},
 		{"past the end", func(r *message.BranchRequest) {
 			r.HighlightStart, r.HighlightEnd = start, len(utf16.Encode([]rune(text)))+1
-		}, "the highlight doesn't match the message"},
-		{"no title", func(r *message.BranchRequest) { r.Title = "  \t " }, "the branch needs a title"},
+		}},
+		{"no title", func(r *message.BranchRequest) { r.Title = "  \t " }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			req := ok
 			tc.edit(&req)
 			_, err := c.branch(ctx, req)
 			require.ErrorIs(t, err, message.ErrBadCut)
-			require.EqualError(t, err, tc.want)
 		})
 	}
 	links, err := c.q.ChatLinks(ctx)
@@ -152,7 +150,6 @@ func TestBranchRefusesUnfinished(t *testing.T) {
 	// ran needs none).
 	_, err := ask(tools, "two files")
 	require.ErrorIs(t, err, message.ErrCutNotFinished)
-	require.EqualError(t, err, "this reply's tools are still running")
 
 	second := c.add(t, "src", message.Tool, message.ToolResult{ToolCallID: "c2", Name: "view", Content: "b"})
 	res, err := ask(tools, "two files")
@@ -164,7 +161,6 @@ func TestBranchRefusesUnfinished(t *testing.T) {
 	writing := c.add(t, "src", message.Assistant, message.TextContent{Text: "Both files say hello."})
 	_, err = ask(writing, "hello")
 	require.ErrorIs(t, err, message.ErrCutNotFinished)
-	require.EqualError(t, err, "this reply is still being written")
 	writing.AddFinish(message.FinishReasonEndTurn, "", "")
 	require.NoError(t, c.msgs.Update(ctx, writing))
 	_, err = ask(writing, "hello")

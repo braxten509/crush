@@ -135,6 +135,7 @@
       tabindex="-1"
       disabled={entry.disabled}
       data-menu-item={entry.label}
+      data-menu-id={entry.id}
       onmouseenter={() => {
         if (!entry.disabled) active = i;
       }}

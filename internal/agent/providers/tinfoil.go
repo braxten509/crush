@@ -30,6 +30,17 @@ func tinfoilHTTPClient(baseURL string) (*http.Client, error) {
 	return c.(*http.Client), nil
 }
 
+// verifiedTinfoilTransport checks a Tinfoil server's proof and returns the
+// transport that talks to it. A variable so tests can fail the check without
+// the network.
+var verifiedTinfoilTransport = func(host string) (http.RoundTripper, error) {
+	client, err := tinfoil.NewClientWithOptions(tinfoil.WithEnclave(host))
+	if err != nil {
+		return nil, err
+	}
+	return client.HTTPClient().Transport, nil
+}
+
 // tinfoilTransport makes the verified client on the first request, and
 // again on a later one if making it failed.
 type tinfoilTransport struct {
@@ -41,7 +52,7 @@ type tinfoilTransport struct {
 func (t *tinfoilTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	t.mu.Lock()
 	if t.inner == nil {
-		client, err := tinfoil.NewClientWithOptions(tinfoil.WithEnclave(t.host))
+		inner, err := verifiedTinfoilTransport(t.host)
 		if err != nil {
 			t.mu.Unlock()
 			if req.Body != nil {
@@ -49,7 +60,7 @@ func (t *tinfoilTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 			}
 			return nil, fmt.Errorf("tinfoil: the server could not prove it is Tinfoil's secure server: %w", err)
 		}
-		t.inner = client.HTTPClient().Transport
+		t.inner = inner
 	}
 	inner := t.inner
 	t.mu.Unlock()

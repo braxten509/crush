@@ -9,7 +9,7 @@ numbers show.
 Usage: CHECK_ARGS="-s 7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f01" \\
        tests/check.sh --fixture tests/fixtures/limits-together.json limits_together.py
 """
-import os, sys, time
+import os, re, sys
 
 sys.path.insert(0, os.path.dirname(__file__))
 from harness import check, finish, probe_eval, shot, wait_for
@@ -28,6 +28,7 @@ seen = probe_eval(probe_path, """(async () => {
 })()""") or {}
 shot(out_dir, "limits-together")
 meters = ({} if seen.get("error") else seen).get("meters") or []
-check(meters[1:] == [["5-HOUR", "74% left"], ["WEEK", "42% left"]],
+numbers = [int(m.group()) if (m := re.search(r"\d+", value)) else None for _, value in meters[1:]]
+check(numbers == [74, 42] and not any("checking" in value for _, value in meters),
       f"the chat's own sign-in shows its numbers though three sign-ins were read together ({meters})")
 finish()

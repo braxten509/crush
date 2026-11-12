@@ -65,6 +65,9 @@ type liveState struct {
 	// for the teardown that follows: it runs only if an app joins first,
 	// aborting that teardown (runPendingQ2).
 	pendingQ2 []string
+	// onGone, set only by tests, runs at the start of every departure
+	// (liveGone), on the departing goroutine, before its Q2 begins.
+	onGone func(clientID string, reason GoneReason, last bool)
 	// switchedAway lists the apps that left for another folder with their
 	// work kept running (GoneFolderSwitch). The next app to join takes that
 	// work over, so it stops when that app leaves (owner, 2026-10-21).

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Seeds a chat through the engine's API (desktop-design 6.2), so drivers get
-long chats without typing them: p3_speed.py's 300 items, p3_long.py's 1,000.
+long chats without typing them: p3_long.py's 1,000 items.
 
 Usage:
   seed_chat.py --cwd DIR (--items N | --turns N) [--session SID] [--title T]

@@ -178,9 +178,9 @@ describe("the cache", () => {
     const root = document.createElement("div");
     const renderer = createMarkdown(root, { messageId: "m" });
     renderer.update("Intro\n\n| a |\n|---|\n| 1 |", { finished: false });
-    expect(root.querySelector(".md-chip").dataset.figure).toBeUndefined();
+    expect(root.querySelector("[data-kind]").dataset.figure).toBeUndefined();
     renderer.update("Intro\n\n| a |\n|---|\n| 1 |", { finished: true });
-    expect(root.querySelector(".md-chip").dataset.figure).toBe("m:0");
+    expect(root.querySelector("[data-kind]").dataset.figure).toBe("m:0");
   });
 
   test("released visuals: every chip that leaves the page is handed back once", () => {
@@ -211,9 +211,9 @@ describe("the cache", () => {
     const renderer = createMarkdown(root, { messageId: "m" });
     const text = "one two three";
     renderer.update(text, { finished: true });
-    expect(root.querySelector(".md-deco")).toBeNull();
+    expect(root.querySelector("[data-deco]")).toBeNull();
     renderer.update(text, { finished: true, decorations: [{ kind: "branch", start: 4, end: 7 }] });
-    expect(root.querySelector(".md-deco").textContent).toBe("two");
+    expect(root.querySelector("[data-deco]").textContent).toBe("two");
     expect(root.textContent).toBe(text);
   });
 });

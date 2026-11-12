@@ -538,6 +538,7 @@
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div
   class="scroller"
+  data-testid="vlist-scroller"
   class:bar-never={scrollbar === "never"}
   data-bar-fade="own"
   class:bar-always={scrollbar === "always"}
@@ -549,7 +550,7 @@
   aria-label={label}
   aria-busy="false"
 >
-  <div class="canvas" style:--even="{even}px" bind:this={canvas}>
+  <div class="canvas" data-testid="vlist-canvas" style:--even="{even}px" bind:this={canvas}>
     {#each segs as seg (seg.spacer ? seg.id : keys[seg.index])}
       {#if seg.spacer}
         <div class="spacer" style:height="{seg.height}px" aria-hidden="true"></div>

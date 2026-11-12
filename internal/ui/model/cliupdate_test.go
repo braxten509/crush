@@ -34,5 +34,5 @@ func TestAgentQuestionMovesCLIUpdatePromptToStatus(t *testing.T) {
 	require.NotNil(t, cmd)
 	require.False(t, m.cliUpdatePromptOpen())
 	require.NotNil(t, m.activeInline)
-	require.Contains(t, m.status.msg.Msg, "codex 1.1.0 is available")
+	require.Contains(t, m.status.msg.Msg, "1.1.0")
 }

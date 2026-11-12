@@ -32,7 +32,7 @@
      WebKit then showed an older frame as the fade ended: the Themes sheet
      flickered on every open (FLASHING.md, attempt 10). -->
 {#if dialogs.length > 0 && !bare}
-  <div class="scrim" aria-hidden="true" transition:scrim></div>
+  <div class="scrim" data-scrim aria-hidden="true" transition:scrim></div>
 {/if}
 
 {#if dialogs.length > 0}

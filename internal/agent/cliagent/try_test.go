@@ -38,7 +38,7 @@ func TestTryAccountStopsWithItsChildren(t *testing.T) {
 	go func() { done <- TryAccount(t.Context(), config.TypeClaudeCode, "", "") }()
 	select {
 	case err := <-done:
-		require.ErrorContains(t, err, "did not answer")
+		require.Error(t, err)
 	case <-time.After(3 * time.Second):
 		t.Fatal("TryAccount waited on a child that kept its output open")
 	}

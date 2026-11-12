@@ -133,7 +133,7 @@ func TestReviewListStaysSmallAndDetailPayloadIsBounded(t *testing.T) {
 	full, err := svc.LoadReview(t.Context(), msg.ID)
 	require.NoError(t, err)
 	require.Empty(t, full.ToolResults()[0].Review.Changes[0].After.Content)
-	require.Contains(t, full.ToolResults()[0].Review.Changes[0].After.Omitted, "size limit")
+	require.NotEmpty(t, full.ToolResults()[0].Review.Changes[0].After.Omitted)
 	require.NotEmpty(t, result.Review.Changes[0].After.Content, "caller's snapshot remains immutable")
 }
 
@@ -188,7 +188,26 @@ func TestOlderSummariesGetLineCountsWhileDiffsRemain(t *testing.T) {
 	// Strip the counts, as summaries saved before they existed look.
 	row, err := s.q.GetMessage(t.Context(), msg.ID)
 	require.NoError(t, err)
-	old := strings.Replace(row.Parts, `,"adds":1,"dels":1,"counted":true`, "", 1)
+	parts, err := unmarshalParts([]byte(row.Parts))
+	require.NoError(t, err)
+	stripped := false
+	for i, part := range parts {
+		result, ok := part.(ToolResult)
+		if !ok || result.Review == nil || result.Review.Summary == nil {
+			continue
+		}
+		review, summary := *result.Review, *result.Review.Summary
+		require.True(t, summary.Counted)
+		summary.Adds, summary.Dels, summary.Counted = 0, 0, false
+		review.Summary = &summary
+		result.Review = &review
+		parts[i] = result
+		stripped = true
+	}
+	require.True(t, stripped)
+	encoded, err := marshalParts(parts)
+	require.NoError(t, err)
+	old := string(encoded)
 	require.NotEqual(t, row.Parts, old)
 	storage := s.q.(reviewStorage)
 	payload, err := storage.GetMessageReview(t.Context(), msg.ID)

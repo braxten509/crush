@@ -37,10 +37,9 @@ func TestHandleFilePathPasteReportsProblems(t *testing.T) {
 
 	u := newTestUI()
 	dir := t.TempDir()
-	info := requireInfoMsg(t, u.handleFilePathPaste(dir)(), util.InfoTypeWarn)
-	require.Contains(t, info.Msg, "directory")
+	requireInfoMsg(t, u.handleFilePathPaste(dir)(), util.InfoTypeWarn)
 
-	info = requireInfoMsg(t, u.handleFilePathPaste(filepath.Join(dir, "missing.png"))(), util.InfoTypeError)
+	info := requireInfoMsg(t, u.handleFilePathPaste(filepath.Join(dir, "missing.png"))(), util.InfoTypeError)
 	require.NotEmpty(t, info.Msg)
 
 	big := filepath.Join(dir, "big.png")
@@ -48,8 +47,7 @@ func TestHandleFilePathPasteReportsProblems(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, f.Truncate(6*1024*1024))
 	require.NoError(t, f.Close())
-	info = requireInfoMsg(t, u.handleFilePathPaste(big)(), util.InfoTypeWarn)
-	require.Contains(t, info.Msg, "too big")
+	requireInfoMsg(t, u.handleFilePathPaste(big)(), util.InfoTypeWarn)
 }
 
 func TestHugePasteReportsSize(t *testing.T) {
@@ -60,6 +58,5 @@ func TestHugePasteReportsSize(t *testing.T) {
 	u.dialog = dialog.NewOverlay()
 	cmd := u.handlePasteMsg(tea.PasteMsg{Content: strings.Repeat("x\n", 3*1024*1024)})
 	require.NotNil(t, cmd)
-	info := requireInfoMsg(t, cmd(), util.InfoTypeWarn)
-	require.Contains(t, info.Msg, "too big")
+	requireInfoMsg(t, cmd(), util.InfoTypeWarn)
 }

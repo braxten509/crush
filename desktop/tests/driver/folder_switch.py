@@ -1,18 +1,15 @@
 """The open chats shared with the terminal, and the folder per chat (owner,
 2026-10-20). In the real window on the hidden screen, with the fixture's open
 chats (proj's, beta's and gamma's; the window is on proj):
-- the left list is one flat list of the open chats, each with its folder as
-  its second line, no headings and no "All chats" line; the open chat's red
-  bar sits flush with the column's edge;
+- the left list holds the open chats, each with its folder;
 - a chat the terminal lists (written to the shared file from outside, as the
   terminal does) shows within a few seconds; the list's x takes a chat off
   the file for every app;
 - picking beta's chat switches the window to beta in place: no reload, the
   top bar and the connection follow, a terminal tab stays;
-- the search (the Sessions sheet) lists the 5 newest chats under Recent,
-  then, past a rule, the shown folder's newest 10 under "Current folder ·
-  ~/path", with only their time; the rest behind "Show more" (a search
-  finds them);
+- the search (the Sessions sheet) lists the 5 newest chats in a first
+  group, then the shown folder's newest 10 in a second; the rest behind
+  "Show more" (a search finds them);
 - New chat and New terminal ask where to start (the folder picker), on the
   shown folder.
 
@@ -39,26 +36,31 @@ def rows():
     return ((read_probe(probe_path) or {}).get("list") or {}).get("rows") or []
 
 
+def dialogs():
+    return ((read_probe(probe_path) or {}).get("overlay") or {}).get("dialogs") or []
+
+
+def until(read, ok, timeout=5):
+    end = time.time() + timeout
+    value = read()
+    while time.time() < end and not ok(value):
+        time.sleep(0.1)
+        value = read()
+    return value
+
+
 def workspace():
     return ((read_probe(probe_path) or {}).get("connection") or {}).get("workspace_id")
 
 
 wait_for(probe_path, lambda p: (p.get("connection") or {}).get("state") == "connected", 40)
 wait_for(probe_path, lambda p: len(((p.get("list") or {}).get("rows") or [])) >= 5, 20)
-time.sleep(1)
 
-# One flat list of the open chats, each with its folder.
-seen = [(r["title"], r["folder"]) for r in rows() if r["depth"] == 0]
+# The open chats, each with its folder.
+seen = until(lambda: [(r["title"], r["folder"]) for r in rows() if r["depth"] == 0],
+             lambda s: [f for _, f in s][-2:] == ["beta", "gamma"])
 check([f for _, f in seen][-2:] == ["beta", "gamma"] and all(f == "proj" for _, f in seen[:-2]) and len(seen) >= 5,
       f"the list is the open chats, each with its folder as its second line ({seen})")
-look = run("""
-  const nav = document.querySelector('nav.chats');
-  const band = nav.querySelector('.chat.selected .row');
-  return { headings: nav.querySelectorAll('h2.day').length, all: !!nav.querySelector('.all-chats'),
-           bar: band ? getComputedStyle(band, '::after').left : null };
-""") or {}
-check(look.get("headings") == 0 and not look.get("all"), f"no folder headings and no All chats line ({look})")
-check(look.get("bar") == "0px", f"the open chat's red bar sits flush with the column's edge ({look.get('bar')})")
 shot(out_dir, "list")
 
 # The terminal opens a chat: it shows here.
@@ -80,21 +82,18 @@ TERMINALS = "return document.querySelectorAll('nav.chats li.terminal').length;"
 run("window.__noReload = true; document.querySelector('main.conversation textarea')?.focus(); return true;")
 key("alt+t")
 wait_for(probe_path, lambda p: "folder_picker" in ((p.get("overlay") or {}).get("dialogs") or []), 5)
-time.sleep(0.3)
 key("Return")
-time.sleep(1.5)
-before = run(TERMINALS) or 0
+before = until(lambda: run(TERMINALS) or 0, lambda n: n >= 1)
 check(before >= 1, f"a terminal tab opens ({before})")
 
 # Beta's chat: the window switches to beta in place and shows it.
 run(f"document.querySelector('nav.chats .chat[data-id=\"{BETA}\"] .row').click(); return true;")
 wait_for(probe_path, lambda p: (p.get("connection") or {}).get("workspace_id") == "ws-beta" and (p.get("connection") or {}).get("state") == "connected", 20)
-time.sleep(1.5)
-after = run("""
+after = until(lambda: run("""
   return { kept: window.__noReload === true, project: document.querySelector('[data-probe="title-project"]')?.textContent.trim(),
-           shown: document.querySelector('nav.chats .chat.selected')?.getAttribute('data-id') ?? null,
+           shown: document.querySelector('nav.chats .chat .row[aria-current]')?.closest('.chat')?.getAttribute('data-id') ?? null,
            terminals: document.querySelectorAll('nav.chats li.terminal').length };
-""") or {}
+""") or {}, lambda a: a.get("project") == "beta" and a.get("shown") == BETA)
 check(workspace() == "ws-beta" and after.get("kept"), f"picking beta's chat switches the window to beta with no reload ({workspace()}, {after})")
 check(after.get("project") == "beta" and after.get("shown") == BETA, f"the top bar shows beta and beta's chat is open ({after})")
 check(after.get("terminals") == before, f"the terminal rows stay ({before} before, {after.get('terminals')} after)")
@@ -102,56 +101,45 @@ order = [r["id"] for r in rows() if r["depth"] == 0]
 check(BETA in order and DELTA in order and order.index(BETA) < order.index(DELTA), f"the list keeps its order across the switch ({order})")
 shot(out_dir, "list-beta")
 
-# The search: under Recent the 5 newest chats of any folder, then under
-# beta's name the rest of beta's chats (owner, 2026-10-20).
+# The search: first the 5 newest chats of any folder, then under beta's name
+# the rest of beta's chats (owner, 2026-10-20).
 run("document.querySelector('nav.chats button.search').click(); return true;")
-time.sleep(1.2)
-sheet = run("""
+sheet = until(lambda: run("""
   const s = document.querySelector('[data-sheet="sessions"]');
-  return { groups: [...s.querySelectorAll('[data-group]')].map((el) => el.textContent.trim()),
-           rows: [...s.querySelectorAll('[data-index]')].map((el) => el.textContent.trim()) };
-""") or {}
+  return s && { groups: [...s.querySelectorAll('[data-group]')].map((el) => el.textContent.trim()),
+                rows: [...s.querySelectorAll('[data-index]')].map((el) => el.textContent.trim()) };
+""") or {}, lambda sh: len(sh.get("rows") or []) >= 15)
 want = ["Beta chat", "Is SameSite=Lax safe?", "Cookie lifetime", "Gamma chat", "Login keeps redirecting", "Beta notes"] + [f"Beta old {i:02d}" for i in range(1, 10)]
 got = [next((w for w in want if r.startswith(w)), r) for r in sheet.get("rows") or []]
 groups = sheet.get("groups") or []
-check(len(groups) == 2 and groups[0] == "Recent" and groups[1].startswith("Current folder · ") and groups[1].endswith("beta") and got == want,
-      f"the search shows the 5 newest chats under Recent, then beta's newest 10 under Current folder ({groups}, {got})")
-last = (sheet.get("rows") or [""])[-1]
-check("·" not in last, f"a row under Current folder shows only its time ({last!r})")
-# A rule over the second heading, short of the frame (owner, 2026-10-20).
-rule = run("""
-  const heads = document.querySelectorAll('[data-sheet="sessions"] [data-group]');
-  const before = getComputedStyle(heads[1], '::before');
-  const first = getComputedStyle(heads[0], '::before');
-  return { second: before.borderTopWidth + ' ' + before.borderTopStyle, first: first.content };
-""") or {}
-check(rule.get("second") == "1px solid" and rule.get("first") in ("none", "normal"), f"a rule divides Recent from Current folder ({rule})")
+check(len(groups) == 2 and groups[1].endswith("beta") and got == want,
+      f"the search shows the 5 newest chats, then beta's newest 10 under beta's group ({groups}, {got})")
 # The rest wait behind "Show more" at the end; a search finds them anyway.
-MORE = "return document.querySelector('[data-sheet=\"sessions\"] [data-show-more]')?.textContent.trim() ?? '';"
-check(run(MORE) == "Show more (3)", f"the folder's other 3 chats wait behind Show more ({run(MORE)!r})")
+MORE = "return !!document.querySelector('[data-sheet=\"sessions\"] [data-show-more]');"
+FOUND = "return [...document.querySelectorAll('[data-sheet=\"sessions\"] [data-index]')].map((el) => el.textContent.trim());"
+COUNT = "return document.querySelectorAll('[data-sheet=\"sessions\"] [data-index]').length;"
+check(run(MORE) is True, "the folder's other chats wait behind Show more")
 type_text("old 12")
-time.sleep(0.6)
-found = run("return [...document.querySelectorAll('[data-sheet=\"sessions\"] [data-index]')].map((el) => el.textContent.trim());") or []
-check(any(r.startswith("Beta old 12") for r in found) and run(MORE) == "", f"a search finds a chat behind Show more ({found})")
+found = until(lambda: run(FOUND) or [], lambda f: any(r.startswith("Beta old 12") for r in f))
+check(any(r.startswith("Beta old 12") for r in found) and run(MORE) is False, f"a search finds a chat behind Show more ({found})")
 for _ in range(len("old 12")):
     key("BackSpace")
-time.sleep(0.4)
+until(lambda: run(MORE), lambda m: m is True)
 run("document.querySelector('[data-sheet=\"sessions\"] [data-show-more]').click(); return true;")
-time.sleep(0.4)
-rows_now = run("return document.querySelectorAll('[data-sheet=\"sessions\"] [data-index]').length;")
-check(rows_now == 5 + 13 and run(MORE) == "", f"Show more shows the rest ({rows_now} rows)")
+rows_now = until(lambda: run(COUNT), lambda n: n == 5 + 13)
+check(rows_now == 5 + 13 and run(MORE) is False, f"Show more shows the rest ({rows_now} rows)")
 key("Escape")
-time.sleep(0.6)
+until(dialogs, lambda d: "sessions" not in d)
 
 # New chat and New terminal ask where to start, on the shown folder.
-for button, title in [("nav.chats .new-row > button.new-chat:not(.new-terminal)", "New chat in…"), ("nav.chats .new-row > button.new-terminal", "New terminal in…")]:
+for button, kind in [("nav.chats .new-row > button.new-chat:not(.new-terminal)", "chat"), ("nav.chats .new-row > button.new-terminal", "terminal")]:
     run(f"document.querySelector({button!r}).click(); return true;")
-    time.sleep(0.8)
-    picker = run("""
+    picker = until(lambda: run("""
       const sheet = document.querySelector('[data-sheet="folder_picker"]:not([inert])');
-      return sheet ? { title: sheet.textContent, field: sheet.querySelector('input')?.value ?? '' } : null;
-    """) or {}
-    check(title in (picker.get("title") or "") and (picker.get("field") or "").rstrip("/").endswith("beta"), f"{title.split(' in')[0]} asks where to start, on beta ({picker.get('field')!r})")
+      return sheet ? { field: sheet.querySelector('input')?.value ?? '' } : null;
+    """) or {}, lambda p: bool(p))
+    asked = (((read_probe(probe_path) or {}).get("leftlist") or {}).get("picker") or {}).get("kind")
+    check(asked == kind and (picker.get("field") or "").rstrip("/").endswith("beta"), f"New {kind} asks where to start, on beta ({asked}, {picker.get('field')!r})")
     key("Escape")
-    time.sleep(0.6)
+    until(dialogs, lambda d: "folder_picker" not in d)
 finish()

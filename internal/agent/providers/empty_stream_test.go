@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -32,6 +33,43 @@ func (m *emptyStreamTestModel) Stream(_ context.Context, call fantasy.Call) (fan
 			}
 		}
 	}, nil
+}
+
+// shortRetryWait makes fantasy retry an incomplete stream after 1 ms instead
+// of its normal backoff, until the test ends.
+func shortRetryWait(t *testing.T) {
+	incompleteStreamHeaders = map[string]string{"retry-after-ms": "1"}
+	t.Cleanup(func() { incompleteStreamHeaders = nil })
+}
+
+// shortRetryAfterModel adds a 1 ms retry-after-ms to its model's provider
+// errors, as a server's header would, so a retried 429 doesn't wait out
+// fantasy's normal backoff (the Gemini provider drops response headers).
+type shortRetryAfterModel struct {
+	fantasy.LanguageModel
+}
+
+func (m shortRetryAfterModel) Stream(ctx context.Context, call fantasy.Call) (fantasy.StreamResponse, error) {
+	stream, err := m.LanguageModel.Stream(ctx, call)
+	if err != nil {
+		return nil, withShortRetryAfter(err)
+	}
+	return func(yield func(fantasy.StreamPart) bool) {
+		stream(func(part fantasy.StreamPart) bool {
+			if part.Error != nil {
+				part.Error = withShortRetryAfter(part.Error)
+			}
+			return yield(part)
+		})
+	}, nil
+}
+
+func withShortRetryAfter(err error) error {
+	var providerErr *fantasy.ProviderError
+	if errors.As(err, &providerErr) {
+		providerErr.ResponseHeaders = map[string]string{"retry-after-ms": "1"}
+	}
+	return err
 }
 
 func TestEmptyStreamRecovery(t *testing.T) {
@@ -74,9 +112,10 @@ func TestEmptyStreamRecovery(t *testing.T) {
 }
 
 func TestEmptyStreamRepeatedFailureIsReported(t *testing.T) {
+	shortRetryWait(t)
 	inner := &emptyStreamTestModel{responses: [][]fantasy.StreamPart{nil}}
 	result, err := fantasy.NewAgent(emptyStreamModel{inner}, fantasy.WithMaxRetries(1)).Stream(t.Context(), fantasy.AgentStreamCall{Prompt: "finish the task"})
-	require.ErrorContains(t, err, "unexpected EOF")
+	require.ErrorIs(t, err, io.ErrUnexpectedEOF)
 	require.Nil(t, result)
 	require.Len(t, inner.calls, 2, "recovery must be bounded")
 }
@@ -94,6 +133,7 @@ func TestEmptyStreamCancellationDoesNotRetry(t *testing.T) {
 }
 
 func TestEmptyStreamAfterThirteenActionsKeepsWorking(t *testing.T) {
+	shortRetryWait(t)
 	inner := &emptyStreamTestModel{}
 	for number := 0; number < 13; number++ {
 		inner.responses = append(inner.responses, []fantasy.StreamPart{
@@ -142,7 +182,7 @@ func TestGeminiRateLimitWaitsAndContinues(t *testing.T) {
 	model, err := builder.LanguageModel(t.Context(), provider, config.ProviderConfig{Type: "google"}, config.SelectedModel{Provider: "gemini", Model: "gemini-4-argon"})
 	require.NoError(t, err)
 	retries := 0
-	result, err := fantasy.NewAgent(model).Stream(t.Context(), fantasy.AgentStreamCall{
+	result, err := fantasy.NewAgent(shortRetryAfterModel{model}).Stream(t.Context(), fantasy.AgentStreamCall{
 		Prompt: "finish the task",
 		OnRetry: func(err *fantasy.ProviderError, delay time.Duration) {
 			require.Equal(t, http.StatusTooManyRequests, err.StatusCode)

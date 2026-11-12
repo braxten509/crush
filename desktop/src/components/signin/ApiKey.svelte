@@ -121,7 +121,7 @@
 </script>
 
 <Sheet id={ID} {title} width="standard" {help} {onKey} onboarding={props.onboarding === true}>
-  <div class="body" class:busy={state === "verifying"}>
+  <div class="body" class:busy={state === "verifying"} data-provider={props.providerId}>
     <Field bind:value={key} masked prompt={state === "verifying" ? "… " : "> "} placeholder="Enter your API key..." label="API key" error={saveError} />
     <p class="note">This will be written in your global configuration:</p>
     <p class="path">{configPath}</p>

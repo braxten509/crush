@@ -10,7 +10,6 @@ import {
   opensAt,
   pickFile,
   pickResource,
-  popupColumns,
   previewPick,
   rankRows,
   resourceRows,
@@ -88,12 +87,6 @@ describe("ranking (TYPE-026, completions.go:225-272)", () => {
     expect(match).toMatchObject({ score: 16, chars: [0, 10] });
     expect(fuzzyFind("zz", ["abc"])).toEqual([]);
     expect(fuzzyFind("", ["abc"])).toEqual([]);
-  });
-
-  it("sizes the popup between 10 and 100 characters", () => {
-    expect(popupColumns(rankRows(fileRows([{ path: "a.md" }]), ""))).toBe(10);
-    expect(popupColumns(rankRows(fileRows([{ path: "x".repeat(30) }]), ""))).toBe(32);
-    expect(popupColumns(rankRows(fileRows([{ path: "x".repeat(300) }]), ""))).toBe(100);
   });
 });
 

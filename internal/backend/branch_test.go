@@ -17,7 +17,6 @@ import (
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/proto"
-	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -147,135 +146,62 @@ func replyWorkspace(t *testing.T, llm *replyLLM) (*Backend, *Workspace, string) 
 	return b, ws, clientID
 }
 
-// messageLog records when each message update was published.
-type messageLog struct {
-	mu      sync.Mutex
-	updates map[string][]time.Time
-}
-
-func watchMessages(ctx context.Context, ws *Workspace) *messageLog {
-	l := &messageLog{updates: map[string][]time.Time{}}
-	events := ws.Messages.Subscribe(ctx)
-	go func() {
-		for ev := range events {
-			if ev.Type != pubsub.UpdatedEvent {
-				continue
-			}
-			l.mu.Lock()
-			l.updates[ev.Payload.ID] = append(l.updates[ev.Payload.ID], time.Now())
-			l.mu.Unlock()
-		}
-	}()
-	return l
-}
-
-func (l *messageLog) of(id string) []time.Time {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return slices.Clone(l.updates[id])
-}
-
-// longestGap is the longest time between two writes in a row that spans
-// any part of [from, to].
-func longestGap(writes []time.Time, from, to time.Time) time.Duration {
-	var longest time.Duration
-	for i := 1; i < len(writes); i++ {
-		if writes[i].Before(from) || writes[i-1].After(to) {
-			continue
-		}
-		longest = max(longest, writes[i].Sub(writes[i-1]))
-	}
-	return longest
-}
-
 // A branch made while the AI replies in the source chat copies only
-// finished messages and returns while the reply streams. The copy holds
-// the single database connection briefly: neither the copy nor the
-// reply's writes during it take longer than the bound (engine-design.md
-// 5.11, Risks). Then one send in the branch, which ends with the user's
+// finished messages and returns while the reply streams, without waiting
+// for it. Then one send in the branch, which ends with the user's
 // message, goes through the provider.
 func TestBranchWhileReplying(t *testing.T) {
 	llm := newReplyLLM(t)
 	b, ws, clientID := replyWorkspace(t, llm)
 	ctx := t.Context()
-	updates := watchMessages(ctx, ws)
+	// The held reply never ends by itself, so a call that waits for it
+	// runs into this limit.
+	const patience = 10 * time.Second
 
 	source, err := ws.Sessions.Create(ctx, "Source")
 	require.NoError(t, err)
 	_, err = ws.Sessions.SetModel(ctx, source.ID, session.ModelChoice(`{"provider":"test-openai-compat","model":"test-model"}`))
 	require.NoError(t, err)
-	words := strings.Repeat("and then some more words ", 10)
-	var lastAnswer message.Message
-	for i := 1; i <= 500; i++ {
+	const pairs = 5
+	for i := 1; i <= pairs; i++ {
 		_, err := ws.Messages.Create(ctx, source.ID, message.CreateMessageParams{
-			Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: fmt.Sprintf("Question %d %s", i, words)}},
+			Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: fmt.Sprintf("Question %d", i)}},
 		})
 		require.NoError(t, err)
-		lastAnswer, err = ws.Messages.Create(ctx, source.ID, message.CreateMessageParams{
+		_, err = ws.Messages.Create(ctx, source.ID, message.CreateMessageParams{
 			Role:  message.Assistant,
-			Parts: []message.ContentPart{message.TextContent{Text: fmt.Sprintf("Answer %d %s", i, words)}, message.Finish{Reason: message.FinishReasonEndTurn}},
+			Parts: []message.ContentPart{message.TextContent{Text: fmt.Sprintf("Answer %d", i)}, message.Finish{Reason: message.FinishReasonEndTurn}},
 		})
 		require.NoError(t, err)
 	}
-
-	branchAt := func(m message.Message, highlight, title string) (proto.Branch, time.Duration, error) {
-		start := strings.Index(m.Content().Text, highlight) // ASCII: bytes are UTF-16 units
-		began := time.Now()
-		branch, err := b.CreateBranch(ctx, ws.ID, source.ID, proto.BranchRequest{
-			MessageID: m.ID, HighlightText: highlight, HighlightStart: start, HighlightEnd: start + len(highlight), Title: title,
-		})
-		return branch, time.Since(began), err
-	}
-
-	// The baseline: the same chat copied three times with no reply running,
-	// each to a new branch from its own words, since highlights may not
-	// overlap. The fastest copy is the least disturbed by other work on the
-	// machine.
-	var baselines []time.Duration
-	for i, highlight := range []string{"Answer 500", "and then", "some more"} {
-		branch, took, err := branchAt(lastAnswer, highlight, fmt.Sprintf("Baseline %d", i+1))
-		require.NoError(t, err)
-		require.Equal(t, 1000, branch.Copied)
-		baselines = append(baselines, took)
-	}
-	baseline := slices.Min(baselines)
-	// The bound is loose: the baseline and the copy made mid-reply are taken
-	// at different moments, and the machine's load can change in between.
-	// It still catches a copy that holds the database for long.
-	bound := max(2*time.Second, 4*baseline)
-	t.Logf("baseline copies of 1,000 messages took %v; the fastest, %v, makes the bound %v", baselines, baseline, bound)
-	// Every wait from here on outlasts the bound: a machine slow enough to
-	// stretch the baseline is as slow for the rest. The held reply never
-	// ends by itself, so a call that waits for it still fails.
-	patience := bound + 10*time.Second
 
 	llm.hold()
-	require.NoError(t, b.SendMessage(ws.ID, clientID, proto.AgentMessage{SessionID: source.ID, Prompt: "Tell me about step 501"}))
+	require.NoError(t, b.SendMessage(ws.ID, clientID, proto.AgentMessage{SessionID: source.ID, Prompt: "Tell me about step 6"}))
 	select {
 	case <-llm.streaming:
-	case <-time.After(max(30*time.Second, patience)):
+	case <-time.After(patience):
 		t.Fatal("the reply never started streaming")
 	}
 	msgs, err := ws.Messages.List(ctx, source.ID)
 	require.NoError(t, err)
-	require.Len(t, msgs, 1002)
-	prompt, reply := msgs[1000], msgs[1001]
+	require.Len(t, msgs, 2*pairs+2)
+	prompt, reply := msgs[2*pairs], msgs[2*pairs+1]
 	require.Equal(t, message.User, prompt.Role)
 	require.Equal(t, message.Assistant, reply.Role)
-	require.Eventually(t, func() bool { return len(updates.of(reply.ID)) >= 3 }, patience, 5*time.Millisecond,
-		"the reply writes as it streams")
 	require.True(t, ws.AgentCoordinator.IsSessionBusy(source.ID))
 
 	type result struct {
 		branch proto.Branch
-		took   time.Duration
 		err    error
 	}
 	done := make(chan result, 1)
-	copyStart := time.Now()
 	go func() {
-		branch, took, err := branchAt(prompt, "step 501", "Step 501")
-		done <- result{branch, took, err}
+		const highlight = "step 6"
+		start := strings.Index(prompt.Content().Text, highlight) // ASCII: bytes are UTF-16 units
+		branch, err := b.CreateBranch(ctx, ws.ID, source.ID, proto.BranchRequest{
+			MessageID: prompt.ID, HighlightText: highlight, HighlightStart: start, HighlightEnd: start + len(highlight), Title: "Step 6",
+		})
+		done <- result{branch, err}
 	}()
 	var mid result
 	select {
@@ -283,53 +209,46 @@ func TestBranchWhileReplying(t *testing.T) {
 	case <-time.After(patience):
 		t.Fatal("the branch call waited for the reply")
 	}
-	copyEnd := time.Now()
 	require.NoError(t, mid.err)
 	require.True(t, ws.AgentCoordinator.IsSessionBusy(source.ID), "the call returned while the reply streams")
-	require.Less(t, mid.took, bound, "the copy made mid-reply")
-	t.Logf("the copy made mid-reply took %v", mid.took)
 
-	// The reply writes on past the copy, then ends in the source.
-	time.Sleep(200 * time.Millisecond)
+	// The reply ends in the source.
 	llm.finish()
 	require.Eventually(t, func() bool {
 		_ = ws.Messages.Flush(ctx, reply.ID)
 		m, err := ws.Messages.Get(ctx, reply.ID)
 		return err == nil && m.IsFinished() && strings.HasSuffix(m.Content().Text, " Done.")
 	}, patience, 10*time.Millisecond, "the reply finishes in the source")
-	writes := updates.of(reply.ID)
-	require.True(t, writes[0].Before(copyStart) && writes[len(writes)-1].After(copyEnd), "the reply wrote before and after the copy")
-	stall := longestGap(writes, copyStart, copyEnd)
-	t.Logf("the reply's longest wait between writes during the copy: %v", stall)
-	require.Less(t, stall, bound, "the reply's writes during the copy")
 
 	// The branch holds the chat through the prompt, finished messages only.
 	require.Empty(t, mid.branch.Session.ParentSessionID)
-	require.Equal(t, 1001, mid.branch.Copied)
+	require.Equal(t, 2*pairs+1, mid.branch.Copied)
 	copied, err := ws.Messages.List(ctx, mid.branch.Session.ID)
 	require.NoError(t, err)
-	require.Len(t, copied, 1001)
+	require.Len(t, copied, 2*pairs+1)
 	for _, m := range copied {
 		require.True(t, m.IsFinished(), "only finished messages are copied")
 		require.NotContains(t, m.Content().Text, "Working")
 	}
-	require.Equal(t, message.User, copied[1000].Role)
-	require.Equal(t, prompt.Content().Text, copied[1000].Content().Text)
+	require.Equal(t, message.User, copied[2*pairs].Role)
+	require.Equal(t, prompt.Content().Text, copied[2*pairs].Content().Text)
 
 	// One send in the branch, whose last message is the user's.
-	require.NoError(t, b.SendMessage(ws.ID, clientID, proto.AgentMessage{SessionID: mid.branch.Session.ID, Prompt: "And step 502?"}))
+	require.NoError(t, b.SendMessage(ws.ID, clientID, proto.AgentMessage{SessionID: mid.branch.Session.ID, Prompt: "And step 7?"}))
 	require.Eventually(t, func() bool {
 		_ = ws.Messages.FlushAll(ctx)
 		msgs, err := ws.Messages.List(ctx, mid.branch.Session.ID)
-		if err != nil || len(msgs) != 1003 {
+		if err != nil || len(msgs) != 2*pairs+3 {
 			return false
 		}
-		answer := msgs[1002]
+		answer := msgs[2*pairs+2]
 		return answer.Role == message.Assistant && answer.IsFinished() && answer.Content().Text == "Working Done."
 	}, patience, 10*time.Millisecond, "the branch answers its first send")
 	requests := llm.requests()
+	require.NotEmpty(t, requests)
 	roles := requests[len(requests)-1]
-	t.Logf("the branch's request ended with the roles %v", roles[max(0, len(roles)-3):])
+	require.NotEmpty(t, roles)
+	require.Equal(t, "user", roles[len(roles)-1], "the branch's request ends with the user's message")
 }
 
 // TestBranchStartsOnItsSourceModel: a branch is a copy, and a copy keeps

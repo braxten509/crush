@@ -143,7 +143,7 @@
   {#key section}
     <div class="page" in:slidePage={{ dir }}>
       <h2 class="title">{settingsSections().find((s) => s.id === section)?.label ?? section}</h2>
-      <div class="rows">
+      <div class="rows" data-settings-rows>
   {#if section === "appearance"}
     <div class="row">
       <span class="name">Theme</span>

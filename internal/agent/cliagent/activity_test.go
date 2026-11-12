@@ -1,7 +1,6 @@
 package cliagent
 
-// Content protocol tests ignore timing-dependent heartbeats. The reasoning
-// lifecycle test separately checks that those activity events are emitted.
+// Content protocol tests ignore timing-dependent heartbeats.
 func withoutActivity(events []Event) []Event {
 	var content []Event
 	for _, event := range events {

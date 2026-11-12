@@ -12,7 +12,10 @@ const signalFile = process.env.CRUSH_BG_SIGNAL ?? ""
 const logDir = path.join(os.homedir(), ".cache", "crush", "background")
 const maxOutput = 30_000
 const defaultTimeout = 2 * 60 * 1000
-const autoBackgroundAfter = 11_000
+// Tests shorten the cap through CRUSH_BASH_AUTO_BACKGROUND_MS; the check
+// runs often enough to notice a short cap.
+const autoBackgroundAfter = Number(process.env.CRUSH_BASH_AUTO_BACKGROUND_MS) || 11_000
+const checkEvery = Math.min(200, autoBackgroundAfter / 4)
 
 function backgroundSignal() {
   try {
@@ -82,7 +85,7 @@ All commands run in the current working directory by default. Use the \`workdir\
         const elapsed = Date.now() - started
         if (elapsed > limit) return done("timeout")
         if (elapsed > autoBackgroundAfter) done("auto-background")
-      }, 200)
+      }, checkEvery)
       ctx.abort.addEventListener("abort", onAbort)
       child.on("exit", () => done("exit"))
     })

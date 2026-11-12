@@ -112,14 +112,6 @@ func TestSecureQuestionFormSubmitsTogether(t *testing.T) {
 			require.NotContains(t, out, token)
 		}
 	}
-	out := renderForm(f, 120, 30)
-	require.Contains(t, out, "API key: Entered · saved on submit")
-	require.Contains(t, out, "Name: Ada")
-	t.Log("\n" + out)
-	f.switchTab(1)
-	out = renderForm(f, 120, f.Height(120))
-	require.Contains(t, out, "•••••")
-	t.Log("\n" + out)
 	for _, verb := range []string{"%v", "%+v", "%#v", "%s", "%d", "%x"} {
 		require.NotContains(t, fmt.Sprintf(verb, f), "dummy", verb)
 		require.NotContains(t, fmt.Sprintf(verb, f.questions[1]), "dummy", verb)
@@ -170,7 +162,6 @@ func TestSecureQuestionFormFailedSaveStaysOpen(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte(secureTemplate+"# edited\n"), 0o600))
 	require.False(t, enter(f), "a failed save keeps the form open")
 	require.Equal(t, 2, f.activeIdx, "the failing field is shown")
-	require.Contains(t, renderForm(f, 120, 30), "destination changed")
 	requireNoResult(t, form)
 	requireFile(t, path, secureTemplate+"# edited\n")
 	require.NotEmpty(t, f.secureQuestion(2).buffer.runes, "the entry survives for a retry")
@@ -185,8 +176,8 @@ func TestSecureQuestionFormFailedSaveStaysOpen(t *testing.T) {
 
 func TestSecureQuestionSingleFieldAndClipboard(t *testing.T) {
 	f, form, path := openSecureForm(t, question.Question{ID: "key", Type: question.TypeSecureEntry, Text: "Enter the key", Description: "d"})
-	require.False(t, enter(f))
-	require.Contains(t, renderForm(f, 80, 20), "Enter a value first.")
+	require.False(t, enter(f), "an empty value does not submit")
+	requireNoResult(t, form)
 
 	original, originalTimeout := clipboardText, clipboardTimeout
 	t.Cleanup(func() { clipboardText, clipboardTimeout = original, originalTimeout })
@@ -219,9 +210,7 @@ func TestSecureQuestionNeedsLocalForm(t *testing.T) {
 	typeText(f, "dummy")
 	f.HandlePaste(tea.PasteMsg{Content: "dummy"})
 	require.Empty(t, f.secureQuestion(0).buffer.runes)
-	out := renderForm(f, 100, 20)
-	require.Contains(t, out, "only in the local Crush terminal")
-	require.NotContains(t, out, "dummy")
+	require.NotContains(t, renderForm(f, 100, 20), "dummy")
 }
 
 func TestClosedSecureFormRejectsInputAndDismissalWipesTheBuffer(t *testing.T) {

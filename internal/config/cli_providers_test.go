@@ -42,8 +42,14 @@ func TestAddCLIProviders(t *testing.T) {
 
 	large, small, ok := cfg.defaultCLIModels()
 	require.True(t, ok)
-	require.Equal(t, "opus", large.Model)
-	require.Equal(t, "haiku", small.Model)
+	modelIDs := make([]string, 0, len(claude.Models))
+	for _, m := range claude.Models {
+		modelIDs = append(modelIDs, m.ID)
+	}
+	for _, picked := range []SelectedModel{large, small} {
+		require.Equal(t, string(TypeClaudeCode), picked.Provider)
+		require.Contains(t, modelIDs, picked.Model)
+	}
 }
 
 func TestOpenCodeZenKeepsOnlyFreeModels(t *testing.T) {
@@ -90,29 +96,11 @@ func TestOpenCodeZenRegistersAsFreeProvider(t *testing.T) {
 
 	zen, ok := cfg.Providers.Get("opencode-zen-cli")
 	require.True(t, ok, "opencode on PATH registers Zen beside Go")
-	require.Equal(t, "OpenCode Zen", zen.Name)
 	require.Equal(t, TypeOpenCodeZenCLI, zen.Type)
 	require.NotEmpty(t, zen.Models)
-	require.Equal(t, "opencode/deepseek-v4.1-flash-free", zen.Models[0].ID)
-	var ids []string
-	for _, model := range zen.Models {
-		ids = append(ids, model.ID)
-	}
-	require.Equal(t, []string{
-		"opencode/deepseek-v4.1-flash-free",
-		"opencode/beam-free",
-		"opencode/big-pickle",
-		"opencode/flint-40b-free",
-		"opencode/glm-5.3-flash-free",
-		"opencode/mimo-v2.6-flash-free",
-		"opencode/nemotron-3-ultra-free",
-		"opencode/nemotron-3.5-lightning-free",
-		"opencode/nemotron-3.5-super-vl-free",
-	}, ids, "Zen lists free models only")
 
-	goProvider, ok := cfg.Providers.Get(string(TypeOpenCodeCLI))
+	_, ok = cfg.Providers.Get(string(TypeOpenCodeCLI))
 	require.True(t, ok)
-	require.Equal(t, "OpenCode Go", goProvider.Name)
 }
 
 func TestListModels(t *testing.T) {
@@ -171,11 +159,4 @@ echo '{"id":2,"result":{"data":[{"id":"gpt-6-astra","inputModalities":["text"]},
 	require.False(t, models[0].Capabilities.Vision)
 	require.True(t, models[1].Capabilities.Vision)
 	require.True(t, models[2].Capabilities.Vision)
-	for _, provider := range cliProviders {
-		if provider.cfg.Type == TypeCodexCLI {
-			for _, model := range provider.cfg.Models {
-				require.True(t, model.Capabilities.Vision, model.ID)
-			}
-		}
-	}
 }

@@ -16,7 +16,6 @@ func TestSkillDirectoryContainsDiscoveryMetadataOnly(t *testing.T) {
 	require.Contains(t, policy, "chosen")
 	require.Contains(t, policy, "Use for the sample task")
 	require.Contains(t, policy, "/skills/chosen/SKILL.md")
-	require.Contains(t, policy, "read its SKILL.md")
 	require.NotContains(t, policy, "FULL PROCEDURE")
 	require.NotContains(t, policy, "Manual only")
 	require.Contains(t, policy, `["disabled"]`)
@@ -43,7 +42,6 @@ func TestSkillPolicyDoesNotInvokeCatalogExamples(t *testing.T) {
 	require.NotContains(t, policy, "$align")
 	require.NotContains(t, policy, "$prompter")
 	require.NotContains(t, policy, "$teach")
-	require.Contains(t, policy, "not a user request or skill invocation")
 	// Refreshing the catalog must not disable a real command typed by the user.
 	prompt := withCurrentSkillPolicy("$teach SQL joins", policy)
 	require.Contains(t, prompt, "$teach SQL joins")

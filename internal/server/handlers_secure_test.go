@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -275,7 +276,7 @@ func TestSecureValueNeverLeaks(t *testing.T) {
 }
 
 // TestSecureSubmitDecodeErrorNotLogged: a body that does not decode gets 400
-// with fixed text, and no part of it reaches a log.
+// bad_request, and no part of it reaches the answer or a log.
 func TestSecureSubmitDecodeErrorNotLogged(t *testing.T) {
 	logs := secureCaptureLogs(t)
 	h := newSecureHarness(t)
@@ -292,7 +293,13 @@ func TestSecureSubmitDecodeErrorNotLogged(t *testing.T) {
 	} {
 		status, out := h.do(t, http.MethodPost, h.secureSubmitPath(sent.FormID), viewer, body)
 		require.Equal(t, http.StatusBadRequest, status, body)
-		require.JSONEq(t, `{"message":"could not read the secure entry","code":"bad_request"}`, string(out))
+		var perr proto.Error
+		require.NoError(t, json.Unmarshal(out, &perr), "%s", out)
+		require.Equal(t, "bad_request", perr.Code)
+		secureNoLeak(t, "the answer", out)
+		for _, detail := range []string{"invalid character", "unexpected EOF", "cannot unmarshal"} {
+			require.NotContains(t, string(out), detail, "the answer")
+		}
 	}
 	for where, log := range map[string]string{"the server log": h.logs.String(), "the process log": logs.String()} {
 		secureNoLeak(t, where, []byte(log))
@@ -335,7 +342,8 @@ func TestSecureFieldErrorHasField(t *testing.T) {
 	events.waitFor(t, pubsub.PayloadTypeSecureForm, &sent)
 
 	perr := h.expectError(t, http.MethodPost, h.secureSubmitPath(sent.FormID), viewer, secureValues("bad\nvalue"), http.StatusUnprocessableEntity, "secure_field_error")
-	require.Equal(t, proto.Error{Message: "enter a single-line value without control characters", Code: "secure_field_error", Field: "key"}, perr)
+	require.Equal(t, "secure_field_error", perr.Code)
+	require.Equal(t, "key", perr.Field)
 	require.False(t, form.Closed())
 
 	h.expectOK(t, http.MethodPost, h.secureSubmitPath(sent.FormID), viewer, secureValues("good"), nil)

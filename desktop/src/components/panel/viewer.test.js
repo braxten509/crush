@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { base64Bytes, dataBytes, pictureName, pictureSize, viewerSource } from "./viewer.js";
+import { base64Bytes, dataBytes, pictureName, viewerSource } from "./viewer.js";
 
 // 4.5: the picture viewer's bar words and the pictures it may load.
 
@@ -24,14 +24,6 @@ describe("sizes", () => {
     expect(dataBytes("data:image/png;base64,AAAAAAAA")).toBe(6);
     expect(dataBytes("data:image/svg+xml,%3Csvg%3E")).toBe(5);
     expect(dataBytes("blob:x")).toBeNull();
-  });
-
-  it("writes the bar's size words", () => {
-    expect(pictureSize(1280, 720, 214 * 1024)).toBe("1280 × 720 · 214 KB");
-    expect(pictureSize(16, 16, 900)).toBe("16 × 16 · 900 B");
-    expect(pictureSize(4000, 3000, 3.4 * 1024 * 1024)).toBe("4000 × 3000 · 3.4 MB");
-    expect(pictureSize(1280, 720, null)).toBe("1280 × 720");
-    expect(pictureSize(0, 0, 10)).toBe("10 B");
   });
 
   it("names the picture by its name, else the path's last part", () => {

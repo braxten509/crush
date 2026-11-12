@@ -22,22 +22,22 @@ func TestSubAgentOutputLimitRecovery(t *testing.T) {
 		first       fantasy.FinishReason
 		second      fantasy.FinishReason
 		firstText   string
-		wantError   string
+		wantError   bool
 		wantContent string
 		wantCalls   int
 	}{
 		{name: "plain report is delivered", first: fantasy.FinishReasonStop, firstText: "report", wantContent: "report", wantCalls: 1},
 		{name: "reasoning exhausted before report", first: fantasy.FinishReasonLength, second: fantasy.FinishReasonStop, wantContent: "complete report", wantCalls: 2},
 		{name: "partial report replaced with complete report", first: fantasy.FinishReasonLength, firstText: "unfinished", second: fantasy.FinishReasonStop, wantContent: "complete report", wantCalls: 2},
-		{name: "repeated exhaustion fails", first: fantasy.FinishReasonLength, second: fantasy.FinishReasonLength, wantError: "ran out of output tokens", wantCalls: 2},
-		{name: "refusal is not retried", first: fantasy.FinishReasonContentFilter, wantError: "safety classifier refused", wantCalls: 1},
-		{name: "refusal with text is not success", first: fantasy.FinishReasonContentFilter, firstText: "refused", wantError: "safety classifier refused", wantCalls: 1},
-		{name: "provider error finish is not success", first: fantasy.FinishReasonError, firstText: "partial", wantError: "error", wantCalls: 1},
-		{name: "run stopped on pending tool calls is not success", first: fantasy.FinishReasonToolCalls, firstText: "narration", wantError: "stopped before finishing", wantCalls: 1},
+		{name: "repeated exhaustion fails", first: fantasy.FinishReasonLength, second: fantasy.FinishReasonLength, wantError: true, wantCalls: 2},
+		{name: "refusal is not retried", first: fantasy.FinishReasonContentFilter, wantError: true, wantCalls: 1},
+		{name: "refusal with text is not success", first: fantasy.FinishReasonContentFilter, firstText: "refused", wantError: true, wantCalls: 1},
+		{name: "provider error finish is not success", first: fantasy.FinishReasonError, firstText: "partial", wantError: true, wantCalls: 1},
+		{name: "run stopped on pending tool calls is not success", first: fantasy.FinishReasonToolCalls, firstText: "narration", wantError: true, wantCalls: 1},
 		{name: "unknown finish with text is delivered", first: fantasy.FinishReasonUnknown, firstText: "report", wantContent: "report", wantCalls: 1},
 		{name: "other finish with text is delivered", first: fantasy.FinishReasonOther, firstText: "report", wantContent: "report", wantCalls: 1},
-		{name: "unknown finish without text fails", first: fantasy.FinishReasonUnknown, wantError: "no text output", wantCalls: 1},
-		{name: "whitespace report fails", first: fantasy.FinishReasonStop, firstText: " \n\t", wantError: "no text output", wantCalls: 1},
+		{name: "unknown finish without text fails", first: fantasy.FinishReasonUnknown, wantError: true, wantCalls: 1},
+		{name: "whitespace report fails", first: fantasy.FinishReasonStop, firstText: " \n\t", wantError: true, wantCalls: 1},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			env := testEnv(t)
@@ -73,9 +73,8 @@ func TestSubAgentOutputLimitRecovery(t *testing.T) {
 			})
 			require.NoError(t, err)
 			require.Equal(t, test.wantCalls, calls)
-			if test.wantError != "" {
+			if test.wantError {
 				require.True(t, resp.IsError)
-				require.Contains(t, resp.Content, test.wantError)
 			} else {
 				require.False(t, resp.IsError)
 				require.Equal(t, test.wantContent, resp.Content)
@@ -120,7 +119,8 @@ func TestSubAgentReportJudgesTheLastStep(t *testing.T) {
 	for _, test := range []struct {
 		name        string
 		first       *fantasy.AgentResult
-		wantError   string
+		wantError   bool
+		wantReason  string // the finish reason code the error names
 		wantContent string
 		wantCalls   int
 	}{
@@ -137,15 +137,16 @@ func TestSubAgentReportJudgesTheLastStep(t *testing.T) {
 			wantCalls:   1,
 		},
 		{
-			name:      "last step refused after earlier text is not retried",
-			first:     multiStepResult(testStep(fantasy.FinishReasonToolCalls, "I will look."), testStep(fantasy.FinishReasonContentFilter, "")),
-			wantError: "content_filter",
-			wantCalls: 1,
+			name:       "last step refused after earlier text is not retried",
+			first:      multiStepResult(testStep(fantasy.FinishReasonToolCalls, "I will look."), testStep(fantasy.FinishReasonContentFilter, "")),
+			wantError:  true,
+			wantReason: "content_filter",
+			wantCalls:  1,
 		},
 		{
 			name:      "last step still calling tools is incomplete",
 			first:     multiStepResult(testStep(fantasy.FinishReasonToolCalls, "I will look.")),
-			wantError: "stopped before finishing",
+			wantError: true,
 			wantCalls: 1,
 		},
 	} {
@@ -162,8 +163,11 @@ func TestSubAgentReportJudgesTheLastStep(t *testing.T) {
 			})
 			result, err := runSubAgentReport(t.Context(), agent, SessionAgentCall{})
 			require.Equal(t, test.wantCalls, calls)
-			if test.wantError != "" {
-				require.ErrorContains(t, err, test.wantError)
+			if test.wantError {
+				require.Error(t, err)
+				if test.wantReason != "" {
+					require.ErrorContains(t, err, test.wantReason)
+				}
 				return
 			}
 			require.NoError(t, err)
@@ -377,7 +381,8 @@ func TestBackgroundSubAgentReportsExhaustionAsFailed(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatal("task did not deliver its result")
 	}
-	require.Contains(t, notification, "<status>failed</status>")
+	_, status, ok := ParseTaskNotification(notification)
+	require.True(t, ok)
+	require.Equal(t, string(TaskFailed), status)
 	require.Contains(t, notification, "max_tokens")
-	require.NotContains(t, notification, "(no final message)")
 }

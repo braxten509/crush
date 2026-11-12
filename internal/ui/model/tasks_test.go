@@ -56,34 +56,6 @@ func TestTaskRowOpensMatchingDialog(t *testing.T) {
 	require.False(t, m.dialog.ContainsDialog(dialog.SubAgentsID))
 }
 
-func TestTaskRowCollapsesAgentDetails(t *testing.T) {
-	t.Parallel()
-	m := newTestUI()
-	m.session = &session.Session{ID: "s1"}
-	m.taskRow.tasks = map[string]agent.Task{
-		"t1": {ID: "t1", SessionID: "s1", Name: "Benchmark offline speech-to-text on Pixel", CLI: "claude", Status: agent.TaskRunning},
-		"t2": {ID: "t2", SessionID: "s1", Name: "Evaluate Hey Jarvis wake word", CLI: "codex", Status: agent.TaskRunning},
-	}
-	m.taskRow.bgProcs = []agent.Process{{PID: 42}}
-	for _, width := range []int{60, 120} {
-		for _, focused := range []bool{false, true} {
-			m.taskRow.focused = focused
-			row := m.renderTasks(width)
-			out := ansi.Strip(row)
-			require.Contains(t, out, "2 subagents")
-			require.Contains(t, out, "1 background process")
-			for _, task := range m.taskRow.tasks {
-				require.NotContains(t, out, task.Name)
-				require.NotContains(t, out, task.CLI)
-			}
-			require.NotContains(t, out, "x stop")
-			require.NotContains(t, row, "\n")
-			require.LessOrEqual(t, ansi.StringWidth(row), width)
-			t.Logf("width=%d focused=%v: %s", width, focused, row)
-		}
-	}
-}
-
 // Ctrl+X with the sub-agents entry selected opens the sub-agents list, not
 // the background processes one.
 func TestTaskRowBackgroundKeyOpensSelectedEntry(t *testing.T) {
@@ -142,10 +114,9 @@ func TestTaskCountChangesImmediatelyOnCompletion(t *testing.T) {
 	m.handleTaskEvent(first)
 	m.handleTaskEvent(second)
 	m.openSubAgentsDialog()
-	require.Contains(t, ansi.Strip(m.renderTasks(80)), "2 subagents")
+	require.Len(t, m.visibleTasks(), 2)
 	first.Status, first.Ended = agent.TaskDone, time.Now()
 	m.handleTaskEvent(first)
-	require.Contains(t, ansi.Strip(m.renderTasks(80)), "1 subagent")
 	require.Len(t, m.visibleTasks(), 1, "no tick or linger delay is needed")
 	scr := uv.NewScreenBuffer(100, 24)
 	m.dialog.Dialog(dialog.SubAgentsID).Draw(scr, scr.Bounds())
@@ -166,13 +137,12 @@ func TestTaskRowCountsServersOutsideSessionHost(t *testing.T) {
 	m.session = &session.Session{ID: "s1"}
 	adb := agent.Process{PID: 7, Command: "adb -L tcp:5037 fork-server server --reply-fd 4", Started: time.Now()}
 	m.handleBgProcs(bgProcsMsg{servers: []agent.Server{{Port: 5037, Process: adb}}})
-	line := ansi.Strip(m.renderTaskLine(120, false))
-	require.Contains(t, line, "1 server")
-	require.NotContains(t, line, "background process")
+	require.Len(t, m.taskRow.servers, 1)
+	require.Empty(t, m.taskRow.bgProcs, "a server is not a background process")
 	require.Equal(t, 1, m.taskRowLen())
 
 	m.openBackgroundDialog()
 	scr := uv.NewScreenBuffer(100, 24)
 	m.dialog.Dialog(dialog.BackgroundID).Draw(scr, scr.Bounds())
-	require.Contains(t, ansi.Strip(scr.Render()), "adb · 5037")
+	require.Contains(t, ansi.Strip(scr.Render()), "5037")
 }

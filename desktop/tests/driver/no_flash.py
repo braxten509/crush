@@ -5,7 +5,7 @@ owner's paths run: opening the Themes sheet, switching Settings sections, back
 to the chats, opening a tool group, hovering the chat rows, opening the model
 menu. It fails when an animation fades a piece in from see-through (an opacity
 under 1 in its keyframes) anywhere but a scrim layer behind sheets
-(.scrim), or when the settings page shows a frame with no rows during
+([data-scrim]), or when the settings page shows a frame with no rows during
 a section switch. The veil itself once faded, and every sheet inside it faded
 with it (FLASHING.md, attempt 10).
 
@@ -21,7 +21,7 @@ probe_path, out_dir = sys.argv[1], sys.argv[2]
 
 
 def app_window(timeout=20):
-    """The largest visible window of the app, found by its class (as look_align.py)."""
+    """The largest visible window of the app, found by its class."""
     end = time.time() + timeout
     while time.time() < end:
         r = subprocess.run(["xdotool", "search", "--onlyvisible", "--class", "crush-desktop"], capture_output=True, text=True)
@@ -72,9 +72,6 @@ wait_for(probe_path, lambda p: p.get("connection", {}).get("state") == "connecte
 wid = app_window()
 if not check(wid is not None, "the app window is on the hidden screen"):
     finish()
-xdo("windowmove", wid, 0, 0)
-xdo("windowsize", wid, 1600, 992)
-time.sleep(1.5)
 g = subprocess.run(["xdotool", "getwindowgeometry", "--shell", wid], capture_output=True, text=True)
 geo = dict(l.split("=", 1) for l in g.stdout.split() if "=" in l)
 geo_x, geo_y = int(geo["X"]), int(geo["Y"])
@@ -90,13 +87,13 @@ started = run("""
       const target = a.effect?.target;
       if (!target) continue;
       // The scrim alone may fade: its own layer, under the sheets.
-      if (target.classList?.contains('scrim')) continue;
+      if (target.hasAttribute?.('data-scrim')) continue;
       const fades = (a.effect.getKeyframes?.() ?? []).some((k) => k.opacity !== undefined && k.opacity !== '' && Number(k.opacity) < 0.99);
       const key = name(target) + (a.effect.pseudoElement || '') + '|' + (a.animationName || a.transitionProperty || 'svelte');
       if (fades && !seen.has(key)) { seen.add(key); window.__fades.push(key); }
     }
     const page = document.querySelector('[data-probe="settings-page"]');
-    if (page && page.querySelectorAll('.row').length === 0) window.__blank += 1;
+    if (page && !page.querySelector('[data-settings-rows] > *')) window.__blank += 1;
     requestAnimationFrame(frame);
   };
   requestAnimationFrame(frame);

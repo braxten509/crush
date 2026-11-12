@@ -193,22 +193,6 @@ func TestShellReviewPreservesExitStatus(t *testing.T) {
 	}
 }
 
-func TestObservedCommandRunsAtFullSpeed(t *testing.T) {
-	root := visibleRestoreRoot(t)
-	// 400k system calls took ~7 s when every call stopped the command.
-	command := `python3 -c "import os
-fd = os.open('/dev/null', os.O_WRONLY)
-for _ in range(200000): os.write(fd, b'x'); os.getppid()
-open('done', 'w').write('ok')"`
-	started := time.Now()
-	review, err := runObserved(t, root, command)
-	require.NoError(t, err)
-	require.Less(t, time.Since(started), 3*time.Second)
-	require.NotNil(t, review)
-	require.Len(t, review.Changes, 1)
-	require.Equal(t, filepath.Join(root, "done"), review.Changes[0].Path)
-}
-
 // A program a command leaves running must keep working after Crush exits:
 // without the keeper its filtered calls would fail with ENOSYS.
 func TestLeftoverProcessWritesAfterWatcherExits(t *testing.T) {

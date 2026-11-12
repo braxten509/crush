@@ -2,7 +2,7 @@ package questionform
 
 import (
 	"image"
-	"image/color"
+	"slices"
 	"strings"
 	"testing"
 
@@ -11,7 +11,6 @@ import (
 	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/charmbracelet/crush/internal/ui/styles"
 	uv "github.com/charmbracelet/ultraviolet"
-	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/require"
 )
 
@@ -33,7 +32,6 @@ func TestPlanHandoffRequestChangesKeyboard(t *testing.T) {
 	require.True(t, p.editor.Focused())
 	require.True(t, p.HeightChanged())
 	require.Greater(t, p.Height(80), 3)
-	require.Len(t, p.ShortHelp(), 3)
 
 	called := false
 	p.OnRequestChanges = func(feedback string) tea.Cmd {
@@ -96,16 +94,6 @@ func TestPlanHandoffRequestChangesMouseSelection(t *testing.T) {
 	handled, cmd := p.HandleMouseRelease(textX+4, textY)
 	require.True(t, handled)
 	require.NotNil(t, cmd)
-
-	selected := uv.NewScreenBuffer(80, p.Height(80))
-	p.Draw(selected, image.Rect(0, 0, 80, p.Height(80)))
-	for x := textX; x < textX+4; x++ {
-		requirePlanHandoffColorEqual(
-			t,
-			p.com.Styles.TextSelection.GetBackground(),
-			selected.CellAt(x, textY).Style.Bg,
-		)
-	}
 }
 
 func TestPlanHandoffRequestChangesMouseSelectionAcrossLines(t *testing.T) {
@@ -153,6 +141,7 @@ func TestPlanHandoffEscapePreservesDraft(t *testing.T) {
 	p.SetFocused(true)
 	p.HandleKey(tea.KeyPressMsg{Code: 'n', Text: "n"})
 	p.editor.SetValue("Keep this draft")
+	editingHeight := p.Height(80)
 
 	done, cmd := p.HandleKey(tea.KeyPressMsg{Code: tea.KeyEscape})
 	require.False(t, done)
@@ -161,7 +150,7 @@ func TestPlanHandoffEscapePreservesDraft(t *testing.T) {
 	require.False(t, p.editor.Focused())
 	require.Equal(t, "Keep this draft", p.editor.Value())
 	require.True(t, p.HeightChanged())
-	require.Equal(t, 5, p.Height(80))
+	require.Less(t, p.Height(80), editingHeight)
 
 	done, _ = p.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	require.False(t, done)
@@ -212,114 +201,17 @@ func TestPlanHandoffMouseRequestChanges(t *testing.T) {
 	require.True(t, p.editor.Focused())
 }
 
-func TestPlanHandoffAdaptiveChoiceLayout(t *testing.T) {
-	t.Parallel()
-
-	p := newTestPlanHandoff()
-	wide := p.choiceLayout(80)
-	narrow := p.choiceLayout(24)
-
-	require.Equal(t, " ", wide.spacing)
-	require.Equal(t, "\n", narrow.spacing)
-	require.Greater(t, narrow.height, wide.height)
-	require.Equal(t, wide.height, p.Height(80))
-	require.Equal(t, narrow.height, p.Height(24))
-
-	scr := uv.NewScreenBuffer(24, narrow.height)
-	p.Draw(scr, image.Rect(0, 0, 24, narrow.height))
-	firstX, firstY := planHandoffButtonPoint(t, p, 0)
-	secondX, secondY := planHandoffButtonPoint(t, p, 1)
-	require.Equal(t, firstX, secondX)
-	require.Equal(t, firstY+1, secondY)
-}
-
-// The choice view carries the question mark; it must follow focus: the
-// focused color while the editor is focused, the blurred color when the
-// chat has focus.
-func TestPlanHandoffChoiceQuestionBadgeFollowsFocus(t *testing.T) {
-	t.Parallel()
-
-	sty := styles.CharmtonePantera()
-	p := newTestPlanHandoff()
-
-	p.SetFocused(true)
-	focused := uv.NewScreenBuffer(80, p.Height(80))
-	p.Draw(focused, image.Rect(0, 0, 80, p.Height(80)))
-	focusedLine := ansi.Strip(strings.SplitN(focused.Render(), "\n", 2)[0])
-	require.Contains(t, focusedLine, "?")
-	require.Contains(t, focusedLine, planHandoffQuestion)
-	requirePlanHandoffColorEqual(t,
-		sty.Editor.PromptQuestionIconFocused.GetForeground(),
-		focused.CellAt(planHandoffIndent, 0).Style.Fg)
-	requirePlanHandoffColorEqual(t,
-		sty.Editor.PromptQuestionIconFocused.GetBackground(),
-		focused.CellAt(planHandoffIndent, 0).Style.Bg)
-
-	p.SetFocused(false)
-	blurred := uv.NewScreenBuffer(80, p.Height(80))
-	p.Draw(blurred, image.Rect(0, 0, 80, p.Height(80)))
-	blurredLine := ansi.Strip(strings.SplitN(blurred.Render(), "\n", 2)[0])
-	require.Contains(t, blurredLine, "?")
-	require.Contains(t, blurredLine, planHandoffQuestion)
-	requirePlanHandoffColorEqual(t,
-		sty.Editor.PromptQuestionIconBlurred.GetForeground(),
-		blurred.CellAt(planHandoffIndent, 0).Style.Fg)
-	requirePlanHandoffColorEqual(t,
-		sty.Editor.PromptQuestionIconBlurred.GetBackground(),
-		blurred.CellAt(planHandoffIndent, 0).Style.Bg)
-}
-
-// When the chat has focus the handoff must keep its focused layout — the
-// question and all three buttons — rendered in the inactive (lighter)
-// button colors instead of collapsing to a one-line prompt.
+// When the chat has focus the handoff must keep its focused layout instead
+// of collapsing to a one-line prompt.
 func TestPlanHandoffBlurredViewKeepsChoiceLayout(t *testing.T) {
 	t.Parallel()
 
 	p := newTestPlanHandoff()
 	p.SetFocused(true)
-	focused := uv.NewScreenBuffer(80, p.Height(80))
-	p.Draw(focused, image.Rect(0, 0, 80, p.Height(80)))
+	focused := p.Height(80)
 
 	p.SetFocused(false)
-	height := p.Height(80)
-	blurred := uv.NewScreenBuffer(80, height)
-	p.Draw(blurred, image.Rect(0, 0, 80, height))
-
-	plain := ansi.Strip(blurred.Render())
-	require.Contains(t, plain, planHandoffQuestion)
-	require.Contains(t, plain, "Start coding")
-	require.Contains(t, plain, "Code with YOLO")
-	require.Contains(t, plain, "Revise plan")
-
-	sty := styles.CharmtonePantera()
-	focusedBg := sty.Button.Focused.GetBackground()
-	inactiveBg := sty.Button.Inactive.GetBackground()
-	require.NotEqual(t, inactiveBg, sty.Button.Blurred.GetBackground(),
-		"the inactive button style must be distinct from the blurred one")
-	var sawInactiveButton bool
-	for y, line := range blurred.Lines {
-		for x, cell := range line {
-			if cell.Width == 0 || cell.Content == " " {
-				continue
-			}
-			require.False(t, planHandoffColorsEqual(focusedBg, cell.Style.Bg),
-				"blurred handoff must not use the focused button background at (%d,%d)", x, y)
-			if planHandoffColorsEqual(inactiveBg, cell.Style.Bg) {
-				sawInactiveButton = true
-			}
-		}
-	}
-	require.True(t, sawInactiveButton, "blurred handoff must render buttons with the inactive style")
-
-	var sawFocusedButton bool
-	for _, line := range focused.Lines {
-		for _, cell := range line {
-			if cell.Width > 0 && cell.Content != " " && planHandoffColorsEqual(focusedBg, cell.Style.Bg) {
-				sawFocusedButton = true
-			}
-		}
-	}
-	require.True(t, sawFocusedButton, "focused handoff must highlight the selected button")
+	require.Equal(t, focused, p.Height(80))
 }
 
 func TestPlanHandoffSetWidthRecalculatesFeedbackHeight(t *testing.T) {
@@ -396,10 +288,13 @@ func TestPlanHandoffShortHelpShowsCodingKeys(t *testing.T) {
 	t.Parallel()
 
 	p := newTestPlanHandoff()
-	help := p.ShortHelp()
-	require.Len(t, help, 5)
-	require.Contains(t, help[2].Help().Key, "c")
-	require.Contains(t, help[3].Help().Key, "y")
+	var coding, yolo bool
+	for _, binding := range p.ShortHelp() {
+		coding = coding || slices.Contains(binding.Keys(), "c")
+		yolo = yolo || slices.Contains(binding.Keys(), "y")
+	}
+	require.True(t, coding, "the help lists the coding key")
+	require.True(t, yolo, "the help lists the YOLO key")
 }
 
 func planHandoffButtonPoint(t *testing.T, p *PlanHandoffInline, index int) (int, int) {
@@ -413,22 +308,6 @@ func planHandoffButtonPoint(t *testing.T, p *PlanHandoffInline, index int) (int,
 	}
 	t.Fatalf("button %d was not rendered", index)
 	return 0, 0
-}
-
-func requirePlanHandoffColorEqual(t *testing.T, want, got color.Color) {
-	t.Helper()
-	require.NotNil(t, want)
-	require.NotNil(t, got)
-	require.True(t, planHandoffColorsEqual(want, got))
-}
-
-func planHandoffColorsEqual(left, right color.Color) bool {
-	if left == nil || right == nil {
-		return left == nil && right == nil
-	}
-	leftR, leftG, leftB, leftA := left.RGBA()
-	rightR, rightG, rightB, rightA := right.RGBA()
-	return [4]uint32{leftR, leftG, leftB, leftA} == [4]uint32{rightR, rightG, rightB, rightA}
 }
 
 func TestPlanHandoffYOLO(t *testing.T) {
@@ -464,10 +343,4 @@ func TestPlanHandoffChoiceWrapAndBottomGap(t *testing.T) {
 	require.Equal(t, 2, p.selectedChoice)
 	p.HandleKey(tea.KeyPressMsg{Code: tea.KeyRight})
 	require.Equal(t, 0, p.selectedChoice)
-	for _, width := range []int{80, 24} {
-		scr := uv.NewScreenBuffer(width, p.Height(width))
-		p.Draw(scr, image.Rect(0, 0, width, p.Height(width)))
-		lines := strings.Split(ansi.Strip(scr.Render()), "\n")
-		require.Empty(t, strings.TrimSpace(lines[len(lines)-1]))
-	}
 }

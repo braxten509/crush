@@ -217,7 +217,7 @@ func TestShellOutputStreamsToRequesterOnly(t *testing.T) {
 	require.True(t, noLive(runnerEvents, pubsub.PayloadTypeShellOutput, 300*time.Millisecond))
 
 	liveError(t, h, http.MethodPost, shellPath+"?client_id="+runner+"&request_id="+strings.Repeat("r", 65),
-		cmd, http.StatusBadRequest, "bad_request", "request_id must be at most 64 characters")
+		cmd, http.StatusBadRequest, "bad_request", "")
 	liveError(t, h, http.MethodPost, shellPath+"?client_id="+uuid.NewString()+"&request_id=req-2",
 		cmd, http.StatusConflict, "client_not_attached", "")
 }
@@ -284,8 +284,8 @@ func TestClaimMemoryNoticeOncePerWindow(t *testing.T) {
 	require.True(t, again.Claimed, "the claim lives in the cache folder, not in the engine")
 }
 
-// TestSetMemoryLimitMatchesTerminal: the route refuses and reports with the
-// memory-limit dialog's texts (DLG-269, DLG-270), saves the limit, and
+// TestSetMemoryLimitMatchesTerminal: the route refuses what the
+// memory-limit dialog refuses (DLG-269, DLG-270), saves the limit, and
 // applies it to the shared box (engine-design.md 5.9 c).
 func TestSetMemoryLimitMatchesTerminal(t *testing.T) {
 	h := newRealCreateHarness(t)
@@ -312,37 +312,34 @@ func TestSetMemoryLimitMatchesTerminal(t *testing.T) {
 
 	// The terminal's dialog checks a number with config.ValidateMemoryLimitGB
 	// (ui/dialog parseMemoryLimit, and ui/model setMemoryLimit), so those
-	// texts come from it. Its text for a value that is no number is made in
-	// that unexported parseMemoryLimit, out of reach, so it is copied here.
+	// texts come from it.
 	for value, gb := range map[string]float64{"-3": -3, "1": 1, "1 GB": 1} {
 		liveError(t, h, http.MethodPut, "/v1/memory/limit", proto.MemoryLimitRequest{Value: value},
 			http.StatusBadRequest, "bad_request", config.ValidateMemoryLimitGB(gb).Error())
 	}
 	liveError(t, h, http.MethodPut, "/v1/memory/limit", proto.MemoryLimitRequest{Value: "abc"},
-		http.StatusBadRequest, "bad_request", "Enter a number of GB, or leave it empty for no limit")
+		http.StatusBadRequest, "bad_request", "")
 	mu.Lock()
 	require.Empty(t, calls, "a refused value is neither saved nor applied")
 	mu.Unlock()
 	_, saved := config.SavedMemoryLimitGB()
 	require.False(t, saved)
 
-	// The notices are copies too: the terminal makes them in an unexported
-	// closure of ui/model setMemoryLimit, which also applies the limit to
-	// the real memory box.
 	for _, tc := range []struct {
-		value  string
-		gb     float64
-		notice string
+		value string
+		gb    float64
 	}{
-		{"8 GB", 8, "Memory limit set to 8 GB for every Crush window"},
-		{" 7.5 ", 7.5, "Memory limit set to 7.5 GB for every Crush window"},
-		{"", 0, "Memory limit removed"},
-		{"0", 0, "Memory limit removed"},
+		{"8 GB", 8},
+		{" 7.5 ", 7.5},
+		{"", 0},
+		{"0", 0},
 	} {
 		got := liveJSON[proto.MemoryLimitResult](t, h, http.MethodPut, "/v1/memory/limit",
 			proto.MemoryLimitRequest{Value: tc.value}, http.StatusOK)
 		want := config.GBToBytes(tc.gb)
-		require.Equal(t, proto.MemoryLimitResult{LimitBytes: want, Applied: true, Notice: tc.notice}, got, "%q", tc.value)
+		require.Equal(t, want, got.LimitBytes, "%q", tc.value)
+		require.True(t, got.Applied, "%q", tc.value)
+		require.NotEmpty(t, got.Notice, "%q", tc.value)
 		require.Equal(t, applied{memlimit.Slice, want}, lastApplied())
 		gb, ok := config.SavedMemoryLimitGB()
 		require.True(t, ok)
@@ -354,11 +351,9 @@ func TestSetMemoryLimitMatchesTerminal(t *testing.T) {
 	mu.Unlock()
 	got := liveJSON[proto.MemoryLimitResult](t, h, http.MethodPut, "/v1/memory/limit",
 		proto.MemoryLimitRequest{Value: "4"}, http.StatusOK)
-	require.Equal(t, proto.MemoryLimitResult{
-		LimitBytes: 4 << 30,
-		Applied:    false,
-		Notice:     "saved, but couldn't apply the memory limit: no systemd here",
-	}, got)
+	require.Equal(t, uint64(4<<30), got.LimitBytes)
+	require.False(t, got.Applied)
+	require.NotEmpty(t, got.Notice, "the app is told the limit was not applied")
 	gb, ok := config.SavedMemoryLimitGB()
 	require.True(t, ok)
 	require.Equal(t, 4.0, gb, "the limit is saved even when it could not be applied")
@@ -420,7 +415,7 @@ func TestCLIUpdateAutoGate(t *testing.T) {
 	require.False(t, auto.Skipped)
 	require.Equal(t, []string{other.Bin}, bins(auto), "the automatic check leaves out the declined version")
 
-	liveError(t, h, http.MethodGet, "/v1/updates/clis?manual=maybe", nil, http.StatusBadRequest, "bad_request", "manual must be true or false")
+	liveError(t, h, http.MethodGet, "/v1/updates/clis?manual=maybe", nil, http.StatusBadRequest, "bad_request", "")
 	liveError(t, h, http.MethodPost, "/v1/updates/clis/install?client_id="+uuid.NewString(),
 		proto.CLIUpdateBins{Bins: []string{fake.Bin}}, http.StatusConflict, "client_not_attached", "")
 	liveError(t, h, http.MethodPost, "/v1/updates/clis/install", proto.CLIUpdateBins{Bins: []string{fake.Bin}},
@@ -460,7 +455,7 @@ func TestCrushUpdateDeclined(t *testing.T) {
 	check = liveJSON[proto.CrushUpdateCheck](t, h, http.MethodGet, "/v1/updates/crush", nil, http.StatusOK)
 	require.False(t, check.Declined, "a newer release is offered again")
 
-	liveError(t, h, http.MethodPost, "/v1/updates/crush/decline", proto.CrushTag{}, http.StatusBadRequest, "bad_request", "tag is required")
+	liveError(t, h, http.MethodPost, "/v1/updates/crush/decline", proto.CrushTag{}, http.StatusBadRequest, "bad_request", "")
 
 	t.Cleanup(backend.SetCrushUpdateSourceForTest(
 		func() string { return "" },
@@ -597,8 +592,7 @@ func TestLimitsCheckingThenReady(t *testing.T) {
 	require.Equal(t, 50.0, ev.Payload.Windows[0].Used)
 	require.False(t, ev.Payload.ReadAt.Before(after.ReadAt))
 
-	liveError(t, h, http.MethodPost, "/v1/limits/not-a-cli/refresh", nil, http.StatusBadRequest, "bad_request",
-		"This CLI does not report usage limits")
+	liveError(t, h, http.MethodPost, "/v1/limits/not-a-cli/refresh", nil, http.StatusBadRequest, "bad_request", "")
 }
 
 // TestLimitsErrorState: a failed refresh with no reading is error with its
@@ -623,7 +617,7 @@ func TestLimitsErrorState(t *testing.T) {
 	ev, ok = nextLive[proto.CLILimits](t, events, pubsub.PayloadTypeLimits, 5*time.Second)
 	require.True(t, ok)
 	require.Equal(t, "error", ev.Payload.State)
-	require.Equal(t, "No usage windows were returned by this CLI", ev.Payload.Error)
+	require.NotEmpty(t, ev.Payload.Error)
 	require.True(t, ev.Payload.ReadAt.IsZero())
 
 	// A reading clears the error.

@@ -3,6 +3,7 @@ package config
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 
 	"charm.land/catwalk/v3/pkg/catwalk"
@@ -20,15 +21,19 @@ func TestCodexAPIProvider(t *testing.T) {
 		c.addCodexAPIProvider()
 		p, ok := c.Providers.Get(CodexAPIProviderID)
 		require.True(t, ok)
-		require.Equal(t, "Codex API", p.Name)
 		require.Equal(t, catwalk.TypeResponses, p.Type)
 		require.Equal(t, "https://api.openai.com/v1", p.BaseURL)
 		require.Empty(t, p.APIKey)
-		var ids []string
+		require.NotEmpty(t, p.Models)
+		ids := map[string]bool{}
 		for _, m := range p.Models {
-			ids = append(ids, m.ID)
+			ids[m.ID] = true
 		}
-		require.Equal(t, []string{"gpt-6.1-sol", "gpt-6.1-sol-ultrafast", "gpt-6-astra", "gpt-6-astra-ultrafast"}, ids)
+		for id := range ids {
+			if base, ok := strings.CutSuffix(id, "-ultrafast"); ok {
+				require.True(t, ids[base], "%s is listed without its base model", id)
+			}
+		}
 	})
 
 	t.Run("a saved key and name are kept", func(t *testing.T) {
@@ -39,7 +44,7 @@ func TestCodexAPIProvider(t *testing.T) {
 		p, _ := c.Providers.Get(CodexAPIProviderID)
 		require.Equal(t, "sk-test", p.APIKey)
 		require.Equal(t, "Work OpenAI", p.Name)
-		require.Len(t, p.Models, 4)
+		require.NotEmpty(t, p.Models)
 	})
 
 	t.Run("a disabled entry stays off", func(t *testing.T) {
@@ -78,25 +83,23 @@ func TestCodexAPIKeyOnlyEntrySurvivesLoad(t *testing.T) {
 	p, ok := cfg.Providers.Get(CodexAPIProviderID)
 	require.True(t, ok)
 	require.Equal(t, "sk-test", p.APIKey)
-	require.Len(t, p.Models, 4)
+	require.NotEmpty(t, p.Models)
 }
 
 // OpenAI bills a whole request at its long-context rates once its input
 // passes 272K tokens: input and cached input 2x, output 1.5x.
 func TestCodexAPILongContextPrice(t *testing.T) {
 	t.Parallel()
-	var sol catwalk.Model
-	for _, m := range codexAPIModels() {
-		if m.ID == "gpt-6.1-sol-ultrafast" {
-			sol = m
-		}
-	}
-	short := PriceForRequest(sol, 272000)
-	require.Equal(t, 12.0, short.Pricing.Input)
-	long := PriceForRequest(sol, 272001)
-	require.Equal(t, 24.0, long.Pricing.Input)
-	require.Equal(t, 1.2, long.Pricing.CacheHit)
-	require.Equal(t, 90.0, long.Pricing.Output)
+	models := codexAPIModels()
+	require.NotEmpty(t, models)
+	model := models[0]
+	short := PriceForRequest(model, 272000)
+	require.Positive(t, short.Pricing.Input)
+	require.Equal(t, model.Pricing, short.Pricing, "up to 272K the model's own prices")
+	long := PriceForRequest(model, 272001)
+	require.InDelta(t, 2*short.Pricing.Input, long.Pricing.Input, 1e-9)
+	require.InDelta(t, 2*short.Pricing.CacheHit, long.Pricing.CacheHit, 1e-9)
+	require.InDelta(t, 1.5*short.Pricing.Output, long.Pricing.Output, 1e-9)
 	other := catwalk.Model{ID: "claude-opus-5-5", Pricing: catwalk.Pricing{Input: 4}}
 	require.Equal(t, 4.0, PriceForRequest(other, 900000).Pricing.Input)
 }

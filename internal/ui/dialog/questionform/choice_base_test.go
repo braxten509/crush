@@ -56,7 +56,7 @@ func TestMoveDownFromHoverIsSymmetric(t *testing.T) {
 		d := newTestSingleChoice(t)
 		d.mouseActive = true
 		d.hoveredChoice = 1 // hovering Beta
-		d.moveDown()
+		d.HandleKey(tea.KeyPressMsg{Code: tea.KeyDown})
 		require.Equal(t, 2, d.cursorIdx, "down from hovered index 1 should land on 2")
 		require.False(t, d.mouseActive, "keyboard nav must exit hover mode")
 	})
@@ -66,7 +66,7 @@ func TestMoveDownFromHoverIsSymmetric(t *testing.T) {
 		d := newTestSingleChoice(t)
 		d.mouseActive = true
 		d.hoveredChoice = 1 // hovering Beta
-		d.moveUp()
+		d.HandleKey(tea.KeyPressMsg{Code: tea.KeyUp})
 		require.Equal(t, 0, d.cursorIdx, "up from hovered index 1 should land on 0")
 		require.False(t, d.mouseActive, "keyboard nav must exit hover mode")
 	})
@@ -76,7 +76,7 @@ func TestMoveDownFromHoverIsSymmetric(t *testing.T) {
 		d := newTestSingleChoice(t)
 		d.mouseActive = true
 		d.hoveredChoice = -1
-		d.moveDown()
+		d.HandleKey(tea.KeyPressMsg{Code: tea.KeyDown})
 		require.Equal(t, 0, d.cursorIdx)
 	})
 }
@@ -179,69 +179,4 @@ func TestMultiChoiceToggleAdoptsHover(t *testing.T) {
 	require.Equal(t, []string{"b"}, d.Response().SelectedIDs,
 		"space while hovering should toggle the hovered choice")
 	require.False(t, d.mouseActive, "toggling must exit hover mode")
-}
-
-// placeholderItem is a choiceItemRenderer stub for buildLines tests
-// where only layout (not label content) matters.
-func placeholderItem(int, question.Choice, bool, int) string { return "x" }
-
-// fillInRowText builds the choice list and returns the rendered text of
-// the fill-in's first text row, below its blank band row.
-func fillInRowText(t *testing.T, d *SingleChoice, prefix string) string {
-	t.Helper()
-	lines := d.buildLines(40, prefix, placeholderItem)
-	require.GreaterOrEqual(t, d.fillInTop, 0)
-	require.Less(t, d.fillInTop+1, len(lines))
-	return lines[d.fillInTop+1].text
-}
-
-// TestFillInPrefixIsThreadedThrough verifies the prompt string a
-// component supplies actually reaches the fill-in row. Previously
-// buildLines ignored it and recomputed its own, so single-select's
-// pink prompt never rendered.
-func TestFillInPrefixIsThreadedThrough(t *testing.T) {
-	t.Parallel()
-
-	d := newTestSingleChoice(t)
-	d.cursorIdx = len(d.Request.Choices) // on the fill-in
-	got := fillInRowText(t, d, "MARKER> ")
-	require.Contains(t, got, "MARKER>", "buildLines must use the supplied fill-in prompt")
-}
-
-// TestFillInBarFollowsSelection verifies the fill-in gutter bar
-// tracks the active/hover state like a choice row, rather than
-// staying lit whenever the fill-in holds text.
-func TestFillInBarFollowsSelection(t *testing.T) {
-	t.Parallel()
-
-	const bar = "┃"
-	fillInIdx := 3 // len(choices)
-
-	t.Run("lit when selected via keyboard", func(t *testing.T) {
-		t.Parallel()
-		d := newTestSingleChoice(t)
-		d.cursorIdx = fillInIdx
-		d.mouseActive = false
-		require.Contains(t, fillInRowText(t, d, "> "), bar)
-	})
-
-	t.Run("dark when it holds text but is not selected", func(t *testing.T) {
-		t.Parallel()
-		d := newTestSingleChoice(t)
-		d.fillIn.SetValue("custom answer")
-		d.cursorIdx = 0 // a choice, not the fill-in
-		d.mouseActive = false
-		require.NotContains(t, fillInRowText(t, d, "> "), bar,
-			"the bar should not stay lit just because the fill-in has text")
-	})
-
-	t.Run("dark when selected but hovering elsewhere", func(t *testing.T) {
-		t.Parallel()
-		d := newTestSingleChoice(t)
-		d.cursorIdx = fillInIdx
-		d.mouseActive = true
-		d.hoveredChoice = 0 // mouse over the first choice
-		require.NotContains(t, fillInRowText(t, d, "> "), bar,
-			"in hover mode the bar belongs to the hovered choice")
-	})
 }

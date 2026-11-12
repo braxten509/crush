@@ -1,90 +1,75 @@
 package config
 
 import (
+	"slices"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestConfig_setupAgentsWithNoDisabledTools(t *testing.T) {
-	cfg := &Config{
-		Options: &Options{
-			DisabledTools: []string{},
-		},
-	}
+// editingTools change files; the read-only agents (task and plan) never get
+// them.
+var editingTools = []string{"edit", "multiedit", "write", "download", "lsp_rename", "lsp_replace_symbol"}
 
+// checkAgentTools sets up the agents with the given tools disabled and
+// checks the permissions: no agent gets a disabled tool, the read-only
+// agents get no editing tool, and the coder gets every other tool.
+func checkAgentTools(t *testing.T, disabled []string) *Config {
+	t.Helper()
+	cfg := &Config{Options: &Options{DisabledTools: disabled}}
 	cfg.SetupAgents()
-	coderAgent, ok := cfg.Agents[AgentCoder]
-	require.True(t, ok)
-	assert.Equal(t, allToolNames(), coderAgent.AllowedTools)
 
-	taskAgent, ok := cfg.Agents[AgentTask]
+	coder, ok := cfg.Agents[AgentCoder]
 	require.True(t, ok)
-	assert.Equal(t, []string{"bash", "lsp_symbols", "lsp_definition", "lsp_call_hierarchy", "glob", "grep", "ls", "sourcegraph", "view"}, taskAgent.AllowedTools)
+	task, ok := cfg.Agents[AgentTask]
+	require.True(t, ok)
+	plan, ok := cfg.Agents[AgentPlan]
+	require.True(t, ok)
 
-	planAgent, ok := cfg.Agents[AgentPlan]
-	require.True(t, ok)
-	assert.Equal(t, []string{"agent", "agent_dispatch", "agent_send", "agent_status", "agent_stop", "lsp_symbols", "lsp_definition", "lsp_call_hierarchy", "glob", "grep", "ls", "question", "sourcegraph", "view"}, planAgent.AllowedTools)
+	for _, agent := range []Agent{coder, task, plan} {
+		for _, tool := range disabled {
+			require.NotContains(t, agent.AllowedTools, tool, "%s got the disabled tool %s", agent.ID, tool)
+		}
+	}
+	for _, agent := range []Agent{task, plan} {
+		for _, tool := range editingTools {
+			require.NotContains(t, agent.AllowedTools, tool, "read-only %s got %s", agent.ID, tool)
+		}
+	}
+	for _, tool := range allToolNames() {
+		if !slices.Contains(disabled, tool) {
+			require.Contains(t, coder.AllowedTools, tool)
+		}
+	}
+	return cfg
+}
+
+func TestConfig_setupAgentsWithNoDisabledTools(t *testing.T) {
+	cfg := checkAgentTools(t, []string{})
+	require.NotEmpty(t, cfg.Agents[AgentTask].AllowedTools)
+	require.NotEmpty(t, cfg.Agents[AgentPlan].AllowedTools)
 }
 
 func TestConfig_setupAgentsWithDisabledTools(t *testing.T) {
-	cfg := &Config{
-		Options: &Options{
-			DisabledTools: []string{
-				"edit",
-				"download",
-				"grep",
-			},
-		},
-	}
-
-	cfg.SetupAgents()
-	coderAgent, ok := cfg.Agents[AgentCoder]
-	require.True(t, ok)
-
-	assert.Equal(t, []string{"agent", "agent_dispatch", "agent_send", "agent_status", "agent_stop", "bash", "crush_info", "crush_logs", "job_output", "job_kill", "multiedit", "lsp_diagnostics", "lsp_references", "lsp_restart", "lsp_symbols", "lsp_definition", "lsp_call_hierarchy", "lsp_rename", "lsp_replace_symbol", "fetch", "agentic_fetch", "glob", "ls", "question", "sourcegraph", "todos", "view", "write", "list_mcp_resources", "read_mcp_resource"}, coderAgent.AllowedTools)
-
-	taskAgent, ok := cfg.Agents[AgentTask]
-	require.True(t, ok)
-	assert.Equal(t, []string{"bash", "lsp_symbols", "lsp_definition", "lsp_call_hierarchy", "glob", "ls", "sourcegraph", "view"}, taskAgent.AllowedTools)
-
-	planAgent, ok := cfg.Agents[AgentPlan]
-	require.True(t, ok)
-	assert.Equal(t, []string{"agent", "agent_dispatch", "agent_send", "agent_status", "agent_stop", "lsp_symbols", "lsp_definition", "lsp_call_hierarchy", "glob", "ls", "question", "sourcegraph", "view"}, planAgent.AllowedTools)
+	checkAgentTools(t, []string{"edit", "download", "grep"})
 }
 
 func TestConfig_setupAgentsWithEveryReadOnlyToolDisabled(t *testing.T) {
-	cfg := &Config{
-		Options: &Options{
-			DisabledTools: []string{
-				"agent",
-				"agent_dispatch",
-				"agent_send",
-				"agent_status",
-				"agent_stop",
-				"glob",
-				"grep",
-				"ls",
-				"lsp_call_hierarchy",
-				"lsp_definition",
-				"lsp_symbols",
-				"sourcegraph",
-				"view",
-			},
-		},
-	}
-
-	cfg.SetupAgents()
-	coderAgent, ok := cfg.Agents[AgentCoder]
-	require.True(t, ok)
-	assert.Equal(t, []string{"bash", "crush_info", "crush_logs", "job_output", "job_kill", "download", "edit", "multiedit", "lsp_diagnostics", "lsp_references", "lsp_restart", "lsp_rename", "lsp_replace_symbol", "fetch", "agentic_fetch", "question", "todos", "write", "list_mcp_resources", "read_mcp_resource"}, coderAgent.AllowedTools)
-
-	taskAgent, ok := cfg.Agents[AgentTask]
-	require.True(t, ok)
-	assert.Equal(t, []string{"bash"}, taskAgent.AllowedTools)
-
-	planAgent, ok := cfg.Agents[AgentPlan]
-	require.True(t, ok)
-	assert.Equal(t, []string{"question"}, planAgent.AllowedTools)
+	cfg := checkAgentTools(t, []string{
+		"agent",
+		"agent_dispatch",
+		"agent_send",
+		"agent_status",
+		"agent_stop",
+		"glob",
+		"grep",
+		"ls",
+		"lsp_call_hierarchy",
+		"lsp_definition",
+		"lsp_symbols",
+		"sourcegraph",
+		"view",
+	})
+	require.Equal(t, []string{"bash"}, cfg.Agents[AgentTask].AllowedTools)
+	require.Equal(t, []string{"question"}, cfg.Agents[AgentPlan].AllowedTools)
 }

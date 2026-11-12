@@ -292,13 +292,14 @@ it("a branch link over a web link's words wins: a click opens only the branch, a
   const opened = [];
   guardLinks(root, (href) => opened.push(href), { trust: () => true }); // as a real click
   const anchor = root.querySelector("a");
-  const span = anchor.querySelector(".md-deco-branch-link");
+  const span = anchor.querySelector("[data-deco]"); // the one decoration: the branch link
   expect(span.textContent).toBe("login guide");
   const click = (el) => el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0, detail: 1 }));
   click(anchor); // the web link's own words still open its address
   expect(opened).toEqual(["https://example.com/guide"]);
   span.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
-  expect([span.closest("[title]") === span, span.title]).toEqual([true, "Open Login guide branch"]);
+  expect(span.closest("[title]")).toBe(span);
+  expect(span.title).toContain("Login guide branch");
   expect(click(span)).toBe(false); // nothing navigates
   await settle();
   expect(opened).toEqual(["https://example.com/guide"]);

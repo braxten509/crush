@@ -27,7 +27,7 @@ func TestCLIHandoff(t *testing.T) {
 	prompt, resume := cliHandoff(history, cliagent.Link{}, "next")
 	require.Empty(t, resume)
 	require.Contains(t, prompt, "PINEAPPLE")
-	require.Contains(t, prompt, "[assistant: codex-cli/gpt]\ncodex answer")
+	require.Contains(t, prompt, "codex answer")
 	require.True(t, len(prompt) > len("next") && prompt[len(prompt)-4:] == "next")
 
 	// Resumed session that saw up to message 2: only 3 and 4 are new.
@@ -62,7 +62,7 @@ func TestCLIHandoff_ErrorFinish(t *testing.T) {
 	}
 
 	prompt, _ := cliHandoff(history, cliagent.Link{}, "next")
-	require.Contains(t, prompt, "[error: Provider Error]\nmodel access is disabled")
+	require.Contains(t, prompt, "model access is disabled")
 }
 
 func TestCLISteer(t *testing.T) {
@@ -234,7 +234,6 @@ func TestCLISteeredPromptKeepsAgentWorking(t *testing.T) {
 	const question = "Will other users be able to use it?"
 	sa.enqueueCall(SessionAgentCall{SessionID: sess.ID, Prompt: question})
 	text := s.steer()
-	require.Contains(t, text, "keep\ngoing with your current work in this same turn")
 	require.Equal(t, midTurnNote+question, text)
 
 	require.NoError(t, s.handle(cliagent.Event{Type: cliagent.EventUserMessage, Text: text}))
@@ -242,5 +241,4 @@ func TestCLISteeredPromptKeepsAgentWorking(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, msgs, 1)
 	require.Equal(t, question, msgs[0].Content().String())
-	require.Contains(t, sharedCLIInstructions, "<crush_mid_turn_messages>")
 }

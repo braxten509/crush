@@ -13,7 +13,7 @@
 <nav class="settings-nav" aria-label="Settings sections" transition:slidePage|global={{ dir: -1, overlay: true }}>
   <h1 class="wordmark"><span class="crush">Crush</span> <span class="ai">AI</span></h1>
 
-  <button class="back" type="button" onclick={closeSettings}>
+  <button class="back" type="button" data-testid="settings-back" onclick={closeSettings}>
     <span class="arrow"><Icon name="disclosure" size={10} /></span>
     <span class="label">Back to chats</span>
   </button>
@@ -24,7 +24,7 @@
   <ul class="list">
     {#each settingsSections() as s (s.id)}
       <li>
-        <button type="button" class="row" class:selected={settingsPage.section === s.id} aria-current={settingsPage.section === s.id ? "page" : undefined} onclick={() => (settingsPage.section = s.id)}>
+        <button type="button" class="row" data-section={s.id} class:selected={settingsPage.section === s.id} aria-current={settingsPage.section === s.id ? "page" : undefined} onclick={() => (settingsPage.section = s.id)}>
           {s.label}
         </button>
       </li>

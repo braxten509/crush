@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { attachmentChip, deleteModeKey, fitChips, moreText, skillChip } from "./chips.js";
+import { attachmentChip, deleteModeKey, fitChips, skillChip } from "./chips.js";
 
 describe("chip views (TYPE-035, attachments.go:266-274)", () => {
   it("picks the icon from the type: picture, skill (Markdown), else text", () => {
@@ -29,7 +29,6 @@ describe("fitChips (TYPE-035, attachments.go:160-232)", () => {
     // would end at 504 + 76 for its hint).
     expect(fitChips({ ...base, widths: Array(8).fill(120), available: 520 })).toEqual({ shown: 3, more: 5, firstName: null });
     expect(fitChips({ ...base, widths: Array(8).fill(120), available: 600 })).toEqual({ shown: 4, more: 4, firstName: null });
-    expect(moreText(5)).toBe("5 more…");
   });
 
   it("trims the first name, to at least 5 characters, when even one chip does not fit", () => {

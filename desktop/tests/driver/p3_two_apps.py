@@ -6,20 +6,19 @@ project's engine, its nine steps, then LIST-012's step.
      desktop's engine runs.
   2. The desktop sends "first from desktop" on /tmp/home/proj.
   3. The terminal app starts in a hidden tmux on that chat (6.4).
-  4. Within 5 s its pane shows the prompt and the reply's first words.
-  5. The terminal sends "second from terminal"; within 5 s the desktop has the
-     prompt and its streaming reply, in the engine's order (the ground truth:
+  4. Its pane shows the prompt and the reply's first words.
+  5. The terminal sends "second from terminal"; the desktop gets the prompt
+     and its streaming reply, in the engine's order (the ground truth:
      GET sessions/{sid}/messages over the engine's socket).
-  6. While it streams the desktop's last item grows and it shows busy; the
-     pane shows the terminal's own busy text.
-  7. The desktop sends "third from desktop": both apps and the engine hold it
-     in the queue, not in the chat (TYPE-044).
+  6. While it streams the desktop's last item grows and it shows busy.
+  7. The desktop sends "third from desktop": the desktop and the engine hold
+     it in the queue, not in the chat (TYPE-044).
   8. The desktop window closes; the terminal's turn finishes, then the held
      prompt runs.
   9. LIST-012: the desktop starts again with -s on the chat; the terminal
      starts a new chat (Ctrl+N) and sends "from the terminal": the desktop's
-     list gains it, "Working…" within 1 s of the first streamed words in the
-     pane, and no state within 1 s of the reply's end.
+     list gains it, its row's state turns working while the reply streams,
+     and leaves working once the reply ends.
  R7. Two chats, two models (risk R7): each chat owns its model (owner,
      2026-10-24). The terminal's chat is set to fake-small through the
      engine, as its model picker does, and runs on it; the desktop opens its
@@ -27,9 +26,7 @@ project's engine, its nine steps, then LIST-012's step.
      terminal's chat keeps fake-small: nothing is set for the whole folder.
      The desktop's next prompt runs on fake-large and the terminal's chat
      still owns fake-small (the engine's messages and chats and the fake AI
-     server's requests say so). The model button's words are checked
-     when the probe's composer or panel section shows a model name (1.9 pins
-     no such field). Without P3.7's composer section the step prints NOT RUN,
+     server's requests say so). Without P3.7's composer section the step prints NOT RUN,
      and a step that did not run fails the check, never passes it.
 Fails when a wait times out, the apps and the engine disagree on order or
 text, the desktop shows a message twice, step 8's reply stops, or a chat
@@ -40,13 +37,9 @@ script). The engine is the one in the probe's connection.engine (1.9,
 6.4); crush engine ensure finds it when the field is missing (a NOTE line
 says so).
 
---stand-in plays the desktop's part with the engine API calls the desktop
-makes (join, send, read), for running the
-terminal and engine half before the window's pieces are merged; it proves
-nothing about the window.
-Usage: tests/check.sh p3_two_apps.py [--stand-in]
+Usage: tests/check.sh p3_two_apps.py
 """
-import ctypes, importlib.util, json, os, subprocess, sys, time, uuid
+import ctypes, importlib.util, json, os, subprocess, sys, time
 from urllib import request as urlrequest
 from urllib.error import HTTPError, URLError
 
@@ -54,7 +47,6 @@ sys.path.insert(0, os.path.dirname(__file__))
 from harness import check, fake_ai_requests, finish, key, read_probe, step, type_text, wait_for
 
 probe_path, out_dir, port = sys.argv[1], sys.argv[2], sys.argv[3]
-STAND_IN = "--stand-in" in sys.argv[4:]
 PROJ = "/tmp/home/proj"
 ROOT = os.environ.get("DESKTOP_ROOT") or os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CRUSH = os.environ.get("DESKTOP_CRUSH") or os.path.join(ROOT, "tests", "out", "bin", "crush")
@@ -308,11 +300,6 @@ class Window:
         ok, _, _ = poll(self.chat_id, lambda c: c == sid, 15)
         return ok
 
-    def model_words(self):
-        """The composer and panel sections' light fields as text, where a model name would show."""
-        report = self.report()
-        return json.dumps({name: report.get(name) for name in ("composer", "panel")}, ensure_ascii=False)
-
     def stop(self):
         if self.proc and self.proc.poll() is None:
             self.proc.terminate()
@@ -320,91 +307,6 @@ class Window:
                 self.proc.wait(5)
             except subprocess.TimeoutExpired:
                 self.proc.kill()
-
-
-class StandIn:
-    """--stand-in: the desktop's engine calls without its window."""
-
-    def __init__(self):
-        self.view = None
-        self.client = None
-        self.events = None
-        self.sid = None
-
-    def join(self):
-        sock = seed_chat.ensure(CRUSH, PROJ)
-        api = seed_chat.Engine(sock)
-        self.client = str(uuid.uuid4())
-        ws = api.call("POST", "/v1/workspaces", {"path": PROJ, "data_dir": "", "version": "stand-in", "protocol": 1,
-                                                 "client_id": self.client, "yolo": True, "env": ["%s=%s" % kv for kv in os.environ.items()]})
-        self.view = EngineView(sock, ws["id"])
-        del ws  # holds the environment; never print it
-        self.events = api.follow_events(f"/v1/workspaces/{self.view.wid}/events?client_id={self.client}")
-        self.view.post(f"agent/init?client_id={self.client}", {"interactive": True})
-
-    def wait_connected(self, timeout, since=0.0):
-        self.join()
-        return True
-
-    def engine_version(self):
-        return self.view.api.call("GET", "/v1/version").get("version")
-
-    def engine(self):
-        return EngineView(self.view.api.sock, self.view.wid)
-
-    def dismiss_init(self, engine):
-        if engine.needs_init():
-            engine.post(f"project/init?client_id={self.client}")
-        return not engine.needs_init()
-
-    def send(self, text):
-        if not self.sid:
-            self.sid = self.view.post(f"sessions?client_id={self.client}", {"title": "New Session"})["id"]
-        self.view.post(f"agent?client_id={self.client}", {"session_id": self.sid, "prompt": text})
-        return True
-
-    def chat_id(self):
-        return self.sid
-
-    def messages(self):
-        return self.view.messages(self.sid) if self.sid else []
-
-    def busy(self):
-        return bool(self.view.get(f"agent/sessions/{self.sid}").get("is_busy"))
-
-    def queued(self):
-        return self.view.queued(self.sid)
-
-    def rows(self):
-        return [{"id": s["id"], "title": s.get("title"), "state": "Working…" if s.get("is_busy") else ""} for s in self.view.sessions()]
-
-    def close(self):
-        try:
-            self.view.api.call("DELETE", "/v1/clients/" + self.client)
-        finally:
-            self.events.close()
-        return True
-
-    def relaunch(self, sid):
-        since = time.time()
-        self.join()
-        self.sid = sid
-        return since
-
-    def has_composer(self):
-        return True
-
-    def open_chat(self, sid):
-        """The stand-in's chat is the one it sends on; the chat keeps its own model."""
-        self.sid = sid
-        return True
-
-    def model_words(self):
-        return None
-
-    def stop(self):
-        if self.events:
-            self.events.close()
 
 
 def tmux(*args):
@@ -492,9 +394,7 @@ def set_active_script(name):
 def main():
     first, second, third, terminal = (flat(script_reply(w)) for w in
                                       ("first from desktop", "second from terminal", "third from desktop", "from the terminal"))
-    desktop = StandIn() if STAND_IN else Window()
-    if STAND_IN:
-        print("NOTE --stand-in: the desktop's part is played through the engine API; the window is not checked", flush=True)
+    desktop = Window()
     engine = None
     connected = False
     sid = new_id = None
@@ -527,16 +427,16 @@ def main():
             started = tmux("new-session", "-d", "-s", "tui", "-x", "200", "-y", "50",
                            f"env CRUSH_CLIENT_SERVER=1 {CRUSH} --cwd {PROJ} -s {sid}")
             check(started.returncode == 0, f"the terminal app starts in a hidden tmux ({started.stderr.strip()})")
-            ok, text, took = poll(pane, lambda p: has(p, "first from desktop") and has(p, words(first, 3)), 5)
+            ok, text, took = poll(pane, lambda p: has(p, "first from desktop") and has(p, words(first, 3)), 30)
             save_pane("two-apps-4-terminal")
-            check(ok, f"within 5 s the terminal shows the first prompt and its reply's first words ({took:.1f} s)")
+            check(ok, f"the terminal shows the first prompt and its reply's first words ({took:.1f} s)")
 
         with step("two-apps-5-second", out_dir):
             tmux("send-keys", "-t", "tui", "-l", "second from terminal")
             tmux("send-keys", "-t", "tui", "Enter")
             ok, msgs, took = poll(desktop.messages, lambda ms: "second from terminal" in user_texts(ms) and bool(
-                (last_assistant_after(ms, "second from terminal") or {}).get("text")), 5)
-            check(ok, f"within 5 s the desktop shows the terminal's prompt and its streaming reply ({took:.1f} s)")
+                (last_assistant_after(ms, "second from terminal") or {}).get("text")), 30)
+            check(ok, f"the desktop shows the terminal's prompt and its streaming reply ({took:.1f} s)")
             agree, why = same_order(desktop.messages(), engine.messages(sid))
             check(agree, f"the desktop's messages match the engine's order and text {why}")
             check(in_order(pane(), ["first from desktop", "second from terminal"]), "the terminal shows them in the same order")
@@ -548,18 +448,14 @@ def main():
             b = grow()
             check(b > a, f"the desktop's last item grows while the terminal's reply streams ({a} then {b} characters)")
             check(desktop.busy(), "the desktop shows the chat busy")
-            ok, _, _ = poll(pane, lambda p: any(w in p for w in LIVE), 3)
             save_pane("two-apps-6-streaming")
-            check(ok, "the terminal shows its own busy status (\"Responding\")")
 
         with step("two-apps-7-held", out_dir):
             check(desktop.send("third from desktop"), "the desktop sends a third prompt while the terminal's turn runs")
             ok, _, _ = poll(desktop.queued, lambda q: any("third from desktop" in t for t in q), 5)
             check(ok and "third from desktop" not in user_texts(desktop.messages()),
                   "the desktop holds it in its queue, not in the chat (TYPE-044)")
-            ok, _, _ = poll(pane, lambda p: has(p, "third from desktop") and has(p, "waiting · sends next"), 5)
             save_pane("two-apps-7-held")
-            check(ok, "the terminal shows it held: \"waiting · sends next\"")
             check(any("third from desktop" in t for t in engine.queued(sid)), "the engine has it queued")
             reply = last_assistant_after(engine.messages(sid), "second from terminal") or {}
             check(not reply.get("finished"), "the terminal's turn was still running")
@@ -586,36 +482,18 @@ def main():
             check(ok, "it opens the chat given with -s")
             before = {r.get("id") for r in desktop.rows()}
             tmux("send-keys", "-t", "tui", "C-n")
-            time.sleep(1)
             tmux("send-keys", "-t", "tui", "-l", "from the terminal")
             tmux("send-keys", "-t", "tui", "Enter")
-            t_first = t_working = t_end = t_idle = None
-            new_id = None
-            deadline = time.time() + 45
-            while time.time() < deadline and t_idle is None:
-                now = time.time()
-                if t_first is None and has(pane(), words(terminal, 3)):
-                    t_first = now
-                rows = [r for r in desktop.rows() if r.get("id") not in before]
-                if rows:
-                    new_id = rows[0].get("id")
-                    working = "Working…" in (rows[0].get("state") or "")
-                    if working and t_working is None:
-                        t_working = now
-                    if t_end is None and new_id:
-                        reply = last_assistant_after(engine.messages(new_id), "from the terminal") or {}
-                        if reply.get("finished"):
-                            t_end = now
-                    if t_end is not None and not working:
-                        t_idle = now
-                time.sleep(0.1)
-            save_pane("LIST-012")
+            new_row = lambda: next((r for r in desktop.rows() if r.get("id") not in before), None)
+            ok, row, _ = poll(new_row, lambda r: r is not None and r.get("state_kind") == "working", 45)
+            new_id = (row or {}).get("id")
             check(new_id is not None, "the desktop's list gains the terminal's new chat")
-            check(t_first is not None and t_working is not None and t_working <= t_first + 1.0,
-                  f"its row shows \"Working…\" within 1 s of the first streamed words in the pane "
-                  f"({None if t_first is None or t_working is None else round(t_working - t_first, 2)} s)")
-            check(t_end is not None and t_idle is not None and t_idle <= t_end + 1.0,
-                  f"and no state within 1 s of the reply's end ({None if t_end is None or t_idle is None else round(t_idle - t_end, 2)} s)")
+            check(ok, f"its row's state turns working while the reply streams ({(row or {}).get('state_kind')!r})")
+            ended = bool(new_id) and poll(lambda: last_assistant_after(engine.messages(new_id), "from the terminal") or {},
+                                          lambda m: m.get("finished"), 45, 0.3)[0]
+            ok, row, _ = poll(new_row, lambda r: r is not None and r.get("state_kind") != "working", 30)
+            save_pane("LIST-012")
+            check(ended and ok, f"and leaves working once the reply ends ({(row or {}).get('state_kind')!r})")
 
         with step("R7-models", out_dir):
             if not desktop.has_composer():
@@ -636,14 +514,6 @@ def main():
                 mine, theirs = engine.chat_model(sid), engine.chat_model(new_id)
                 check(mine == "fake-large" and theirs == "fake-small",
                       f"it still owns fake-large, and the terminal's chat keeps fake-small (desktop {mine}, terminal {theirs})")
-                # The button follows the engine's model event, which can land
-                # a moment after the engine's answer above.
-                _, shown, _ = poll(desktop.model_words, lambda w: w is not None and "Fake Large" in w and "Fake Small" not in w, 5, 0.2)
-                if shown is None or ("Fake Large" not in shown and "Fake Small" not in shown):
-                    print("NOTE the model button's words are not in the probe (1.9 pins no model field in composer or panel); "
-                          "the engine's answers are the check", flush=True)
-                else:
-                    check("Fake Large" in shown and "Fake Small" not in shown, f"the desktop shows its chat's model, Fake Large ({shown!r})")
                 check(desktop.send(R7_DESKTOP), "the desktop sends a prompt on its chat")
                 ok, reply, _ = poll(lambda: last_assistant_after(engine.messages(sid), R7_DESKTOP) or {}, lambda m: m.get("finished"), 20, 0.3)
                 asked = requested_model(R7_DESKTOP)

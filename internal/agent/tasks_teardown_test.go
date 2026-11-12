@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"slices"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -324,11 +323,7 @@ func TestClosingHubNeverClaims(t *testing.T) {
 	h1.stopAll()
 	// As a copy of hubs taken before the teardown would make it.
 	h1.resumeInterrupted(t.Context())
-	select {
-	case call := <-reports:
-		t.Fatalf("a closing hub must run nothing: %q", call.Prompt)
-	case <-time.After(300 * time.Millisecond):
-	}
+	// The Never below also catches a report from this closing hub.
 	require.Len(t, readSavedJobs(t, h1.savedDataPath(savedJobsFile)), 1, "the job entry stays for the next hub")
 	saved := readSaved(t, h1.savedTasksPath())
 	require.Len(t, saved, 1)
@@ -342,7 +337,7 @@ func TestClosingHubNeverClaims(t *testing.T) {
 	select {
 	case call := <-reports:
 		require.Equal(t, parent.ID, call.SessionID)
-		require.Contains(t, call.Prompt, "Job J1 (build)")
+		require.Contains(t, call.Prompt, "J1")
 	case <-time.After(5 * time.Second):
 		t.Fatal("the next hub did not report the job")
 	}
@@ -356,13 +351,15 @@ func TestClosingHubNeverClaims(t *testing.T) {
 
 func TestTeardownRacingResumeKeepsWork(t *testing.T) {
 	var reported atomic.Int32
+	var parentID string // set before any hub runs
 	c := resumeTestCoordinator(t, func(_ context.Context, call SessionAgentCall) (*fantasy.AgentResult, error) {
-		if strings.Contains(call.Prompt, "crush bg jobs were still running") {
+		if call.SessionID == parentID {
 			reported.Add(1)
 		}
 		return fakeSessionReply(call, "ok"), nil
 	})
 	parent, child := helperChats(t, c)
+	parentID = parent.ID
 	for round := range 200 {
 		h := resumeTestHub(t, c)
 		runningHelper(h, helperTask(parent, child))

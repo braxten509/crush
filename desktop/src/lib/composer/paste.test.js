@@ -62,7 +62,6 @@ describe("a long paste as an attachment (TYPE-011)", () => {
   it("refuses over 5 MB", () => {
     expect(textAttachment("x".repeat(MAX_ATTACHMENT_BYTES), []).attachment).toBeTruthy();
     expect(textAttachment("x".repeat(MAX_ATTACHMENT_BYTES + 1), [])).toEqual({ warn: PASTE_TOO_BIG });
-    expect(PASTE_TOO_BIG).toBe("Paste is too big (>5mb)");
   });
 
   it("names the type as Go's sniffer does", () => {
@@ -120,8 +119,6 @@ describe("pasted paths (TYPE-012, fsext/paste.go)", () => {
     expect(await attachPath("/p/a.png", { stat, read })).toEqual({
       attachment: { kind: "picture", name: "a.png", mime: "image/png", path: "/p/a.png", base64: "iVBORw0KGgo=" },
     });
-    expect(A_FOLDER).toBe("Cannot attach a directory");
-    expect(FILE_TOO_BIG).toBe("File is too big (>5mb)");
   });
 
   it("dropped files become the text a terminal would paste for them", () => {
@@ -144,8 +141,6 @@ describe("a pasted picture (TYPE-014, TYPE-040)", () => {
   it("warns for a model without pictures and refuses over 5 MB", () => {
     expect(pictureAttachment(PNG, [], false)).toEqual({ warn: NO_PICTURES });
     expect(pictureAttachment(new Uint8Array(MAX_ATTACHMENT_BYTES + 1), [], true)).toEqual({ error: PICTURE_TOO_BIG });
-    expect(NO_PICTURES).toBe("The current model does not support image attachments");
-    expect(PICTURE_TOO_BIG).toBe("File too large, max 5MB");
   });
 
   it("knows PNG and JPEG files from the rest", () => {

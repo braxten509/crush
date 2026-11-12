@@ -2,7 +2,6 @@ package filechange
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -110,10 +109,10 @@ func TestIgnoredBookkeepingAndBinaryChanges(t *testing.T) {
 	require.NoError(t, err)
 	changes := byPath(review)
 	require.Len(t, changes, 3)
-	require.Equal(t, "Binary file", changes["image.bin"].Before.Omitted)
+	require.NotEmpty(t, changes["image.bin"].Before.Omitted)
 	require.Empty(t, changes["image.bin"].Before.Content)
 	require.NotEqual(t, changes["image.bin"].Before.Digest, changes["image.bin"].After.Digest)
-	require.Contains(t, changes["large.txt"].After.Omitted, "preview limit")
+	require.NotEmpty(t, changes["large.txt"].After.Omitted)
 	require.NotEmpty(t, changes["runtime-source.txt"].After.Content)
 }
 
@@ -182,26 +181,6 @@ func TestRestoredMtimeDoesNotHideEdits(t *testing.T) {
 	review, err := tracker.Checkpoint(t.Context())
 	require.NoError(t, err)
 	require.Len(t, review.Changes, 1)
-}
-
-func BenchmarkCheckpointUnchanged(b *testing.B) {
-	root := b.TempDir()
-	for i := range 2000 {
-		if err := os.WriteFile(filepath.Join(root, fmt.Sprintf("file-%04d", i)), []byte(strings.Repeat("source line\n", 100)), 0o644); err != nil {
-			b.Fatal(err)
-		}
-	}
-	tracker, err := New(b.Context(), root)
-	if err != nil {
-		b.Fatal(err)
-	}
-	tracker.Track("file-0000")
-	b.ResetTimer()
-	for b.Loop() {
-		if _, err := tracker.Checkpoint(b.Context()); err != nil {
-			b.Fatal(err)
-		}
-	}
 }
 
 // Starting in a home folder must not discover its projects, caches or files.

@@ -259,8 +259,7 @@ three layers:
   pending tokenization). This lets any theme reuse the base without
   inheriting Charmtone-specific colors. It calls one declarative builder
   per area (`quickStyleMarkdown`, `quickStyleTools`, `quickStyleDialogs`,
-  ...), in order; `TestThemeStylesDump` pins the resulting `Styles` of
-  every built-in theme.
+  ...), in order.
 - **`themes.go`**: Defines concrete themes. Each theme function (e.g.
   `CharmtonePantera`) calls `quickStyle` with its palette, then applies
   theme-specific overrides as needed.

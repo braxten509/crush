@@ -55,8 +55,10 @@ func TestShortLivedDetachedProcessesAreNotReported(t *testing.T) {
 func TestDetachedNotificationDoesNotInventExitStatus(t *testing.T) {
 	start := time.Now()
 	notice := detachedNotification(detachedKey{77, start}, detachedProc{command: "npm run dev"}, start.Add(10*time.Second))
-	require.Contains(t, notice, "<status>ended</status>")
-	require.Contains(t, notice, "can't see its exit status")
+	_, status, ok := ParseTaskNotification(notice)
+	require.True(t, ok)
+	require.Equal(t, "ended", status)
+	require.NotContains(t, notice, "exit code")
 }
 
 // A process's age is how long it was seen alive, not when its end was

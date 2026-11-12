@@ -2,10 +2,8 @@ package agent
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -332,6 +330,30 @@ func TestQueueBatchProviderErrorCompletesEverySubmission(t *testing.T) {
 	require.False(t, sa.IsSessionBusy(sess.ID))
 }
 
+// requireInOrder checks that text holds each want, one after another.
+func requireInOrder(t *testing.T, text string, wants ...string) {
+	t.Helper()
+	require.NotEmpty(t, text)
+	rest := text
+	for _, want := range wants {
+		i := strings.Index(rest, want)
+		require.GreaterOrEqual(t, i, 0, "%q missing or out of order in %q", want, text)
+		rest = rest[i+len(want):]
+	}
+}
+
+// attachmentPathsIn returns the attachment cache paths a prompt names, in
+// order.
+func attachmentPathsIn(text string) []string {
+	var paths []string
+	for _, word := range strings.Fields(text) {
+		if strings.Contains(word, "crush/attachments/") {
+			paths = append(paths, strings.Trim(word, `"'.,()<>`))
+		}
+	}
+	return paths
+}
+
 func TestOpenCodeSteersWhileNoToolRuns(t *testing.T) {
 	sa, _ := newCancelTestAgent(t)
 	queued := []SessionAgentCall{{SessionID: "opencode", Prompt: "queued"}}
@@ -339,7 +361,7 @@ func TestOpenCodeSteersWhileNoToolRuns(t *testing.T) {
 	// OpenCode folds a second ACP prompt into the running turn, so its
 	// message need not wait for a tool boundary (owner, 2026-10-24).
 	s := &cliSteps{running: map[string]bool{}, a: sa, ctx: t.Context(), sessionID: "opencode", steerAnyTime: true}
-	require.Equal(t, midTurnNote+"queued", s.steer())
+	requireInOrder(t, s.steer(), "queued")
 
 	// Other CLIs still wait for a tool to run.
 	sa.messageQueue.Set("opencode", queued)
@@ -358,7 +380,7 @@ func TestQueueBatchUnconfirmedSteeringRestoresOriginalsInOrder(t *testing.T) {
 		sa.enqueueCall(SessionAgentCall{SessionID: s.sessionID, Prompt: "repeat", SubmissionID: id, RunID: id, Attachments: []message.Attachment{image}})
 	}
 	text, images := s.steerWithImages()
-	require.Equal(t, midTurnNote+"repeat\n\nrepeat", text)
+	requireInOrder(t, text, "repeat", "repeat")
 	require.Len(t, images, 2)
 	sa.enqueueCall(SessionAgentCall{SessionID: s.sessionID, Prompt: "later", SubmissionID: "later"})
 	s.returnUnsteered()
@@ -399,7 +421,7 @@ func TestQueueBatchNativeConfirmationOwnsEveryOriginal(t *testing.T) {
 		sa.enqueueCall(SessionAgentCall{SessionID: sess.ID, Prompt: "repeat", SubmissionID: id, RunID: id})
 	}
 	text := s.steer()
-	require.Equal(t, midTurnNote+"repeat\n\nrepeat", text)
+	requireInOrder(t, text, "repeat", "repeat")
 	require.NoError(t, s.handle(cliagent.Event{Type: cliagent.EventUserMessage, Text: text}))
 	require.Len(t, consumed, 2)
 	msgs, err := env.messages.List(t.Context(), sess.ID)
@@ -506,22 +528,21 @@ echo '{"jsonrpc":"2.0","id":"3","result":{"stopReason":"end_turn"}}'
 	require.Contains(t, prompt, "inline note")
 	require.Contains(t, prompt, "second batch prompt")
 	require.Less(t, strings.Index(prompt, "first batch prompt"), strings.Index(prompt, "second batch prompt"))
-	require.Equal(t, 2, strings.Count(prompt, "crush/attachments/"))
-	var previous int
+	var images [][]byte
 	for _, original := range calls {
 		for _, attachment := range original.Attachments {
-			if !attachment.IsImage() {
-				continue
+			if attachment.IsImage() {
+				images = append(images, attachment.Content)
 			}
-			sum := sha256.Sum256(attachment.Content)
-			path := filepath.Join(cache, "crush", "attachments", fmt.Sprintf("%x.png", sum[:16]))
-			position := strings.Index(prompt, path)
-			require.Greater(t, position, previous, "image paths retain their original order")
-			previous = position
-			bytes, err := os.ReadFile(path)
-			require.NoError(t, err)
-			require.Equal(t, attachment.Content, bytes)
 		}
+	}
+	paths := attachmentPathsIn(prompt)
+	require.Len(t, paths, len(images))
+	for i, path := range paths {
+		require.True(t, strings.HasPrefix(path, cache), "attachment saved in the test's cache: %s", path)
+		bytes, err := os.ReadFile(path)
+		require.NoError(t, err)
+		require.Equal(t, images[i], bytes, "image paths retain their original order")
 	}
 	msgs, err := env.messages.List(t.Context(), sess.ID)
 	require.NoError(t, err)
@@ -550,15 +571,13 @@ func TestQueueBatchNativeBinaryAttachmentsKeepBytesAndOrder(t *testing.T) {
 	require.NoError(t, err)
 	cache, err := os.UserCacheDir()
 	require.NoError(t, err)
-	previous := 0
-	for _, attachment := range files {
-		path := filepath.Join(cache, "crush", "attachments", fmt.Sprintf("%x%s", sha256.Sum256(attachment.Content), filepath.Ext(attachment.FileName)))
-		position := strings.Index(text, path)
-		require.Greater(t, position, previous)
-		previous = position
+	paths := attachmentPathsIn(text)
+	require.Len(t, paths, len(files))
+	for i, path := range paths {
+		require.True(t, strings.HasPrefix(path, cache), "attachment saved in the test's cache: %s", path)
 		data, err := os.ReadFile(path)
 		require.NoError(t, err)
-		require.Equal(t, attachment.Content, data)
+		require.Equal(t, files[i].Content, data, "files keep their order")
 	}
 }
 
@@ -635,7 +654,7 @@ func TestQueueBatchInterruptIncludesUnconfirmedNativeSteering(t *testing.T) {
 		require.NoError(t, err)
 	}
 	text := steps.steer()
-	require.Equal(t, midTurnNote+"repeat\n\nrepeat", text)
+	requireInOrder(t, text, "repeat", "repeat")
 	_, err = sa.Run(t.Context(), SessionAgentCall{SessionID: sess.ID, Prompt: "third", SubmissionID: "three", RunID: "three"})
 	require.NoError(t, err)
 	sa.Interrupt(sess.ID)

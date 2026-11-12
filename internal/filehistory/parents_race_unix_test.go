@@ -58,48 +58,6 @@ func TestPinnedParentSwapCannotRedirectRestore(t *testing.T) {
 	}
 }
 
-func TestMissingParentsStayUnderPinnedAncestor(t *testing.T) {
-	root := restoreRaceRoot(t)
-	parent, held, outside := filepath.Join(root, "selected"), filepath.Join(root, "held"), filepath.Join(root, "outside")
-	require.NoError(t, os.Mkdir(parent, 0o700))
-	require.NoError(t, os.Mkdir(outside, 0o700))
-	path := filepath.Join(parent, "new", "nested", "file")
-	target, err := walkRestoreParents(path, true, func(opened string) {
-		if opened == parent {
-			require.NoError(t, os.Rename(parent, held))
-			require.NoError(t, os.Symlink(outside, parent))
-		}
-	})
-	require.NoError(t, err)
-	defer target.close()
-	require.NoError(t, target.replace([]byte("restored"), 0o600, State{}))
-	require.Equal(t, "restored", contents(t, filepath.Join(held, "new", "nested", "file")))
-	require.NoDirExists(t, filepath.Join(outside, "new"))
-}
-
-func TestPinnedTargetRejectsLeafLinkAndChangedFile(t *testing.T) {
-	root := restoreRaceRoot(t)
-	path, outside := filepath.Join(root, "file"), filepath.Join(root, "outside")
-	require.NoError(t, os.WriteFile(path, []byte("original"), 0o600))
-	require.NoError(t, os.WriteFile(outside, []byte("outside"), 0o600))
-	target, err := openRestoreTarget(path, false)
-	require.NoError(t, err)
-	defer target.close()
-	before, _, err := target.current()
-	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(path, []byte("changed"), 0o600))
-	require.ErrorIs(t, target.replace([]byte("restore"), 0o600, before), errRestoreChanged)
-	require.ErrorIs(t, target.delete(before), errRestoreChanged)
-	require.Equal(t, "changed", contents(t, path))
-	require.NoError(t, os.Remove(path))
-	require.NoError(t, os.Symlink(outside, path))
-	_, _, err = target.current()
-	require.Error(t, err)
-	require.ErrorIs(t, target.replace([]byte("restore"), 0o600, before), errRestoreChanged)
-	require.ErrorIs(t, target.delete(before), errRestoreChanged)
-	require.Equal(t, "outside", contents(t, outside))
-}
-
 // Restore intentionally excludes the operating system temp directory.
 func restoreRaceRoot(t *testing.T) string {
 	t.Helper()

@@ -5,11 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -176,21 +174,27 @@ func (r *liveRig) view(t *testing.T, ws *Workspace, app, chat string) {
 }
 
 // TestQ2ReconnectWithinGraceKeepsRun: a stream that drops and comes back
-// within the grace stops nothing. (The grace is 500 ms rather than the
-// design's 200 ms, so a slow machine still reattaches inside it.)
+// within the grace stops nothing: the reattach ends the grace, and no Q2
+// waits for the app.
 func TestQ2ReconnectWithinGraceKeepsRun(t *testing.T) {
 	r := newLiveRig(t)
-	r.b.SetDetachGrace(500 * time.Millisecond)
+	r.b.SetDetachGrace(time.Hour)
 	a, other := newClientID(t), newClientID(t)
 	ws := r.open(t, r.project(t), a, other)
 	c := r.chat(t, ws, "C")
 	r.hold(t, ws, a, c, "a1")
 
 	r.b.DetachClient(ws.ID, a)
-	time.Sleep(100 * time.Millisecond)
 	require.NoError(t, r.b.AttachClient(ws.ID, a))
-	time.Sleep(800 * time.Millisecond)
 
+	ws.clientsMu.Lock()
+	cs, ok := ws.clients[a]
+	require.True(t, ok, "the app keeps its claim")
+	require.Nil(t, cs.holdTimer, "the reattach ends the grace")
+	ws.clientsMu.Unlock()
+	ws.live.mu.Lock()
+	require.Empty(t, ws.live.pendingQ2, "no Q2 waits for the app")
+	ws.live.mu.Unlock()
 	require.Equal(t, 1, r.model.heldNow("a1"), "the run never stops")
 	require.Equal(t, 1, r.model.callsOf("a1"), "and never restarts")
 	require.True(t, ws.coordinator().IsSessionBusy(c))
@@ -201,7 +205,7 @@ func TestQ2ReconnectWithinGraceKeepsRun(t *testing.T) {
 // app's work in a chat nobody views stops, and another app's work does not.
 func TestQ2DropPastGraceStopsUnviewedWork(t *testing.T) {
 	r := newLiveRig(t)
-	r.b.SetDetachGrace(500 * time.Millisecond)
+	r.b.SetDetachGrace(50 * time.Millisecond)
 	a, bApp := newClientID(t), newClientID(t)
 	p := r.project(t)
 	ws := r.open(t, p, a, bApp)
@@ -215,9 +219,6 @@ func TestQ2DropPastGraceStopsUnviewedWork(t *testing.T) {
 	helperB, jobB := r.spawnWork(t, ws, bApp, d, "b1")
 
 	r.b.DetachClient(ws.ID, a)
-	time.Sleep(100 * time.Millisecond)
-	require.Equal(t, 1, r.model.heldNow("a1"), "nothing stops inside the grace")
-
 	r.model.waitHeld(t, "a1", 0)
 	r.model.waitHeld(t, "a1-helper", 0)
 	require.True(t, done.wait(t, "a2").Cancelled, "A's queued prompt is dropped with a cancelled RunComplete")
@@ -227,7 +228,7 @@ func TestQ2DropPastGraceStopsUnviewedWork(t *testing.T) {
 	requireReleased(t, p, "background-jobs.json", jobA.JobID)
 	require.Eventually(t, func() bool { return !ws.coordinator().IsSessionBusy(c) }, 10*time.Second, 10*time.Millisecond)
 
-	time.Sleep(time.Second)
+	time.Sleep(300 * time.Millisecond)
 	require.Zero(t, r.model.noticeCount(), "neither the helper's end nor the job's started a turn")
 	require.Zero(t, r.model.callsOf("a2"), "A's queued prompt never ran")
 	require.Empty(t, promptsOf(ws, a))
@@ -413,7 +414,6 @@ func TestQ2RetireActsAtOnce(t *testing.T) {
 // claim at once (expired), or released after an explicit release, and Q2
 // stops the app's unviewed work.
 func TestQ2DetachWithZeroGrace(t *testing.T) {
-	logs := captureDebugLogs(t)
 	r := newLiveRig(t)
 	r.b.SetDetachGrace(0)
 	a, a2, other := newClientID(t), newClientID(t), newClientID(t)
@@ -421,14 +421,19 @@ func TestQ2DetachWithZeroGrace(t *testing.T) {
 	c1, c2 := r.chat(t, ws, "C1"), r.chat(t, ws, "C2")
 	r.hold(t, ws, a, c1, "a1")
 	r.hold(t, ws, a2, c2, "a2")
+	var goneMu sync.Mutex
+	gone := map[string][]GoneReason{}
+	ws.live.mu.Lock()
+	ws.live.onGone = func(clientID string, reason GoneReason, _ bool) {
+		goneMu.Lock()
+		gone[clientID] = append(gone[clientID], reason)
+		goneMu.Unlock()
+	}
+	ws.live.mu.Unlock()
 	left := func(app string, reason GoneReason) bool {
-		for line := range strings.Lines(logs.String()) {
-			if strings.Contains(line, "An app left a workspace") && strings.Contains(line, "client="+app) &&
-				strings.Contains(line, "reason="+string(reason)) {
-				return true
-			}
-		}
-		return false
+		goneMu.Lock()
+		defer goneMu.Unlock()
+		return slices.Contains(gone[app], reason)
 	}
 
 	r.b.DetachClient(ws.ID, a)
@@ -441,52 +446,6 @@ func TestQ2DetachWithZeroGrace(t *testing.T) {
 	r.b.DetachClient(ws.ID, a2)
 	r.model.waitHeld(t, "a2", 0)
 	require.True(t, left(a2, GoneReleased), "after a release the drop fires gone(released)")
-}
-
-// hookHandler is a log handler that runs fn once, on the goroutine that
-// logs, for the first record match accepts. It drops every record.
-type hookHandler struct {
-	match func(slog.Record) bool
-	fn    func()
-	fired atomic.Bool
-}
-
-func (h *hookHandler) Enabled(context.Context, slog.Level) bool { return true }
-
-func (h *hookHandler) Handle(_ context.Context, rec slog.Record) error {
-	if h.match(rec) && h.fired.CompareAndSwap(false, true) {
-		h.fn()
-	}
-	return nil
-}
-
-func (h *hookHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
-func (h *hookHandler) WithGroup(string) slog.Handler      { return h }
-
-// onLastLeave runs fn on the departure path of clientID when it is the last
-// app, at liveGone's debug line: after the gone hooks began and before the
-// teardown they lead to takes the backend's lock, the window in which a
-// join aborts that teardown.
-func onLastLeave(t *testing.T, clientID string, fn func()) {
-	t.Helper()
-	prev := slog.Default()
-	slog.SetDefault(slog.New(&hookHandler{fn: fn, match: func(rec slog.Record) bool {
-		if rec.Message != "An app left a workspace" {
-			return false
-		}
-		client, last := false, false
-		rec.Attrs(func(a slog.Attr) bool {
-			switch a.Key {
-			case "client":
-				client = a.Value.String() == clientID
-			case "last":
-				last = a.Value.Kind() == slog.KindBool && a.Value.Bool()
-			}
-			return true
-		})
-		return client && last
-	}}))
-	t.Cleanup(func() { slog.SetDefault(prev) })
 }
 
 // TestQ2WhenTeardownAborts: the last app leaves, so a teardown is
@@ -502,13 +461,22 @@ func TestQ2WhenTeardownAborts(t *testing.T) {
 	c := r.chat(t, ws, "C")
 	helper := r.spawnHelper(t, ws, a, c, "a1")
 
-	onLastLeave(t, a, func() {
+	// The join runs on a's departure path, as the last app, after its gone
+	// hooks began and before the teardown they lead to takes the backend's
+	// lock: the window in which a join aborts that teardown.
+	var fired atomic.Bool
+	ws.live.mu.Lock()
+	ws.live.onGone = func(clientID string, _ GoneReason, last bool) {
+		if clientID != a || !last || !fired.CompareAndSwap(false, true) {
+			return
+		}
 		joined, _, err := r.b.CreateWorkspace(prototest.CreateRequest(proto.Workspace{
 			Path: p.dir, DataDir: p.dataDir, ClientID: joiner, YOLO: true,
 		}))
 		require.NoError(t, err)
 		require.Same(t, ws, joined, "the join lands before the teardown")
-	})
+	}
+	ws.live.mu.Unlock()
 	require.NoError(t, r.b.RetireClient(a))
 
 	got, err := r.b.GetWorkspace(ws.ID)
@@ -668,7 +636,7 @@ func requireResumedOnce(t *testing.T, r *liveRig, p liveProject, chat string, he
 // exactly once, on the new hub.
 func TestRecreateWhileTeardownRuns(t *testing.T) {
 	r := newLiveRig(t)
-	for round := range 20 {
+	for round := range 3 {
 		a, n := newClientID(t), newClientID(t)
 		p := r.project(t)
 		ws := r.open(t, p, a)

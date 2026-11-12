@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -30,16 +29,17 @@ func TestCLIHelpersStayHiddenAfterTheirCLIExits(t *testing.T) {
 	for _, protocol := range []string{"mcp", "stdio", "node-job"} {
 		t.Run(protocol, func(t *testing.T) {
 			h := registerTestHub(t)
-			cmd := exec.Command("python3", "-c", `import subprocess, sys
-args = [sys.executable, "-c", "import time; time.sleep(30)"]
+			// The child is the gate command, run without a shell: it keeps
+			// running until the test ends.
+			hold, _ := gate(t)
+			cmd := exec.Command("python3", "-c", `import shlex, subprocess, sys
+args = shlex.split(sys.argv[2])
 if sys.argv[1] == "stdio":
-    args.append("--stdio")
-if sys.argv[1] == "node-job":
-    args = ["node", "-e", "setInterval(() => {}, 1000)"]
+    args = [args[0], "--", *args[1:], "--stdio"]
 child = subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=sys.argv[1] != "mcp")
 print(child.pid, flush=True)
 sys.stdin.readline()
-`, protocol)
+`, protocol, hold)
 			cmd.Env = append(os.Environ(), h.env(t.Name())...)
 			input, err := cmd.StdinPipe()
 			require.NoError(t, err)
@@ -58,12 +58,12 @@ sys.stdin.readline()
 			markers := []string{TasksDirEnv + "=" + h.dir}
 			seen := map[detachedKey]detachedProc{}
 			if protocol == "node-job" {
-				require.Eventually(t, func() bool { return len(strayProcesses(markers)) == 1 }, 2*time.Second, 20*time.Millisecond, "a real Node command remains visible")
+				require.Eventually(t, func() bool { return len(strayProcesses(markers)) == 1 }, 2*time.Second, 20*time.Millisecond, "a real command remains visible")
 				require.NoError(t, input.Close())
 				require.NoError(t, cmd.Wait())
-				require.Len(t, strayProcesses(markers), 1, "a real Node command remains visible after its CLI exits")
+				require.Len(t, strayProcesses(markers), 1, "a real command remains visible after its CLI exits")
 				require.Empty(t, completedDetached(seen, markedProcs(markers)))
-				require.Len(t, seen, 1, "real Node jobs still get completion notices")
+				require.Len(t, seen, 1, "real jobs still get completion notices")
 				return
 			}
 			require.Empty(t, strayProcesses(markers), "an attached CLI helper is not a job")
@@ -79,15 +79,7 @@ sys.stdin.readline()
 
 func TestNativeCommandAppearsInBackgroundAfterCtrlB(t *testing.T) {
 	env := testEnv(t)
-	h := &taskHub{dir: t.TempDir()}
-	hubsMu.Lock()
-	hubs = append(hubs, h)
-	hubsMu.Unlock()
-	t.Cleanup(func() {
-		hubsMu.Lock()
-		hubs = slices.DeleteFunc(hubs, func(candidate *taskHub) bool { return candidate == h })
-		hubsMu.Unlock()
-	})
+	h := registerTestHub(t)
 	tool := shelltool.NewBashTool(env.permissions, env.workingDir, env.workingDir, &config.Attribution{TrailerStyle: config.TrailerStyleNone}, 0, nil, reportStartedJob)
 	ctx, cancel := context.WithCancel(context.WithValue(t.Context(), tools.SessionIDContextKey, t.Name()))
 	defer cancel()
@@ -137,15 +129,7 @@ func TestBackgroundCountAfterCtrlB(t *testing.T) {
 	// the command could then look started after Ctrl+B and stay hidden.
 	// Without the guard, only the CLI's open call keeps it off the list.
 	noMinAge(t)
-	h := &taskHub{dir: t.TempDir()}
-	hubsMu.Lock()
-	hubs = append(hubs, h)
-	hubsMu.Unlock()
-	t.Cleanup(func() {
-		hubsMu.Lock()
-		hubs = slices.DeleteFunc(hubs, func(x *taskHub) bool { return x == h })
-		hubsMu.Unlock()
-	})
+	h := registerTestHub(t)
 	// A protocol fixture starts a real command, then hands it back still
 	// running when Ctrl+B is requested. No real model or credentials are used.
 	hold, _ := gate(t)
@@ -216,15 +200,7 @@ finally:
 
 func TestBackgroundProcesses(t *testing.T) {
 	noMinAge(t)
-	h := &taskHub{dir: t.TempDir()}
-	hubsMu.Lock()
-	hubs = append(hubs, h)
-	hubsMu.Unlock()
-	t.Cleanup(func() {
-		hubsMu.Lock()
-		hubs = slices.DeleteFunc(hubs, func(x *taskHub) bool { return x == h })
-		hubsMu.Unlock()
-	})
+	h := registerTestHub(t)
 
 	// A stand-in CLI (not a shell) that runs a command through a shell,
 	// like an agent's bash tool does.
@@ -273,15 +249,7 @@ func TestCommandText(t *testing.T) {
 
 func TestBackgroundProcessesSkipBusServices(t *testing.T) {
 	noMinAge(t)
-	h := &taskHub{dir: t.TempDir()}
-	hubsMu.Lock()
-	hubs = append(hubs, h)
-	hubsMu.Unlock()
-	t.Cleanup(func() {
-		hubsMu.Lock()
-		hubs = slices.DeleteFunc(hubs, func(x *taskHub) bool { return x == h })
-		hubsMu.Unlock()
-	})
+	h := registerTestHub(t)
 
 	// Two commands that outlive their shell; one looks like a service a
 	// D-Bus daemon started, which isn't the agent's own command.
@@ -356,11 +324,15 @@ func TestCLIBackgroundProcessHoldsCompletionAlert(t *testing.T) {
 func TestCLIBackgroundServerDoesNotHoldCompletionAlert(t *testing.T) {
 	noMinAge(t)
 	h := registerTestHub(t)
-	listen := `import socket,time
+	// The server runs until the test's cleanup makes the gate file.
+	gateFile := filepath.Join(t.TempDir(), "gate")
+	t.Cleanup(func() { _ = os.WriteFile(gateFile, nil, 0o600) })
+	listen := `import os,socket,time
 s=socket.socket()
 s.bind(("127.0.0.1",0))
 s.listen()
-time.sleep(60)`
+while not os.path.exists("` + gateFile + `"):
+    time.sleep(0.05)`
 	cmd := exec.Command("sh", "-c", "setsid python3 -c '"+listen+"' >/dev/null 2>&1 &")
 	cmd.Env = append(os.Environ(), TasksDirEnv+"="+h.dir, TasksSessionEnv+"="+t.Name())
 	require.NoError(t, cmd.Run())

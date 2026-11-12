@@ -27,6 +27,12 @@ func fakeClaudeHolding(t *testing.T, hold bool) (stdinFile string) {
 	t.Helper()
 	dir := t.TempDir()
 	stdinFile = filepath.Join(dir, "stdin")
+	// The held command ends only when the gate appears (the test's cleanup
+	// makes it), so a turn Crush never moves to the background fails
+	// instead of passing after a long wait. The script stops the waiter
+	// when it is done, so a passing test never sits through it.
+	gate := filepath.Join(dir, "gate")
+	t.Cleanup(func() { _ = os.WriteFile(gate, nil, 0o600) })
 	result := `echo '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"ok"}]}}'
 ( sleep 0.3; echo '{"type":"result","subtype":"success"}' ) &
 `
@@ -37,11 +43,13 @@ func fakeClaudeHolding(t *testing.T, hold bool) (stdinFile string) {
 read -r _
 echo '{"type":"system","subtype":"init","session_id":"s1"}'
 echo '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"sleep 300"}}]}}'
-( sleep 5; echo '{"type":"result","subtype":"success"}' ) &
+( n=0; until [ -e "` + gate + `" ] || [ "$n" -ge 100 ]; do sleep 0.05; n=$((n+1)); done; echo '{"type":"result","subtype":"success"}' ) &
+waiter=$!
 ` + result + `while read -r line; do
   printf '%s\n' "$line" >> "` + stdinFile + `"
   case "$line" in
   *background_tasks*)
+    kill "$waiter" 2>/dev/null
     echo '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"Command was manually backgrounded by user with ID: b1."}]},"tool_use_result":{"stdout":"","backgroundTaskId":"b1","backgroundedByUser":true}}'
     echo '{"type":"result","subtype":"success"}'
     cat >/dev/null
@@ -49,6 +57,7 @@ echo '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","na
     ;;
   esac
 done
+kill "$waiter" 2>/dev/null
 `
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "claude"), []byte(script), 0o755))
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))

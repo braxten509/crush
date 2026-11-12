@@ -16,7 +16,7 @@
 <div class="row">
   <span class="name">Helper model (titles)</span>
   <span class="value">{name}</span>
-  <button type="button" class="act" onclick={() => openDialog("models", { helper: true })}>Change…</button>
+  <button type="button" class="act" data-testid="helper-change" onclick={() => openDialog("models", { helper: true })}>Change…</button>
 </div>
 
 <style>

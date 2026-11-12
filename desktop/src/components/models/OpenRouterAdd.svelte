@@ -104,7 +104,7 @@
 
 <Sheet id={ID} title="Add {providerName} models" width="standard" maxHeight={720} {help} {onKey}>
   <Field bind:value={query} icon="search" placeholder={catalog?.length ? `Search ${catalog.length} models` : catalog ? "Search models" : "Reading the catalog…"} label="Search models" />
-  <p class="heads"><span>Name</span><span>In / Out per 1M · Context</span></p>
+  <p class="heads" data-provider={providerId}><span>Name</span><span>In / Out per 1M · Context</span></p>
   <FilterList
     bind:this={list}
     items={rows}

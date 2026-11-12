@@ -6,7 +6,7 @@ with the real engine: the window shows a seeded chat, KWin minimizes it, a
 turn runs in that chat through the engine (the page's frames stopped, as
 the real KWin stops them), and while the window stays
 minimized the page's finished alert must go out (the probe's alerts.jsonl
-gets "Crush finished"; the same raise() plays the sound just
+gets a notify line for the chat; the same raise() plays the sound just
 before it).
 
 Usage: tests/check.sh --no-app --kwin minimized_ring.py
@@ -47,7 +47,6 @@ try:
     app = apps.App(args=("-s", sid))
     app.wait_window(lambda p: (p.get("connection") or {}).get("state") == "connected", timeout=60)
     check(app_window() is not None, "the window shows on the hidden KWin")
-    time.sleep(1)
 
     gone = kwin_eval("""
       const w = workspace.windowList().find((w) => w.resourceClass == "crush-desktop" && w.normalWindow);
@@ -61,10 +60,9 @@ try:
     # frames stop here instead, as on the real desktop.
     stopped = probe_eval(apps.PROBE, "window.requestAnimationFrame = () => 0; window.__probeEval = true;")
     check(stopped is True, "the page gets no more animation frames")
-    time.sleep(2)
 
     def finished():
-        return [a for a in apps.alerts() if a.get("kind") == "notify" and a.get("title") == "Crush finished"]
+        return [a for a in apps.alerts() if a.get("kind") == "notify" and a.get("session") == sid]
 
     before = len(finished())
     count = engine.call("GET", "%s/sessions/%s" % (base, sid))["message_count"]

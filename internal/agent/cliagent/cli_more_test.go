@@ -2,10 +2,10 @@ package cliagent
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -78,12 +78,18 @@ cat >/dev/null
 		data, err := os.ReadFile(arguments)
 		require.NoError(t, err)
 		args := strings.Split(strings.TrimSpace(string(data)), "\n")
-		want := []string{"agent", "--no-leader", "-m", "grok-4.7"}
-		if effort != "" {
-			want = append(want, "--reasoning-effort", effort)
+		flag := slices.Index(args, "-m")
+		require.Greater(t, flag, -1)
+		require.Less(t, flag+1, len(args))
+		require.Equal(t, "grok-4.7", args[flag+1])
+		at := slices.Index(args, "--reasoning-effort")
+		if effort == "" {
+			require.Equal(t, -1, at)
+			continue
 		}
-		want = append(want, "stdio")
-		require.Equal(t, want, args)
+		require.Greater(t, at, -1)
+		require.Less(t, at+1, len(args))
+		require.Equal(t, effort, args[at+1])
 	}
 }
 
@@ -188,16 +194,14 @@ cat >/dev/null
 `
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "claude"), []byte(script), 0o755))
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	guard := `"hooks":{"PreToolUse":[{"matcher":"*","hooks":[{"type":"command","command":` + strconv.Quote(secretguard.HookCommand()) + `,"timeout":10}]}]}`
 	for _, tc := range []struct {
 		tier      string
 		ultracode bool
-		settings  string
 	}{
-		{"", false, `{` + guard + `}`},
-		{"fast", false, `{"fastMode":true,` + guard + `}`},
-		{"", true, `{"ultracode":true,` + guard + `}`},
-		{"fast", true, `{"fastMode":true,"ultracode":true,` + guard + `}`},
+		{"", false},
+		{"fast", false},
+		{"", true},
+		{"fast", true},
 	} {
 		model := &Model{Kind: config.TypeClaudeCode, ID: "opus", Dir: dir, ServiceTier: tc.tier, Ultracode: tc.ultracode}
 		require.NoError(t, model.Run(t.Context(), Turn{Prompt: "hi", NoTools: true, Emit: func(Event) error { return nil }}))
@@ -206,6 +210,27 @@ cat >/dev/null
 		args := strings.Split(strings.TrimSpace(string(data)), "\n")
 		i := slices.Index(args, "--settings")
 		require.Greater(t, i, -1)
-		require.JSONEq(t, tc.settings, args[i+1])
+		require.Less(t, i+1, len(args))
+		var settings struct {
+			FastMode  bool `json:"fastMode"`
+			Ultracode bool `json:"ultracode"`
+			Hooks     struct {
+				PreToolUse []struct {
+					Hooks []struct {
+						Command string `json:"command"`
+					} `json:"hooks"`
+				} `json:"PreToolUse"`
+			} `json:"hooks"`
+		}
+		require.NoError(t, json.Unmarshal([]byte(args[i+1]), &settings))
+		require.Equal(t, tc.tier == "fast", settings.FastMode)
+		require.Equal(t, tc.ultracode, settings.Ultracode)
+		var commands []string
+		for _, entry := range settings.Hooks.PreToolUse {
+			for _, hook := range entry.Hooks {
+				commands = append(commands, hook.Command)
+			}
+		}
+		require.Contains(t, commands, secretguard.HookCommand())
 	}
 }

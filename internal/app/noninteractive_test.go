@@ -37,5 +37,5 @@ func TestReplyPrinter(t *testing.T) {
 	require.Equal(t, "\tHello, world\n\nBye", buf.String())
 
 	// Content that shrinks below what was printed is an error.
-	require.ErrorContains(t, p.print(textMessage("m2", "B")), "message content is shorter than read bytes: 1 < 3")
+	require.Error(t, p.print(textMessage("m2", "B")))
 }

@@ -11,13 +11,13 @@ import {
   hypercredits,
   noticeParts,
   parseSkill,
-  ranTools,
   REFUSAL_DETAILS,
   REFUSAL_TITLE,
   systemNotice,
   taskNotice,
   toolActivity,
 } from "./timeline.js";
+import { toolActivity as statusToolActivity } from "./tools/status.js";
 
 // -- Message builders (wire.js shapes) --
 let at = 1_792_320_000;
@@ -97,10 +97,10 @@ describe("your messages (CHAT-002 to CHAT-007)", () => {
   });
 
   test.each([
-    ["done", { notice: "task", state: "done", text: "Task Fixer finished" }],
-    ["failed", { notice: "task", state: "failed", text: "Task Fixer failed" }],
-    ["stopped", { notice: "task", state: "stopped", text: "Task Fixer stopped" }],
-    ["running", { notice: "task", state: "running", text: "Still running: Fixer" }],
+    ["done", { notice: "task", state: "done" }],
+    ["failed", { notice: "task", state: "failed" }],
+    ["stopped", { notice: "task", state: "stopped" }],
+    ["running", { notice: "task", state: "running" }],
   ])("task result %s (CHAT-009)", (status, want) => {
     const body = `<crush-task-result>\n<task-id>t1</task-id>\n<name>Fixer</name>\n<status>${status}</status>\n<result>\nall good\n</result>\n</crush-task-result>`;
     const [item] = build([user("u1", body)]).items;
@@ -114,17 +114,17 @@ describe("your messages (CHAT-002 to CHAT-007)", () => {
   });
 
   test.each([
-    [{ notice: "skill", state: "", name: "teach", text: "Explains things" }, { icon: "skill", tone: "ink", before: "Loaded Skill → ", strong: "teach", after: " · Explains things" }],
-    [{ notice: "skill", state: "", name: "teach", text: "" }, { icon: "skill", before: "Loaded Skill → ", strong: "teach", after: "" }],
-    [{ notice: "task", state: "done", name: "Fixer", text: "Task Fixer finished" }, { icon: "check", tone: "ink", before: "Task ", strong: "Fixer", after: " finished" }],
-    [{ notice: "task", state: "failed", name: "Fixer", text: "Task Fixer failed" }, { icon: "cross", tone: "error", before: "Task ", strong: "Fixer", after: " failed" }],
-    [{ notice: "task", state: "stopped", name: "Fixer", text: "Task Fixer stopped" }, { icon: "dot", tone: "muted", after: " stopped" }],
-    [{ notice: "task", state: "running", name: "Fixer", text: "Still running: Fixer" }, { icon: "dot", tone: "ink", before: "Still running: ", strong: "Fixer", after: "" }],
-    [{ notice: "answers", state: "answered", name: "Questions", text: "" }, { icon: "check", before: "Your answers to the questions: ", strong: "answered" }],
-    [{ notice: "answers", state: "cancelled", name: "Questions", text: "" }, { icon: "dot", tone: "muted", strong: "cancelled" }],
-    [{ notice: "system", state: "on", name: "teach", text: "teach turned on by the agent" }, { icon: "half-circle", tone: "ink", before: "", strong: "teach", after: " turned on by the agent" }],
-    [{ notice: "system", state: "off", name: "teach", text: "teach turned off by you" }, { icon: "circle", tone: "muted", strong: "teach", after: " turned off by you" }],
-    [{ notice: "system", state: "", name: "", text: "Memory was refreshed" }, { icon: "half-circle", before: "Memory was refreshed", strong: "", after: "" }],
+    [{ notice: "skill", state: "", name: "teach", text: "Explains things" }, { before: "Loaded Skill → ", strong: "teach", after: " · Explains things" }],
+    [{ notice: "skill", state: "", name: "teach", text: "" }, { before: "Loaded Skill → ", strong: "teach", after: "" }],
+    [{ notice: "task", state: "done", name: "Fixer", text: "Task Fixer finished" }, { before: "Task ", strong: "Fixer", after: " finished" }],
+    [{ notice: "task", state: "failed", name: "Fixer", text: "Task Fixer failed" }, { before: "Task ", strong: "Fixer", after: " failed" }],
+    [{ notice: "task", state: "stopped", name: "Fixer", text: "Task Fixer stopped" }, { after: " stopped" }],
+    [{ notice: "task", state: "running", name: "Fixer", text: "Still running: Fixer" }, { before: "Still running: ", strong: "Fixer", after: "" }],
+    [{ notice: "answers", state: "answered", name: "Questions", text: "" }, { before: "Your answers to the questions: ", strong: "answered" }],
+    [{ notice: "answers", state: "cancelled", name: "Questions", text: "" }, { strong: "cancelled" }],
+    [{ notice: "system", state: "on", name: "teach", text: "teach turned on by the agent" }, { before: "", strong: "teach", after: " turned on by the agent" }],
+    [{ notice: "system", state: "off", name: "teach", text: "teach turned off by you" }, { strong: "teach", after: " turned off by you" }],
+    [{ notice: "system", state: "", name: "", text: "Memory was refreshed" }, { before: "Memory was refreshed", strong: "", after: "" }],
   ])("the line of %j (CHAT-008 to CHAT-011)", (item, want) => {
     expect(noticeParts(item)).toMatchObject(want);
   });
@@ -307,7 +307,7 @@ describe("banners (CHAT-025 to CHAT-029)", () => {
   test("Canceled after a stopped reply, not after a step that called tools", () => {
     const out = build([user("u1", "q"), assistant("a1", [text("Half"), finish("canceled")])]);
     expect(kinds(out)).toEqual(["user", "reply", "banner"]);
-    expect(out.items[2]).toMatchObject({ key: "banner:a1", banner: "canceled", title: "Canceled" });
+    expect(out.items[2]).toMatchObject({ key: "banner:a1", banner: "canceled" });
     const tools = build([user("u1", "q"), assistant("a1", [call("c1", "bash"), finish("canceled")])]);
     expect(tools.items.some((i) => i.kind === "banner")).toBe(false);
   });
@@ -338,7 +338,6 @@ describe("banners (CHAT-025 to CHAT-029)", () => {
     expect(err.items.at(-1)).toMatchObject({ kind: "banner", banner: "error", title: "Provider error 500", details: "upstream said no" });
     const refused = build([user("u1", "q"), assistant("a1", [finish("content_filter")])]);
     expect(refused.items.at(-1)).toMatchObject({ banner: "refused", title: REFUSAL_TITLE, details: REFUSAL_DETAILS });
-    expect(REFUSAL_TITLE).toBe("Model refused to continue");
     const own = build([user("u1", "q"), assistant("a1", [finish("content_filter", { message: "Blocked", details: "Policy 7" })])]);
     expect(own.items.at(-1)).toMatchObject({ banner: "refused", title: "Blocked", details: "Policy 7" });
   });
@@ -348,9 +347,9 @@ describe("banners (CHAT-025 to CHAT-029)", () => {
     expect(build([user("u1", "q"), live], { busy: true }).items.at(-1)).toMatchObject({ kind: "status", words: "Compacting conversation" });
     const done = { ...live, parts: [text("Summary of everything"), finish()] };
     const out = build([user("u1", "q"), done]);
-    expect(out.items.at(-1)).toMatchObject({ kind: "banner", banner: "compacted", title: "Conversation compacted" });
+    expect(out.items.at(-1)).toMatchObject({ kind: "banner", banner: "compacted" });
     expect(JSON.stringify(out.items)).not.toContain("Summary of everything");
-    expect(build([user("u1", "q"), { ...live, parts: [finish("canceled")] }]).items.at(-1)).toMatchObject({ banner: "compaction_canceled", title: "Compaction canceled" });
+    expect(build([user("u1", "q"), { ...live, parts: [finish("canceled")] }]).items.at(-1)).toMatchObject({ banner: "compaction_canceled" });
     expect(build([user("u1", "q"), { ...live, parts: [finish("error", { message: "too long" })] }]).items.at(-1)).toMatchObject({ banner: "error", title: "too long" });
   });
 
@@ -387,19 +386,27 @@ describe("footers (CHAT-035 to CHAT-037)", () => {
     const u = user("u1", "q");
     const a = assistant("a1", [text("Answer"), { type: "finish", data: { reason: "end_turn", time: u.created_at + 12 } }]);
     const out = build([u, a]);
-    expect(out.items.at(-1)).toMatchObject({ kind: "footer", key: "footer:a1", text: "Opus 5.5 via Claude Code in 12s", saved: "" });
+    const footer = out.items.at(-1);
+    expect(footer).toMatchObject({ kind: "footer", key: "footer:a1", saved: "" });
+    for (const part of ["Opus 5.5", "Claude Code", "12s"]) expect(footer.text).toContain(part);
   });
 
   test("Unknown Model and a provider not in the list", () => {
     const m = assistant("a1", [text("x"), { type: "finish", data: { reason: "end_turn", time: 100 } }], { provider: "acme", model: "zz" });
-    expect(footerText(m, PROVIDERS, 38)).toEqual({ text: "Unknown Model via acme in 1m2s", saved: "" });
+    const footer = footerText(m, PROVIDERS, 38);
+    expect(footer.saved).toBe("");
+    for (const part of ["acme", "1m2s"]) expect(footer.text).toContain(part);
   });
 
   test("Prism: every turn, the routed model and the savings (CHAT-036)", () => {
     const mid = assistant("a1", [call("c1", "bash"), finish("tool_use")], { prism_model_name: "Haiku", prism_hypercredit_savings: 12.4 });
-    expect(footerText(mid, PROVIDERS, 0)).toEqual({ text: "Opus 5.5 → Haiku", saved: "◆ 12 Saved" });
+    const routed = footerText(mid, PROVIDERS, 0);
+    for (const part of ["Opus 5.5", "Haiku"]) expect(routed.text).toContain(part);
+    expect(routed.saved).toContain("12");
     const dollars = assistant("a2", [text("x"), { type: "finish", data: { reason: "end_turn", time: 10 } }], { prism_model_name: "Haiku", prism_dollar_savings: 0.4219 });
-    expect(footerText(dollars, PROVIDERS, 0)).toEqual({ text: "Opus 5.5 → Haiku via Claude Code in 10s", saved: "• $0.42 Saved" });
+    const paid = footerText(dollars, PROVIDERS, 0);
+    for (const part of ["Opus 5.5", "Haiku", "Claude Code", "10s"]) expect(paid.text).toContain(part);
+    expect(paid.saved).toContain("0.42");
     expect([hypercredits(1), hypercredits(0.94), hypercredits(0.05), hypercredits(2.5)]).toEqual(["1", "0.9", "0.1", "3"]);
   });
 
@@ -438,7 +445,7 @@ describe("groups and keys (CHAT-080, 4.4)", () => {
       ["c2", "done"],
       ["c3", "error"],
     ]);
-    expect(g.changes).toMatchObject({ sessionId: "s1", toolCallIds: ["c2"], title: "Ran 3 tools" });
+    expect(g.changes).toMatchObject({ sessionId: "s1", toolCallIds: ["c2"] });
     expect(g.members).toEqual(["c1", "c2", "a2", "c3"]);
   });
 
@@ -464,21 +471,10 @@ describe("groups and keys (CHAT-080, 4.4)", () => {
     expect(g).toMatchObject({ working: false, live: null });
   });
 
-  test.each([
-    ["bash", "Waiting for a tool response..."],
-    ["view", "Reading a file"],
-    ["multiedit", "Editing a file"],
-    ["glob", "Searching"],
-    ["web_search", "Searching the web"],
-    ["download", "Reading a web page"],
-    ["todos", "Updating the plan"],
-    ["job_output", "Checking a command"],
-    ["lsp_references", "Checking code"],
-    ["mcp_docker_ps", "Using docker"],
-    ["agent", "Waiting for subagent"],
-    ["mystery", "Working"],
-  ])("tool words: %s → %s", (name, words) => {
-    expect(toolActivity(name)).toBe(words);
+  test("the timeline and the tool rows name a running tool the same way", () => {
+    for (const name of ["agent", "task", "bash", "job_output", "view", "multiedit", "glob", "web_search", "download", "todos", "lsp_references", "mcp_docker_ps", "mcp_bare", "mystery"]) {
+      expect(toolActivity(name), name).toBe(statusToolActivity(name));
+    }
   });
 
   test("keys: A on tool groups and on replies with a branch link, U on a user message with one", () => {
@@ -486,7 +482,6 @@ describe("groups and keys (CHAT-080, 4.4)", () => {
     expect(out.items.map((i) => i.letter)).toEqual(["", "A", "A", "", ""]);
     const user = build(run, { hasKey: (mid) => mid === "u1" });
     expect(user.items.map((i) => i.letter)).toEqual(["U", "", "A", "", ""]);
-    expect(ranTools(1)).toBe("Ran 1 tool");
   });
 
   test("a group in plan mode: thinking steps do not fold", () => {

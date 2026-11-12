@@ -50,6 +50,10 @@ var (
 // openWait is how long Open waits for the password (PLAN §3).
 var openWait = 5 * time.Minute
 
+// openPoll is how often Open checks whether the vault has opened. Tests
+// shorten it.
+var openPoll = 300 * time.Millisecond
+
 // Plasma Vault's DBus service (verified 2026-11-03, PLAN §11).
 const (
 	vaultService   = "org.kde.kded6"
@@ -219,7 +223,7 @@ func (v KDEVault) Open(ctx context.Context) (string, error) {
 	}
 	ctx, cancel := context.WithTimeout(ctx, openWait)
 	defer cancel()
-	tick := time.NewTicker(300 * time.Millisecond)
+	tick := time.NewTicker(openPoll)
 	defer tick.Stop()
 	for {
 		if mounted(mount) {

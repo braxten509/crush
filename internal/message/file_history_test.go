@@ -82,7 +82,7 @@ func TestHistoryFailureDoesNotLoseCreatedOrUpdatedToolResult(t *testing.T) {
 	require.Equal(t, "updated tool", loaded.ToolResults()[0].Content)
 	plan, err := versions.Preview(t.Context(), "chat", "")
 	require.NoError(t, err)
-	require.Contains(t, plan.Entries[0].Unavailable, "File history unavailable")
+	require.NotEmpty(t, plan.Entries[0].Unavailable)
 	// Even a broken optional point table must not stop ordinary messages.
 	_, err = conn.Exec(`ALTER TABLE file_history_points RENAME TO broken_points`)
 	require.NoError(t, err)

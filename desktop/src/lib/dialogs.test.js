@@ -127,7 +127,7 @@ describe("OverlayHost draws the stack", () => {
 
   it("draws nothing while the stack is empty", () => {
     flushSync();
-    expect(target.querySelector(".veil")).toBe(null);
+    expect(target.querySelector("[data-veil]")).toBe(null);
   });
 
   it("leaves only the front sheet without inert", () => {
@@ -145,7 +145,7 @@ describe("OverlayHost draws the stack", () => {
     lib.closeFront();
     lib.closeFront();
     flushSync();
-    expect(target.querySelector(".veil")).toBe(null);
+    expect(target.querySelector("[data-veil]")).toBe(null);
   });
 
   // A {veil: false} sheet in front leaves the veil bare (no scrim); any other
@@ -154,18 +154,18 @@ describe("OverlayHost draws the stack", () => {
     const { default: Sheet } = await import("../components/sheets/ChangesSheet.svelte");
     lib.registerDialog("bare", Sheet, { veil: false });
     const veil = () => {
-      const el = target.querySelector(".veil");
-      return [el.dataset.veil, el.classList.contains("bare")];
+      const el = target.querySelector("[data-veil]");
+      return el.dataset.veil;
     };
     lib.openDialog("a");
     flushSync();
-    expect(veil()).toEqual(["veil", false]);
+    expect(veil()).toBe("veil");
     lib.openDialog("bare");
     flushSync();
-    expect(veil()).toEqual(["none", true]);
+    expect(veil()).toBe("none");
     expect(sheets()).toEqual([["a", true], ["bare", false]]);
     lib.bringToFront("a");
     flushSync();
-    expect(veil()).toEqual(["veil", false]);
+    expect(veil()).toBe("veil");
   });
 });

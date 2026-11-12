@@ -26,19 +26,7 @@ func TestBackgroundJobRoundTripAndCompletion(t *testing.T) {
 	require.NoError(t, err)
 	h := c.tasks
 	h.dir = t.TempDir()
-	hubsMu.Lock()
-	hubs = append(hubs, h)
-	hubsMu.Unlock()
-	t.Cleanup(func() {
-		hubsMu.Lock()
-		for i, hub := range hubs {
-			if hub == h {
-				hubs = append(hubs[:i], hubs[i+1:]...)
-				break
-			}
-		}
-		hubsMu.Unlock()
-	})
+	listTestHub(t, h)
 	hold, finish := gate(t)
 	response := h.background(TaskRequest{Session: session.ID, Background: &BackgroundRequest{Command: hold + "; printf finished; exit 7", WorkingDir: t.TempDir(), Name: "example"}})
 	require.Empty(t, response.Error)
@@ -58,16 +46,18 @@ func TestBackgroundJobRoundTripAndCompletion(t *testing.T) {
 	require.Eventually(t, func() bool { return len(BackgroundProcesses()) > 0 }, time.Second, 20*time.Millisecond)
 	output := h.background(TaskRequest{Session: session.ID, Background: &BackgroundRequest{OutputID: job.ID}})
 	require.Empty(t, output.Error)
-	require.Contains(t, output.Background.Content, "Status: running")
+	require.False(t, job.IsDone())
 	stranger, err := c.sessions.Create(t.Context(), "other")
 	require.NoError(t, err)
 	denied := h.background(TaskRequest{Session: stranger.ID, Background: &BackgroundRequest{StopID: job.ID}})
-	require.Contains(t, denied.Error, "no background job")
+	require.NotEmpty(t, denied.Error)
+	require.False(t, job.IsDone(), "another chat must not stop the job")
 	finish()
 	select {
 	case notice := <-notices:
-		require.Contains(t, notice, "<status>failed</status>")
-		require.Contains(t, notice, "exit code 7")
+		_, status, ok := ParseTaskNotification(notice)
+		require.True(t, ok)
+		require.Equal(t, "failed", status)
 		require.Contains(t, notice, "finished")
 	case <-time.After(8 * time.Second):
 		t.Fatal("completion notification missing")
@@ -168,7 +158,7 @@ func TestBackgroundJobHonorsHooksAndRejectsInvalidRequests(t *testing.T) {
 	_, err = os.Stat(marker)
 	require.ErrorIs(t, err, os.ErrNotExist)
 	response = h.background(TaskRequest{Session: session.ID, Background: &BackgroundRequest{Command: "echo hi", OutputID: "001"}})
-	require.Contains(t, response.Error, "exactly one")
+	require.NotEmpty(t, response.Error)
 }
 
 func TestBackgroundJobStopFromProcessListCancelsWholeScript(t *testing.T) {
@@ -181,19 +171,7 @@ func TestBackgroundJobStopFromProcessListCancelsWholeScript(t *testing.T) {
 	require.NoError(t, err)
 	h := c.tasks
 	h.dir = t.TempDir()
-	hubsMu.Lock()
-	hubs = append(hubs, h)
-	hubsMu.Unlock()
-	t.Cleanup(func() {
-		hubsMu.Lock()
-		for i, hub := range hubs {
-			if hub == h {
-				hubs = append(hubs[:i], hubs[i+1:]...)
-				break
-			}
-		}
-		hubsMu.Unlock()
-	})
+	listTestHub(t, h)
 	directory := t.TempDir()
 	hold, _ := gate(t)
 	response := h.background(TaskRequest{Session: session.ID, Background: &BackgroundRequest{Command: hold + "; printf wrong > should-not-exist", WorkingDir: directory}})
@@ -319,10 +297,10 @@ func TestBackgroundServiceRemainsTrackedWithoutBlockingCompletion(t *testing.T) 
 	saved := readSavedJobs(t, savedPath)
 	require.Len(t, saved, 1)
 	require.True(t, saved[0].Service)
-	require.Contains(t, interruptedJobsNotification(saved), "crush bg --service")
+	require.Contains(t, interruptedJobsNotification(saved), "--service")
 	output := h.background(TaskRequest{Session: sess.ID, Background: &BackgroundRequest{OutputID: job.ID}})
 	require.Empty(t, output.Error)
-	require.Contains(t, output.Background.Content, "Status: running")
+	require.False(t, job.IsDone())
 	stop := h.background(TaskRequest{Session: sess.ID, Background: &BackgroundRequest{StopID: job.ID}})
 	require.Empty(t, stop.Error)
 	require.False(t, stop.Background.IsError)

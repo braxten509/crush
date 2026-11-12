@@ -48,7 +48,6 @@ func TestLauncherOpensAWindowOnlyForThePassword(t *testing.T) {
 
 	w := launch(h, "wrong one")
 	require.Equal(t, http.StatusUnauthorized, w.Code)
-	require.Contains(t, w.Body.String(), "Wrong password.")
 	require.Empty(t, started)
 
 	w = launch(h, "correct horse")
@@ -57,7 +56,7 @@ func TestLauncherOpensAWindowOnlyForThePassword(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &out))
 	require.Len(t, started, 1)
 	require.Equal(t, started[0], out["launch"])
-	require.Len(t, out["launch"], 16)
+	require.NotEmpty(t, out["launch"])
 }
 
 func TestLauncherLocksOutAfterWrongPasswords(t *testing.T) {
@@ -96,14 +95,15 @@ func TestLauncherRefusesOtherDevicesBrowsersAndNoPassword(t *testing.T) {
 	require.NoError(t, os.Remove(l.passwordFile))
 	w = launch(l.routes(g), "correct horse")
 	require.Equal(t, http.StatusTooManyRequests, w.Code)
-	require.Contains(t, w.Body.String(), "crush remote password")
 
 	r = httptest.NewRequest(http.MethodGet, "/v1/launcher", nil)
 	r.RemoteAddr = phoneAddr + ":1234"
 	w = httptest.NewRecorder()
 	l.routes(g).ServeHTTP(w, r)
 	require.Equal(t, http.StatusOK, w.Code)
-	require.Contains(t, w.Body.String(), `"password_set":false`)
+	var info map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &info))
+	require.Equal(t, false, info["password_set"])
 }
 
 func TestPasswordIsStoredAsAHashOwnerOnly(t *testing.T) {

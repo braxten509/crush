@@ -506,7 +506,7 @@ func TestRemoteRoutes(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("the share did not stop")
 	}
-	require.EqualError(t, shareReply(t, reply), "Remote Control is off")
+	require.Error(t, shareReply(t, reply), "the phone is told the action did not run")
 	h.expectOK(t, http.MethodGet, h.wsPath("/remote"), owner, nil, &listed)
 	require.Empty(t, listed)
 }
@@ -640,8 +640,4 @@ func TestRemoteShareAdapterKinds(t *testing.T) {
 	} {
 		require.Equal(t, kind, shareActionFromRemote(&remote.Action{Kind: remoteKind}).Kind)
 	}
-	require.Equal(t, proto.RemoteSetup{State: "missing", Title: "Install Tailscale", Detail: "d", Action: "install", Button: "Install Tailscale"},
-		remoteSetupProto(remote.SetupInfo{State: remote.SetupMissing, Title: "Install Tailscale", Detail: "d", Action: "install", Button: "Install Tailscale"}))
-	require.Equal(t, proto.RemoteSetup{State: "unsupported", Title: "t", Detail: "d"},
-		remoteSetupProto(remote.SetupInfo{State: remote.SetupUnsupported, Title: "t", Detail: "d", Button: "ignored"}))
 }

@@ -105,8 +105,7 @@ component and fails where a space beside a dot would be lost.
   of the left divider and 19 of the right. The left column can collapse to a strip. While
   its width glides, the list inside keeps its open width, so the column's edge covers and
   uncovers it and no word squeezes; the strip slides in once the list has gone and leaves
-  at once when the list opens (look A, owner 2026-10-21; `list_fold.py`,
-  `close_motion.py`). A sub-chat's tree line stays drawn over the open or hovered row's
+  at once when the list opens (look A, owner 2026-10-21). A sub-chat's tree line stays drawn over the open or hovered row's
   band (owner, 2026-10-21).
 - The conversation reads at a fixed measure in the middle column; the typing box sits on the
   bottom rule. The red rail shows only under an open chat, never on a start screen.
@@ -176,7 +175,7 @@ component and fails where a space beside a dot would be lost.
 - Dragging the chat's scroll bar never shows a blank chat (owner, 2026-10-20): Electron runs
   with `run-all-compositor-stages-before-draw`, so a frame shows only once it is painted
   (tests/driver/scroll_drag.py records the real pixels with ffmpeg; without it 5-8 of 333
-  frames were empty paper; p3_speed still passes).
+  frames were empty paper).
 - The chat's scroll range ends on a whole pixel (an invisible bit of room under the last
   item), so a wheel at the bottom never nudges it (owner, 2026-10-20).
 - Clock times read "9:05 AM" (bylines and the list's times today and yesterday).
@@ -184,8 +183,7 @@ component and fails where a space beside a dot would be lost.
 - The title bar's icon is the heart bit alone (no tile). The title, folder and branch share
   one baseline, set so the title's capitals sit on the bar's middle with the heart and the
   window icons (within half a pixel; the branch's smaller capitals sit 1 px lower), and
-  they are evenly spaced word to word (tests/driver/titlebar_align.py
-  with tests/look/titlebar_manifest.py, the align skill's checker).
+  they are evenly spaced word to word.
 - No column gets so narrow that its words are cut or overlap: the list stops where both
   buttons fit whole, the panel where every meter's label, figure and reset time fit, both
   measured from the words themselves at the current zoom.
@@ -276,7 +274,7 @@ Every dialog is a `kit/Sheet`:
   it both ways, so nothing beside or below it jumps once it has gone: the chat list's and the
   panel's column widths glide as they collapse and come back, and pieces in the flow (the
   usage strip, a tool group's list, a tool's details) fold their height (`settle`'s `fold`). Opening pieces use `lib/motion.js` transitions, not on-mount
-  keyframes, so each has its close; `close_motion.py` checks them. The busy marks loop over 1.2 s
+  keyframes, so each has its close. The busy marks loop over 1.2 s
   on one beat (`busyBeat`, counted from the page's start), so every mark on the page pulses
   together, the to-do list's step in progress too (owner, 2026-10-21). Nothing moves the layout when
   a state changes (no show or hide on a flag).
@@ -310,18 +308,7 @@ Every dialog is a `kit/Sheet`:
 
 ## Checks
 
-- `tests/driver/owner_fixes.py` checks, at Compact zoom: the to-do steps stack, the
-  strip's "›" cell and the Send square are centred, reply footers name the configured
-  model, the busy dots are whole pixels and keep the page's one beat (the to-do step's
-  too, and after Settings hides the chat), and Send turns into Stop and back.
-- `tests/driver/dark_mode.py` turns dark mode on and off in the real window, checks the
-  graphite paper, the soft ink (10 to 13:1), that the ink reads on every dark surface, that
-  quiet text stays quieter and the frame rules faint, that a diagram's box fills with the
-  paper (part `diagram`, on the themed chat), and that the chat's scroll bar hides after
-  scrolling and is not covered by the column grip; dark pictures go to `tests/out/dark_mode/`.
-
-- `tests/driver/look_real.py` compares the first screen with the approved picture in the
-  real window (WebKitGTK).
-- `tests/look/align_app.py` with `tests/driver/look_align.py` measures icon, label and edge
-  alignment on the first screen and every dialog in the real window, with the align skill's
-  checker (see README.md, "Check").
+- `tests/driver/owner_fixes.py` checks that reply footers name the configured model and
+  that Send turns into Stop and back, and Stop ends the run.
+- `tests/driver/dark_mode.py` checks in the real window that the chat's scroll bar is not
+  covered by the column grip and that the wheel scrolls the chat.

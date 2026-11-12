@@ -21,8 +21,8 @@ func TestGlobalAutocompactPersistence(t *testing.T) {
 	require.EqualValues(t, 275000, loaded.Options.GetAutoCompactTokenLimit())
 	require.Empty(t, loaded.Models, "the global option must not create a model override")
 	var unset *Options
-	require.EqualValues(t, 400000, unset.GetAutoCompactTokenLimit())
-	require.EqualValues(t, 400000, (&Options{}).GetAutoCompactTokenLimit())
+	require.Equal(t, DefaultAutoCompactTokenLimit, unset.GetAutoCompactTokenLimit())
+	require.Equal(t, DefaultAutoCompactTokenLimit, (&Options{}).GetAutoCompactTokenLimit())
 }
 
 // A setting whose file write fails is not kept in memory either, so what

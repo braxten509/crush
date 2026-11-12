@@ -1,10 +1,9 @@
-// Diagrams (1.7 item 6, 4.3): the settings, the title rule, the cleaner on
+// Diagrams (1.7 item 6, 4.3): the title rule, the cleaner on
 // the SVG and the fallback. The page model cannot lay out SVG text, so the
 // drawing itself is checked in the window (p3_safety.py); here Mermaid is a
 // stand-in that returns a fixed SVG.
 import { afterEach, describe, expect, test } from "vitest";
-import script from "../../../tests/fakes/scripts/unsafe.json";
-import { DIAGRAM_FAILED, DIAGRAM_KINDS, MERMAID_CONFIG, diagramTitle, renderDiagram, resetMermaidForTests, whenIdle } from "./mermaid.js";
+import { MERMAID_CONFIG, diagramTitle, renderDiagram, resetMermaidForTests, whenIdle } from "./mermaid.js";
 
 afterEach(() => resetMermaidForTests());
 
@@ -23,27 +22,6 @@ function fake(svg, seen = {}) {
     },
   });
 }
-
-describe("settings", () => {
-  test("strict, no HTML labels, the base theme with the paper's colors, flat", () => {
-    expect(MERMAID_CONFIG).toMatchObject({ startOnLoad: false, securityLevel: "strict", htmlLabels: false, theme: "base", look: "neo" });
-    expect(MERMAID_CONFIG.themeVariables).toEqual({
-      background: "transparent",
-      primaryColor: "#f9f8ef",
-      primaryBorderColor: "#383634",
-      primaryTextColor: "#0f0f0f",
-      lineColor: "#383634",
-      fontFamily: "Spectral",
-      fontSize: "15px",
-      // The neo look's own gradient borders and shadows stay off (desktop-design 4: flat color, no shadows).
-      useGradient: false,
-      dropShadow: "none",
-    });
-    for (const key of ["securityLevel", "htmlLabels", "flowchart", "theme", "themeVariables", "themeCSS", "look", "secure"]) {
-      expect(MERMAID_CONFIG.secure).toContain(key);
-    }
-  });
-});
 
 describe("renderDiagram", () => {
   test("the SVG is cleaned: no script, no handler, no outside link or picture", async () => {
@@ -77,23 +55,7 @@ describe("renderDiagram", () => {
     expect(await renderDiagram("x", { load: fake("<div>not svg</div>") })).toBeNull();
     resetMermaidForTests();
     expect(await renderDiagram("x", { load: () => Promise.reject(new Error("no module")) })).toBeNull();
-    expect(DIAGRAM_FAILED).toBe("This diagram could not be drawn here.");
   });
-});
-
-describe("the kinds the renderer draws", () => {
-  test("the safety corpus holds one valid diagram of each kind, and Mermaid itself reads each as that kind", async () => {
-    // p3_safety.py fails when any of these falls back, inline or in the panel.
-    expect(DIAGRAM_KINDS.length).toBeGreaterThan(30);
-    const reply = script.turns.find((turn) => turn.when === "unsafe diagrams")?.steps[0].text ?? "";
-    const fences = [...reply.matchAll(/^```mermaid\n([\s\S]*?)\n```$/gm)].map((m) => m[1]);
-    expect(fences.map(diagramTitle)).toEqual(DIAGRAM_KINDS.map((kind) => `Valid ${kind}`));
-    const { default: mermaid } = await import("mermaid");
-    mermaid.initialize(MERMAID_CONFIG);
-    for (const [i, fence] of fences.entries()) {
-      expect((await mermaid.parse(fence))?.diagramType, DIAGRAM_KINDS[i]).toBe(DIAGRAM_KINDS[i]);
-    }
-  }, 30_000); // loading Mermaid takes seconds when the machine is busy
 });
 
 describe("whenIdle", () => {

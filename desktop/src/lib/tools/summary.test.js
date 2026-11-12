@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { cells } from "../diff.js";
 import { hiddenReviewPath } from "./review.js";
 import { groupStatus, toolStatus } from "./status.js";
-import { countLabel, fileChangeLabel, groupChanges, groupExtras, groupMark, groupRow, shortFileName, storedSummary, tally, toolVerbs } from "./summary.js";
+import { fileChangeLabel, groupChanges, groupExtras, groupMark, groupRow, shortFileName, storedSummary, tally, toolVerbs } from "./summary.js";
 
 let nextGroup = 0;
 const tool = (id, name, input, result, status = "done") => ({
@@ -115,10 +115,6 @@ describe("group rows (Go golden)", () => {
 });
 
 describe("group parts", () => {
-  it("counts the tools (PLAN.md:147 wording)", () => {
-    expect(countLabel(1)).toBe("Ran 1 tool");
-    expect(countLabel(4)).toBe("Ran 4 tools");
-  });
   it("lists backgrounded before failed, the failed count as an error (CHAT-082)", () => {
     expect(groupExtras({ moved: 1, failed: 2 })).toEqual([
       { text: "1 backgrounded", tone: "" },

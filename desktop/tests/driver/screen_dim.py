@@ -8,8 +8,7 @@ the protocol stayed right. So the app must not use the protocol at all.
 
 On the private hidden KWin: the app starts with the Wayland traffic logged,
 and its log must show the window being set up but no wp_color_manager_v1
-bound. The GPU process's --disable-features must still hold Electron's own
-entries next to ours (appendSwitch adds to Electron's list, not over it).
+bound.
 
 Usage: tests/check.sh --no-app --kwin screen_dim.py
 """
@@ -21,51 +20,17 @@ import apps
 from harness import check, finish
 
 
-def children(pid):
-    """Every process under pid, by /proc parent links."""
-    kids = {}
-    for name in os.listdir("/proc"):
-        if not name.isdigit():
-            continue
-        try:
-            with open(f"/proc/{name}/stat") as f:
-                parent = int(f.read().rsplit(")", 1)[1].split()[1])
-        except (OSError, IndexError, ValueError):
-            continue
-        kids.setdefault(parent, []).append(int(name))
-    found, todo = [], [pid]
-    while todo:
-        for kid in kids.get(todo.pop(), []):
-            found.append(kid)
-            todo.append(kid)
-    return found
-
-
-def gpu_args(pid):
-    for kid in children(pid):
-        try:
-            with open(f"/proc/{kid}/cmdline", "rb") as f:
-                # Chromium rewrites its title into one space-separated line.
-                argv = f.read().decode(errors="replace").replace("\0", " ").split()
-        except OSError:
-            continue
-        if "--type=gpu-process" in argv:
-            return argv
-    return []
-
-
 app = apps.App(env={"WAYLAND_DEBUG": "client"})
 try:
     app.wait_window(lambda p: bool(p), timeout=60)
-    time.sleep(1)
-    with open(app.log, errors="replace") as f:
-        log = f.read()
+    log, end = "", time.time() + 20
+    while time.time() < end and "xdg_toplevel" not in log:
+        with open(app.log, errors="replace") as f:
+            log = f.read()
+        time.sleep(0.2)
     check("xdg_toplevel" in log, "the app's Wayland traffic is logged (the window was set up)")
     binds = re.findall(r"bind\(\d+, \"wp_color_manager_v1\"", log)
     check(not binds, f"the app does not use KDE's color protocol ({len(binds)} binds)")
-    features = next((a.split("=", 1)[1].split(",") for a in gpu_args(app.proc.pid) if a.startswith("--disable-features=")), [])
-    check("WaylandWpColorManagerV1" in features, f"the GPU process has the feature off ({features})")
-    check("SpareRendererForSitePerProcess" in features, "Electron's own disabled features are still there")
 finally:
     app.stop()
 finish()

@@ -3,7 +3,7 @@
 // made by tool_registry_test.go), plus the shell copy.
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { copyName, copyParams, shellCopyText, SHELL_COPIED, TOOL_COPIED, toolCopyText } from "./copy.js";
+import { copyName, copyParams, shellCopyText, toolCopyText } from "./copy.js";
 import { toolStatus } from "./status.js";
 
 const GOLDEN = new URL("../../../../internal/ui/chat/testdata/TestToolMessageItemRegistry.golden", import.meta.url);
@@ -83,9 +83,5 @@ describe("copy names and parameters", () => {
 describe("shell copy (CHAT-044)", () => {
   it("copies the command and the output without escape codes", () => {
     expect(shellCopyText("ls --color", "\x1b[31mred\x1b[0m\n\x1b]8;;http://x\x07link\x1b]8;;\x07")).toBe("$ ls --color\nred\nlink");
-  });
-  it("names the notices", () => {
-    expect(SHELL_COPIED).toBe("Shell output copied to clipboard");
-    expect(TOOL_COPIED).toBe("Tool content copied to clipboard");
   });
 });

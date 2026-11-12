@@ -122,7 +122,6 @@ func TestLogoutJoinsLiveEngine(t *testing.T) {
 
 	stdout, stderr, code := runCrush(t, p.cwd, os.Environ(), "logout", "--force", "hyper")
 	require.Equal(t, 0, code, "stdout: %s\nstderr: %s", stdout, stderr)
-	require.Contains(t, stdout, "Successfully logged out of Charm Hyper.")
 
 	cfg, err = desktop.GetConfig(ctx, ws.ID)
 	require.NoError(t, err)

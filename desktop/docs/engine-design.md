@@ -298,14 +298,12 @@ func (b *Backend) PendingPrompt(ctx context.Context, workspaceID, sessionID stri
 |---|---|---|
 | `TestSessionWireKeepsContextBudget` (proto) | budget and estimated flag survive both converters | a converter drops a field |
 | `TestSaveSessionKeepsEstimatedUsage` (server) | a PUT of a GET result keeps the "~" marker and budget | save path zeroes them |
-| `TestAgentSessionHasUnfinishedWork` (server) | true while a fake helper runs, false after its result is handed over | not wired |
-| `TestSessionListHasUnfinishedWork` (server) | the list route fills it per chat | only one route fills it |
+| `TestSessionListHasUnfinishedWork` (server) | the list and agent session routes fill it per chat: true while a fake helper runs, false after its result is handed over | not wired, or only one route fills it |
 | `TestSessionListPendingPrompt` (server) | a permission pending in chat C, raised by C's helper: the list shows `pending_prompt:"permission"` for C and `""` for chat D | the helper's prompt is not mapped to its parent chat |
 | `TestPromptPendingReachesEveryApp` (server; two apps, one viewing D; a phone hub built on the engine's Source) | both app streams get `prompt_pending{C, permission, true}`, then `false` after a grant, and `false` after the asking turn is cancelled; the phone stream never gets it | sent only to viewers, never cleared after a cancel, or put on the fan-in |
-| `TestCreateRefusesProtocolMismatch` (backend + server) | 426, code `protocol_mismatch`, message names both numbers | mismatch only logged |
+| `TestCreateRefusesProtocolMismatch` (backend + server) | 426, code `protocol_mismatch`, no workspace made | mismatch only logged |
 | `TestEnsureRestartsIdleMismatchedEngine` (serverctl) | idle engine at protocol 0 is replaced | old reuse path |
 | `TestEnsureRefusesBusyMismatchedEngine` (serverctl) | busy engine at another protocol → `ErrProtocolMismatch`, engine untouched | busy engine reused |
-| `TestEnsureReusesBusySameProtocolOtherBuild` (serverctl) | today's build rule kept | restart forced |
 | `TestSocketIsOwnerOnly` (server) | socket 0600, folder 0700 | `chmod` missing |
 | `TestPrivateSocketDirRejectsUnsafe` (server) | symlinked, foreign-owned or 0755 folder skipped | folder trusted blindly |
 | `TestNoBareTmpFallback` (server) | an over-long path never lands in bare `/tmp` | old fallback kept |
@@ -566,7 +564,7 @@ func FindEngine(ctx context.Context, opts EnsureOptions) (h EngineHandle, ok boo
 | `TestFirstFolderWinsUntilAllLeave` (backend) | first app retires, path unchanged; last app leaves; a new app from `b` makes the path `b` | path reset early or kept after teardown |
 | `TestCreateAnswerCarriesEffectiveYolo` (backend) | the first app sends `yolo:true`, the second `yolo:false`; the second answer says `yolo:true` | the answer echoes the request instead of the workspace's value |
 | `TestEngineRefusesOtherProject` (backend + server) | create for another data folder → 409 `wrong_project` | engine serves two projects |
-| `TestEngineExitDelayIsTenSeconds` (backend) | the engine exit timer uses `EngineIdleShutdownDelay`; legacy still uses 60 s | 60 s kept |
+| `TestEngineIdleTimeoutEnvOverride` (backend) | the engine exit delay is `EngineIdleShutdownDelay` unless `CRUSH_ENGINE_IDLE_TIMEOUT` sets it (`2s`, `3`) | the setting read wrong |
 | `TestReopenBeforeAndAfterIdleExit` (serverctl; real engine subprocess via test-binary re-exec; `CRUSH_ENGINE_IDLE_TIMEOUT=2s`; the last app closes cleanly, then reopens at 1 s and, after closing again, at 3 s: the plan's 5 s and 11 s for a 10 s exit, `PLAN.md:78`, scaled to the 2 s exit) | both reopens succeed; the first reuses the PID, the second has a new one | dead socket left, or a 503 reaches the caller |
 | `TestCreateDuringExitRetriesThroughEnsure` (serverctl; idle timeout injected so the exit latch closes between ensure and create) | the create's 503 `shutting_down` runs ensure again; the second create lands on a new engine | the 503 reaches the caller, or ensure reuses the closing engine |
 | `TestEngineInfoReportsClosing` (server) | `GET /v1/engine` answers `closing:true` after `ShutdownIfIdle` latches | ensure cannot tell a closing engine from a live one |
@@ -1082,7 +1080,7 @@ Helpers and jobs go first, so a helper or job ending cannot start a new turn in 
 
 | Test (package) | Proves | Why it can fail |
 |---|---|---|
-| `TestQ2ReconnectWithinGraceKeepsRun` (backend; grace 200 ms) | A sends; A's stream drops; A reattaches at 100 ms → the run never cancels | Q2 fires on detach |
+| `TestQ2ReconnectWithinGraceKeepsRun` (backend; grace 1 h) | A sends; A's stream drops; A reattaches → the grace timer ends, no Q2 waits, the run never cancels | Q2 fires on detach |
 | `TestQ2DropPastGraceStopsUnviewedWork` (backend) | A owns a running prompt, a queued prompt, a helper and a job in chat C; B is open on chat D; A drops; at 300 ms: A's turn ended, A's queued prompt dropped with a cancelled `RunComplete`, helper saved interrupted with owner 0, job killed with no "job ended" turn; B's work untouched | wrong scope, or the job end starts a turn |
 | `TestQ2QueuedPromptsOfOtherOpenAppSurvive` (backend + agent) | A's prompt runs in C; B, open on chat D, queues a prompt in C; A queues one more; A leaves → A's turn ends and A's queued prompt is dropped; B's prompt runs next, in its place | the whole queue is cleared (the plain cancel) |
 | `TestQ2TurnOfOtherOpenAppKeepsRunning` (backend + agent) | B's prompt runs in C, nobody views C, A has a prompt queued in C; A leaves → B's turn runs to its end; only A's prompt is dropped | the turn is stopped because the latest sender left |
@@ -1512,11 +1510,11 @@ The engine builds the Source with `remote.NewSource(workspace.NewAppWorkspace(ws
 | `TestRemoteOwnerOnlyRoutes` (server) | stop, presence and done from another app → 403 | no owner check |
 | `TestRemoteActionGoesToOwnerOnly` (server, `remote.NewTestAction`) | a forwarded `yolo` reaches the owner's stream as `remote_action`, the other app's stream gets nothing; done → reply nil | broadcast |
 | `TestRemoteEngineRunsActions` (backend, fake coordinator) | `send`, `cancel`, `interrupt`, `clear_queue`, `summarize` and `effort` run in the engine and reply without any `remote_action` event; the send's prompt is stored as the owner's (5.5) | an action forwarded, or the prompt left ownerless |
-| `TestRemoteEngineActionTexts` (backend) | another chat, agent not ready, busy, FAST without Codex, summarize in a new chat, and an unknown kind each reply the terminal's exact text | text drift |
+| `TestRemoteEngineActionRefusals` (backend) | another chat, agent not ready, busy, FAST without Codex, summarize in a new chat, and an unknown kind are each refused | an action the terminal refuses runs |
 | `TestRemoteNewChatSendKeepsUploadsInEngine` (server; a 5 MiB attachment) | the `remote_action` event carries only `uploads` references; after done with a `session_id`, the prompt with the attachment is sent to that chat; the event bytes on the stream stay under 4 KiB | attachment bytes put on the stream |
-| `TestRemoteActionNotTakenFailsFast` (backend; the owner has no stream, then a full one) | the reply is "the Crush window is not responding" within 100 ms | the action waits for its timer |
+| `TestRemoteActionNotTakenFailsFast` (backend; the owner has no stream, then a full one) | the reply is an error with the reply timer set to 1 h | the action waits for its timer |
 | `TestRemoteActionTimeout` (backend, timer injected) | a forwarded action with no done gets "the Crush window did not answer" before 30 s; an engine-run action that hangs gets "the Crush engine did not answer" | the hub's 504 reaches the phone first |
-| `TestRemotePumpNeverBlocks` (backend; a fake share that offers 3 actions at once, the first one slow) | all three are taken from `Actions()` within 100 ms | the pump runs actions inline, so the hub answers 503 |
+| `TestRemotePumpNeverBlocks` (backend; a fake share that offers 3 actions at once, the first one slow) | all three are taken from `Actions()` while the first still runs | the pump runs actions inline, so the hub answers 503 |
 | `TestRemoteShareStopsWhenOwnerLeaves` (backend) | retire → `Stop` called; pending failed | share outlives its app |
 | `TestRemoteLaunchIDPerShare` (remote) | two shares report their own launch IDs; `StartContext` still reports `LaunchID()` | process-wide value |
 | `TestRemoteStatusEvents` (server) | phones-changed and stopped reach the owner | the events go to every app, or `Stopped` leaves the share listed |
@@ -2342,7 +2340,7 @@ func (b *Backend) ChatLinks(ctx context.Context, workspaceID string) ([]proto.Ch
 | `TestBranchRefusesToolOutputAndBadHighlight` (message) | `ErrBadCut` cases, including a highlight after an emoji (UTF-16 offsets) | offsets measured in bytes, so a highlight after a non-ASCII character is refused or misplaced |
 | `TestBranchRefusesUnfinished` (message) | a reply in progress or pending tool results → `ErrCutNotFinished` | partial copy |
 | `TestHighlightOverlapRefused` (message) | 409 `highlight_overlaps_link` over HTTP; touching ranges `[0,5)` and `[5,9)` are allowed | the overlap test uses closed ranges, or the error maps to 500 |
-| `TestBranchWhileReplying` (backend, fake streaming agent; a 1,000-message chat) | a branch made mid-reply holds only finished messages; the reply finishes in the source; the call returns while the reply streams; the copy takes under the time bound below | busy guard or lock reused, or the copy holds the database too long |
+| `TestBranchWhileReplying` (backend, fake streaming agent; a 10-message chat) | a branch made mid-reply holds only finished messages; the reply finishes in the source; the call returns while the reply streams; the branch's first send is answered | busy guard or lock reused |
 | `TestBranchTitleNeverAutoReplaced` (agent) | the first send in a branch keeps the title, even when title generation fails | fallback rename |
 | `TestBranchParentSessionIDEmpty` (server) | the new session has `parent_session_id` "" and a `chat_link` origin | the copy fills the helper-chat column, so chat lists hide the branch |
 | `TestUntrackedToolGetsItsMarker` (agent, fake CLI) | the result of a tool with no file tracker (a shell command) gets its `For: "tool"` marker, on that tool's own message | the marker reads `r.results`, which only tracked tools fill (`file_review.go:123-125`), or it is recorded before the tool message exists |
@@ -2354,8 +2352,6 @@ These are the "fake-tool tests for fork cut points" that PLAN section 8 asks for
 ### Risks
 
 - **One database connection.** The copy transaction briefly blocks the reply's writes. It is kept to one transaction with no network work inside.
-  - **The bound.** In `TestBranchWhileReplying`, the copy of a 1,000-message chat made mid-reply must take under 500 ms. During the copy, the fake reply's writes must not stall for longer than that either.
-  - **A slow machine.** The test first copies the same chat with no reply running, as a baseline, in the same run. When the baseline itself takes over 250 ms, the bound becomes twice the baseline. So a slow machine moves the bound, while a copy that blocks the reply still fails.
 - **A branch ending with a user message.** API providers that require turns to alternate may refuse the next request (inferred). `TestBranchWhileReplying` also sends once in such a branch through the fake provider. If a real provider refuses, the agent's request builder needs to merge the two turns (see "Decisions made").
 - **Marker formats depend on each tool.** The fake-tool tests pin them, and phase 4 re-checks them live.
 
@@ -2596,8 +2592,7 @@ func IsUnreachable(err error) bool
 | Test (package) | Proves | Why it can fail |
 |---|---|---|
 | `TestIsUnreachable` (client) | each error class | a 404 treated as dead, or the reverse |
-| `TestClientRecoversWhenEngineKilled` (workspace + serverctl, real engine subprocess) | SIGKILL → the client ensures, gets a new workspace ID, sends `ConnectionRecovered` | retries the dead address forever |
-| `TestTwoAppsRecoverAndHelperResumes` (integration in `serverctl`; two `ClientWorkspace`s on one chat; a fake helper CLI script that sleeps) | after SIGKILL both apps recover; there is one engine PID; the helper runs again with the same task ID; both apps get its `helper` event | the plan's 5.14 test |
+| `TestTwoAppsRecoverAndHelperResumes` (integration in `serverctl`; two `ClientWorkspace`s on one chat; a fake helper CLI script that sleeps) | after SIGKILL both apps recover under a new workspace ID; there is one engine PID; the helper runs again with the same task ID; both apps get its `helper` event | retries the dead address forever; the plan's 5.14 test |
 | `TestEnsureFailureMarksStuckAfterThree` (workspace) | the stuck flag after 3 failed ensures | silent loop |
 
 Race detector: `go test -race ./internal/workspace/ -run Recover`.

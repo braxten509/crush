@@ -162,14 +162,14 @@
         {:else}
           <div class="row">
             <span class="name">API key</span>
-            <button type="button" class="act" onclick={() => openKey(current)}>{current.hasKey || current.hasOAuth ? "Change…" : "Add key…"}</button>
+            <button type="button" class="act" data-action={current.hasKey || current.hasOAuth ? "change" : "add-key"} onclick={() => openKey(current)}>{current.hasKey || current.hasOAuth ? "Change…" : "Add key…"}</button>
             {#if current.hasKey}<button type="button" class="act" onclick={() => (removing = current.id)}>Remove</button>{/if}
           </div>
         {/if}
         {#if current.configured}
           <div class="row">
             <span class="name quiet-name">Another {current.name} account</span>
-            <button type="button" class="act" onclick={() => addProviderAccount(current)}>Add…</button>
+            <button type="button" class="act" data-action="add" onclick={() => addProviderAccount(current)}>Add…</button>
           </div>
         {/if}
       {/if}

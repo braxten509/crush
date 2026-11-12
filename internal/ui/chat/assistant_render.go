@@ -178,7 +178,7 @@ func (a *AssistantMessageItem) activityStatus(now time.Time) string {
 		return ""
 	}
 	if a.message.IsSummaryMessage || a.message.IsCompacting || a.compactingEarlier {
-		return "Compacting conversation"
+		return StatusCompacting
 	}
 	if status := retryActivityStatus(a.message.Activity); status != "" {
 		return status
@@ -187,7 +187,7 @@ func (a *AssistantMessageItem) activityStatus(now time.Time) string {
 		return "Writing command"
 	}
 	if a.message.Activity == "thinking" || a.message.IsThinking() {
-		return "Thinking"
+		return StatusThinking
 	}
 	if a.message.Activity == "responding" && now.Sub(time.Unix(a.message.ActivityAt, 0)) < 5*time.Second {
 		return "Responding"

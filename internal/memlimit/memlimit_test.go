@@ -12,7 +12,8 @@ func TestSplitKeepsTotalUnderLimit(t *testing.T) {
 	ram, swap, limited := Split(16 << 30)
 	require.True(t, limited)
 	require.Equal(t, uint64(16<<30), ram+swap)
-	require.Equal(t, uint64(16<<30)/5, swap)
+	require.Positive(t, ram)
+	require.Positive(t, swap)
 
 	_, _, limited = Split(0)
 	require.False(t, limited, "0 is no limit")

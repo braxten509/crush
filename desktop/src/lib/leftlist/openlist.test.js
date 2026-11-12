@@ -17,7 +17,7 @@ describe("listedRows", () => {
     const row = rows[0];
     expect(row.folder).toEqual({ dir: "/p/other" });
     expect(row.selected).toBe(true);
-    expect(row.state).toBe("Background");
+    expect(row.stateKind).toBe("background");
     expect(row.time).not.toBe("");
   });
 
@@ -25,7 +25,7 @@ describe("listedRows", () => {
     const open = [{ id: "x", dir: "/p/other" }, { id: "y", dir: "/p/other" }];
     const states = { x: { is_busy: true }, y: { is_busy: false, has_unfinished_work: false } };
     const rows = listedRows(open, { here, states });
-    expect(rows.map((r) => [r.id, r.state, r.stateKind])).toEqual([["x", "Working…", "working"], ["y", "", ""]]);
+    expect(rows.map((r) => [r.id, r.stateKind])).toEqual([["x", "working"], ["y", ""]]);
   });
 
   it("draws the open chats in the list's order, each with its folder", () => {

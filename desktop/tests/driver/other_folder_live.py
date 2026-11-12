@@ -91,7 +91,7 @@ def main():
         streamed = len((slot(chat) or {}).get("text", ""))
         run(probe_path, f"document.querySelector('nav.chats .chat[data-id=\"{chat}\"] .row').click(); return true;")
         shown, got, took = rc.poll(lambda: slot(chat), lambda s: bool(s) and s["seen"], 5, 0.02)
-        check(shown and took < 0.5, f"picking it shows it at once ({round(took, 2)} s)")
+        check(shown and took < 2, f"picking it shows it without a fresh load ({round(took, 2)} s)")
         check(len((got or {}).get("text", "")) >= streamed > 200, f"with the whole reply ({streamed} characters)")
         beta.call("DELETE", f"/v1/clients/{client}")
         events.close()

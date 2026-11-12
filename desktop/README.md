@@ -55,27 +55,10 @@ real desktop and nothing makes a sound:
   The app writes what is on its screen to the probe file every 200 ms;
   drivers read it and use the real mouse and keyboard through `xdotool`.
 - `tests/selftest.sh` proves the harness: the sandbox is sealed, the fake AI
-  server answers inside it, the app window opens at full size, a deliberately
+  server answers inside it, the app window opens, a deliberately
   wrong check fails, and the owner's real Crush files stay unchanged
   (`tests/outside-check.py` compares fingerprints, never contents).
 - `pnpm test` runs the front-end unit tests.
-- `tests/sandbox.sh -s 1700x1100 tests/run-in-sandbox.sh look_real.py`
-  captures the real window (Electron, what the app ships with) at the
-  approved picture's size, 1600 x 992, at the default zoom and at picture
-  size, into `tests/out/look_real/`. Build first (`tests/build.sh`).
-- `tests/look/align_real.py IMAGE --zoom 8/12 --out DIR` measures alignment
-  on such a capture with the align skill's checker: the boxes come from the
-  same layout in headless Chromium (`tests/look/align-marks.js` names what is
-  measured), the pixels from the real window. `tests/look/capture.py`
-  captures the Chromium page itself. It only works on the first screen of the
-  design mock; the check below replaces it for the real app.
-- `tests/look/align_app.py prepare`, then `tests/check.sh look_align.py`, then
-  `tests/look/align_app.py measure` measures alignment on the first screen
-  (with a seeded chat) and every dialog that opens without arguments, all in
-  the real window: the boxes come from the app's page itself (the probe runs
-  the align skill's collector in the window, test runs only), the pixels from
-  the window's picture. `tests/look/app-marks.js` names what is measured; the
-  results are in `tests/out/look_align/summary.json` and `measure/`.
 - `tests/go-test.sh [packages]` runs Crush's Go tests on the newest commit, in
   a separate checkout (`~/dev/crush-desktop-verify`), as a named
   `systemd-run` service with its own time limit (`GO_TEST_MAX_SEC`, default

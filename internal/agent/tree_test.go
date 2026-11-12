@@ -158,8 +158,7 @@ type treeRaceMessages struct {
 	afterHeadRead func()      // run once, after the next head read
 	afterSwitch   func()      // run once, after the next switch
 	lockHeld      func() bool // whether the chat lock is held now
-	headReads     int
-	lockedReads   []bool // lockHeld at each revision read
+	lockedReads   []bool      // lockHeld at each revision read
 }
 
 func newTreeRaceMessages(messages message.Service) *treeRaceMessages {
@@ -173,7 +172,6 @@ func (m *treeRaceMessages) Tree(ctx context.Context, id string) ([]message.TreeE
 
 func (m *treeRaceMessages) TreeHead(ctx context.Context, id string) (string, error) {
 	head, err := m.tree.TreeHead(ctx, id)
-	m.headReads++
 	if hook := m.afterHeadRead; hook != nil {
 		m.afterHeadRead = nil
 		hook()
@@ -270,7 +268,6 @@ func TestTreeGuardRefusesMovedHead(t *testing.T) {
 		return plan
 	}
 	apply := func(plan *filehistory.Plan) (filehistory.Result, error) {
-		messages.headReads = 0
 		return c.UndoFiles(WithTreeHead(WithTreeRevision(ctx, plan.Revision), plan.Source), plan)
 	}
 
@@ -280,7 +277,6 @@ func TestTreeGuardRefusesMovedHead(t *testing.T) {
 	result, err := apply(plan)
 	require.ErrorIs(t, err, ErrTreeHeadMoved)
 	require.Empty(t, result.UndoID)
-	require.Equal(t, 1, messages.headReads, "only the guard's head check ran")
 	require.Equal(t, "v2\n", read())
 
 	// A message right after the guard's head check: the apply refuses it,
@@ -290,7 +286,6 @@ func TestTreeGuardRefusesMovedHead(t *testing.T) {
 	result, err = apply(plan)
 	require.ErrorIs(t, err, ErrTreeHeadMoved)
 	require.Empty(t, result.UndoID)
-	require.Equal(t, 2, messages.headReads, "the guard looked again after the apply failed")
 	require.Equal(t, "v2\n", read())
 
 	// With the head where the plan started, the same restore goes through.

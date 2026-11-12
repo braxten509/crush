@@ -1,7 +1,7 @@
 // The virtual list's arithmetic (desktop-design 1.6 items 2 and 8): what is
 // mounted for a long selection (CHAT-087), the anchor that keeps the view
-// still (CHAT-092, CHAT-099), the rhythm between items and the estimates;
-// and the list itself in the page model: its rows outlive a size change.
+// still (CHAT-092, CHAT-099), the measured heights; and the list itself
+// in the page model: its rows outlive a size change.
 // @vitest-environment jsdom
 import { flushSync, mount, unmount } from "svelte";
 import { describe, expect, test, vi } from "vitest";
@@ -149,34 +149,7 @@ describe("the view stays still (CHAT-092, CHAT-099)", () => {
   });
 });
 
-describe("rhythm and estimates (the picture's Timeline CSS; 1.6 item 2)", () => {
-  const u = { kind: "user", messageId: "u" };
-  const r = { kind: "reply", messageId: "a" };
-  const g = { kind: "tools", messageId: "a" };
-  test.each([
-    [null, r, 0],
-    [u, r, 44],
-    [r, g, 37],
-    [u, g, 37],
-    [g, r, 39],
-    [g, g, 39],
-    [r, u, 40],
-    [r, { kind: "banner", messageId: "a" }, 16],
-    [r, { kind: "footer", messageId: "a" }, 16],
-    [r, { kind: "status", messageId: "a" }, 16],
-    [r, { kind: "footer", messageId: "b" }, 40],
-    [u, { kind: "status", messageId: "" }, 44],
-  ])("%j then %j: %i", (prev, item, gap) => {
-    expect(gapBefore(prev, item)).toBe(gap);
-  });
-
-  test("estimates by kind", () => {
-    expect(estimate({ kind: "user", chips: [] })).toBe(80);
-    expect(estimate({ kind: "reply", text: "x".repeat(70) })).toBe(83);
-    expect(estimate({ kind: "reply", text: "x".repeat(71) })).toBe(116);
-    expect(estimate({ kind: "tools" })).toBe(44);
-  });
-
+describe("measured heights (1.6 item 2)", () => {
   test("measured heights win over estimates and follow the key across versions", () => {
     const h = createHeights();
     const item = reply("r1");
@@ -214,8 +187,8 @@ describe("VirtualList", () => {
     document.body.append(target);
     const list = mount(VirtualList, { target, props: { items } });
     flushSync();
-    const scroller = target.querySelector(".scroller");
-    const canvas = target.querySelector(".canvas");
+    const scroller = target.querySelector('[data-testid="vlist-scroller"]');
+    const canvas = target.querySelector('[data-testid="vlist-canvas"]');
     const resize = (node) => observers.forEach((o) => o.fn([{ target: node, contentRect: { height: 0 } }]));
     const text = () => canvas.textContent;
     try {

@@ -22,20 +22,17 @@ probe_eval(probe_path, "window.__noReload = true;")
 
 report = probe_heavy(probe_path, invoke=[{"command": "window_show_chat", "args": {"projectDir": "/tmp/home/beta", "sessionId": BETA}}])
 answer = ((report or {}).get("invoked") or [{}])[0]
-check(answer.get("ok") is True and (answer.get("value") or {}).get("label") == "main" and (answer.get("value") or {}).get("created") is False,
+check(answer.get("ok") is True and (answer.get("value") or {}).get("created") is False,
       f"the click's chat goes to the open window ({answer})")
 
 shown = wait_for(probe_path, lambda p: (p.get("connection") or {}).get("workspace_id") == "ws-beta"
                  and (p.get("connection") or {}).get("state") == "connected", 20)
 check(((shown or {}).get("connection") or {}).get("workspace_id") == "ws-beta", f"the window switches to beta ({(shown or {}).get('connection')})")
-deadline = time.time() + 5
-selected = None
-while time.time() < deadline:
-    selected = probe_eval(probe_path, "window.__probeEval = { id: document.querySelector('nav.chats .chat.selected')?.getAttribute('data-id') ?? null, kept: window.__noReload === true };")
-    if (selected or {}).get("id") == BETA:
-        break
-    time.sleep(0.3)
-check((selected or {}).get("id") == BETA and (selected or {}).get("kept"), f"beta's chat shows, in place with no reload ({selected})")
+# The list's selected row, from the probe's list section.
+picked = wait_for(probe_path, lambda p: any(r.get("id") == BETA and r.get("selected") for r in (p.get("list") or {}).get("rows") or []), 5)
+selected = next((r.get("id") for r in ((picked or {}).get("list") or {}).get("rows") or [] if r.get("selected")), None)
+kept = probe_eval(probe_path, "window.__probeEval = { kept: window.__noReload === true };") or {}
+check(selected == BETA and kept.get("kept"), f"beta's chat shows, in place with no reload ({selected}, {kept})")
 time.sleep(0.5)
 check(not os.path.exists(probe_path + ".w2"), "no second window opens")
 finish()

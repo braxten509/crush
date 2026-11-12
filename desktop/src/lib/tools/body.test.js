@@ -2,13 +2,12 @@
 // hidden count, and never hide a single line (tools.go collapsedMaxLines,
 // tool_output.go).
 import { describe, expect, it } from "vitest";
-import { codeLines, collapse, collapsedMaxLines, diffShown, hiddenText, markdownLines, MAX_LINES, plainLines } from "./body.js";
+import { codeLines, collapse, collapsedMaxLines, diffShown, markdownLines, plainLines } from "./body.js";
 
 const numbered = (n) => Array.from({ length: n }, (_, i) => `line ${i + 1}`).join("\n");
 
 describe("collapsing (CHAT-052)", () => {
   it("shows 10 lines whole, 11 lines whole, and 10 of 12 with the hidden count", () => {
-    expect(MAX_LINES).toBe(10);
     expect(collapsedMaxLines(10)).toBe(10);
     expect(collapsedMaxLines(11)).toBe(11);
     expect(collapsedMaxLines(12)).toBe(10);
@@ -18,7 +17,6 @@ describe("collapsing (CHAT-052)", () => {
     expect(twelve.lines).toHaveLength(10);
     expect(twelve.lines.at(-1)).toBe("line 10");
     expect(twelve.hidden).toBe(2);
-    expect(hiddenText(2)).toBe("… (2 lines hidden) [click or space to expand]");
   });
   it("shows everything once opened", () => {
     expect(collapse(25, true)).toEqual({ shown: 25, hidden: 0 });

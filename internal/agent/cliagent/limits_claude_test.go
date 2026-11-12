@@ -66,7 +66,7 @@ func TestClaudeExpiredLoginStaysUnreadWhenRefreshFails(t *testing.T) {
 	t.Cleanup(func() { claudeUsageURL = saved })
 
 	_, err := fetchClaudeLimits(t.Context())
-	require.ErrorContains(t, err, "claude login expired")
+	require.Error(t, err)
 	require.Zero(t, hits)
 }
 

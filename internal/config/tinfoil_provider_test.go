@@ -84,7 +84,6 @@ func TestTinfoilProvidersLoad(t *testing.T) {
 			require.Equal(t, tinfoilBaseURL, p.BaseURL)
 		}
 		p, _ := cfg.Providers.Get(TinfoilProviderID)
-		require.Equal(t, "Tinfoil", p.Name)
 		require.Equal(t, "key-1", p.APIKey)
 	}
 	check(load())

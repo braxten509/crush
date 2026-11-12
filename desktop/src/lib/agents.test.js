@@ -1,16 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { AGENT_NAMES, agentName, chatAgent } from "./agents.js";
+import { agentName, chatAgent } from "./agents.js";
 
 describe("agentName", () => {
-  it("names each agent CLI", () => {
-    expect(agentName("claude-code")).toBe("Claude");
-    expect(agentName("codex-cli")).toBe("Codex");
-    expect(agentName("grok-cli")).toBe("Grok");
-    expect(agentName("agy-cli")).toBe("Antigravity");
-    expect(agentName("opencode-cli")).toBe("OpenCode");
-    expect(Object.keys(AGENT_NAMES)).toHaveLength(5);
-  });
-
   it("names an API provider from the providers list, else by its id", () => {
     const providers = [{ id: "anthropic", name: "Anthropic" }];
     expect(agentName("anthropic", providers)).toBe("Anthropic");

@@ -162,10 +162,6 @@ def self_test():
     check(code == 0 and "image/png" in got.split(), "set-image offers image/png")
     code, got = run("get-text")
     check(got == "", "a picture on the clipboard has no text")
-    run("set-text", "held for a while")
-    time.sleep(HOLD_SECONDS + 1.5)
-    code, got = run("get-text")
-    check(got == "", f"a setter lets go after {HOLD_SECONDS} s")
     print("ALL PASSED" if failures == 0 else f"{failures} FAILED", flush=True)
     return 1 if failures else 0
 

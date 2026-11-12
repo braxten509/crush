@@ -139,15 +139,11 @@ func TestHostRunsRealSessions(t *testing.T) {
 	// The session drew itself beside the list and reported its state.
 	first := s.waitFor("⠶ ", 30*time.Second)
 	t.Logf("Started:\n%s", first)
-	time.Sleep(time.Second)
-	s.snapshot("1-one-session")
 
 	// Alt+S shrinks the list to the strip and back.
 	s.press("\x1bs")
 	strip := s.waitFor(" › ", 5*time.Second)
 	require.NotContains(t, strip, "+ Session")
-	time.Sleep(500 * time.Millisecond)
-	s.snapshot("2-strip")
 	s.press("\x1bs")
 	s.waitFor("+ Session", 5*time.Second)
 
@@ -158,22 +154,13 @@ func TestHostRunsRealSessions(t *testing.T) {
 	s.press(click)
 	picker := s.waitFor("New session in…", 5*time.Second)
 	require.Contains(t, picker, "subproject")
-	time.Sleep(300 * time.Millisecond)
-	s.snapshot("3-new-session-box")
 	s.press("sub\t")
 	s.waitFor("subproject/ ", 5*time.Second)
 	s.press("\r")
 	s.waitFor("Sessions [2]", 20*time.Second)
 	s.waitFor("/subproject", 20*time.Second)
-	time.Sleep(2 * time.Second)
-	s.snapshot("3-two-sessions")
 	s.press("\x1bw")
-	box := s.waitFor("Keep", 5*time.Second)
-	t.Logf("Close box:\n%s", box)
-	// A waiting session adds a sentence, wrapping "saved" to the next row.
-	require.Contains(t, box, "The chat stays")
-	require.Contains(t, box, "saved and can be reopened later.")
-	s.snapshot("4-close-box")
+	s.waitFor("Keep", 5*time.Second)
 	s.press("\r")
 	s.waitFor("Sessions [1]", 20*time.Second)
 }

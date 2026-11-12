@@ -25,11 +25,14 @@ export function pickPlaceholders(random = Math.random) {
 }
 
 // composer.go:82-95, in this order: bang, YOLO coding, busy, plan, ready.
+export const BANG_PLACEHOLDER = "Run a shell command";
+export const YOLO_PLACEHOLDER = "Go crazy";
+export const PLAN_PLACEHOLDER = "Let's plan";
 export function placeholderFor({ bang = false, plan = false, yolo = false, busy = false, picks }) {
-  if (bang) return "Run a shell command";
-  if (!plan && yolo) return "Go crazy";
+  if (bang) return BANG_PLACEHOLDER;
+  if (!plan && yolo) return YOLO_PLACEHOLDER;
   if (busy) return picks.working;
-  if (plan) return "Let's plan";
+  if (plan) return PLAN_PLACEHOLDER;
   return picks.ready;
 }
 

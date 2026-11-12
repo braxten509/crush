@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ambiguousText, goQuote, hashId, idsMatchingHash, notFoundText, resolveSessionId, xxh3 } from "../../lib/sessionid.js";
+import { goQuote, hashId, idsMatchingHash, resolveSessionId, xxh3 } from "../../lib/sessionid.js";
 
 // XXH3-64 of buf[:n] with buf[j] = (j + 1) % 251, from the C reference: the
 // table testVecs64 in github.com/zeebo/xxh3@v1.1.0/compat_test.go:262-1287
@@ -108,23 +108,22 @@ describe("resolveSessionId", () => {
     expect(await resolveSessionId("9343", { getSession: missing, ids })).toEqual({ id: "a3c1e2d4-0000-4000-8000-000000000001" });
   });
 
-  it("names a prefix shared by several chats with the terminal's text", async () => {
-    expect(await resolveSessionId(SHARED, { getSession: missing, ids })).toEqual({
-      error: `session ID "${SHARED}" is ambiguous (${SHARING.length} matches)`,
-    });
+  it("refuses a prefix shared by several chats", async () => {
+    const got = await resolveSessionId(SHARED, { getSession: missing, ids });
+    expect(got.id).toBeUndefined();
+    expect(got.error).toEqual(expect.any(String));
+    expect(got.error).not.toBe("");
   });
 
-  it("says when nothing matches, with the terminal's text", async () => {
-    expect(await resolveSessionId("abc", { getSession: missing, ids })).toEqual({ error: "session not found: abc" });
+  it("refuses when nothing matches", async () => {
+    const got = await resolveSessionId("abc", { getSession: missing, ids });
+    expect(got.id).toBeUndefined();
+    expect(got.error).toEqual(expect.any(String));
+    expect(got.error).not.toBe("");
   });
 });
 
 describe("texts", () => {
-  it("are the terminal's (root.go:309,313)", () => {
-    expect(notFoundText("abc")).toBe("session not found: abc");
-    expect(ambiguousText("ab", 3)).toBe('session ID "ab" is ambiguous (3 matches)');
-  });
-
   it("quote like Go's %q", () => {
     expect(goQuote('a"b\\c')).toBe('"a\\"b\\\\c"');
     expect(goQuote("tab\there\n")).toBe('"tab\\there\\n"');

@@ -111,8 +111,9 @@ func TestLeadingSleep(t *testing.T) {
 // No command stays in the foreground past 2 minutes, whatever the model
 // asks (owner, 2026-10-21).
 func TestAutoBackgroundWaitIsAtMostTwoMinutes(t *testing.T) {
-	require.Equal(t, 60*time.Second, autoBackgroundWait(0))
-	require.Equal(t, 90*time.Second, autoBackgroundWait(90))
-	require.Equal(t, 120*time.Second, autoBackgroundWait(600))
-	require.Equal(t, ForegroundWaitLimit+time.Second, autoBackgroundWait(1))
+	for _, requested := range []int{0, 1, 90, 600, 1 << 20} {
+		wait := autoBackgroundWait(requested)
+		require.LessOrEqual(t, wait, 2*time.Minute, "requested %d", requested)
+		require.Greater(t, wait, ForegroundWaitLimit, "requested %d", requested)
+	}
 }

@@ -278,8 +278,8 @@ func TestClientCallsMapStatusErrors(t *testing.T) {
 			require.Error(t, err, "%s: status %d", name, tc.status)
 			require.ErrorIs(t, err, tc.want, "%s: status %d: %v", name, tc.status, err)
 			if name == "LoadMessageReview" {
-				// The review call keeps its user-facing explanation.
-				require.Contains(t, err.Error(), "diff details are unavailable")
+				// The review call shows its own explanation in place of
+				// the server's message.
 				continue
 			}
 			require.Contains(t, err.Error(), "workspace not found", "%s", name)

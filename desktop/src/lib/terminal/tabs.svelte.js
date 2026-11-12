@@ -579,7 +579,7 @@ export function probeLight() {
 
 export function probeHeavy() {
   const box = document.querySelector('[data-sheet="terminal_close"]');
-  const closeButtons = box ? [...box.querySelectorAll(".buttons button")].map((button) => ({ label: button.textContent.trim(), rect: rectOf(button) })) : [];
+  const closeButtons = box ? [...box.querySelectorAll(".buttons button")].map((button) => ({ id: button.dataset.button ?? "", label: button.textContent.trim(), rect: rectOf(button) })) : [];
   const tab = shownTab();
   const term = tab?.term;
   const screen = term?.element?.querySelector(".xterm-screen");

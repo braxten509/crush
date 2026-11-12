@@ -49,5 +49,5 @@ func TestRunShellCommand_TitlesFirstMessage(t *testing.T) {
 		IsFirstMessage: true,
 	})
 	require.NoError(t, err)
-	require.Equal(t, "$ echo hi", coord.prompt)
+	require.Contains(t, coord.prompt, "echo hi")
 }

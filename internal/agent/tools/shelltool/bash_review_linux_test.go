@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -61,7 +62,12 @@ func TestBackgroundShellPersistsReviewAfterTurnEnds(t *testing.T) {
 			turnCtx, cancelTurn := context.WithCancel(context.WithValue(t.Context(), tools.SessionIDContextKey, sess.ID))
 			defer cancelTurn()
 			tool := newBashToolForTest(root)
-			command := `python3 -c 'import time,pathlib; time.sleep(2); pathlib.Path("late.txt").write_text("late change")'`
+			// The command keeps running until the test opens its gate.
+			gate := filepath.Join(t.TempDir(), "gate")
+			t.Cleanup(func() { _ = os.WriteFile(gate, nil, 0o600) })
+			command := fmt.Sprintf(`python3 -c 'import os, time, pathlib
+while not os.path.exists(%q): time.sleep(0.05)
+pathlib.Path("late.txt").write_text("late change")'`, gate)
 			input, err := json.Marshal(tools.BashParams{Command: command, RunInBackground: !manual})
 			require.NoError(t, err)
 			responses := make(chan fantasy.ToolResponse, 1)
@@ -90,6 +96,7 @@ func TestBackgroundShellPersistsReviewAfterTurnEnds(t *testing.T) {
 			require.NoError(t, err)
 			PersistBackgroundReview(turnCtx, messages, sess.ID, result)
 			cancelTurn()
+			require.NoError(t, os.WriteFile(gate, nil, 0o600))
 			job.Wait()
 			data, err := os.ReadFile(filepath.Join(root, "late.txt"))
 			require.NoError(t, err)

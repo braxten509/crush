@@ -75,10 +75,8 @@ describe("the helper model in Settings (HelperModel.svelte)", () => {
   it("saves a pick as the helper model only, never as a chat's model", async () => {
     mount((await import("./HelperModel.svelte")).default);
     await settle();
-    expect(document.body.textContent).toContain("Helper model (titles)");
-    expect(document.body.textContent).toContain("Claude B");
 
-    [...document.querySelectorAll("button")].find((b) => b.textContent.includes("Change")).click();
+    document.querySelector('[data-testid="helper-change"]').click();
     expect(dialogs.dialogs.map((d) => [d.id, d.props])).toEqual([["models", { helper: true }]]);
     mount(dialogs.dialogs[0].component ?? (await import("../models/ModelPicker.svelte")).default, dialogs.dialogs[0].props);
     await settle();

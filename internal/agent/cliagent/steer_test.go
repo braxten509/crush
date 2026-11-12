@@ -144,14 +144,16 @@ done
 }
 
 func TestClaudeKeptWhileTaskRuns(t *testing.T) {
-	// The task ends on its own 400ms after the turn; the idle limit is 100ms.
+	// The task ends when the test makes the gate; the idle limit is 100ms.
 	dir := t.TempDir()
+	gate := filepath.Join(dir, "gate")
+	t.Cleanup(func() { _ = os.WriteFile(gate, nil, 0o600) })
 	script := `read -r _
 read -r _
 echo '{"type":"system","subtype":"init","session_id":"s1"}'
 echo '{"type":"system","subtype":"task_started","task_id":"t1","is_backgrounded":true}'
 echo '{"type":"result","subtype":"success","result":"ok"}'
-sleep 0.4
+until [ -e "` + gate + `" ]; do sleep 0.05; done
 echo '{"type":"system","subtype":"task_notification","task_id":"t1","status":"completed"}'
 while read -r _; do :; done
 `
@@ -167,7 +169,7 @@ while read -r _; do :; done
 		defer claudeSessions.mu.Unlock()
 		return claudeSessions.m["task-test"] != nil
 	}
-	time.Sleep(250 * time.Millisecond)
-	require.True(t, parked(), "closed while its task was running")
+	require.Never(t, func() bool { return !parked() }, 200*time.Millisecond, 20*time.Millisecond, "closed while its task was running")
+	require.NoError(t, os.WriteFile(gate, nil, 0o600))
 	require.Eventually(t, func() bool { return !parked() }, 3*time.Second, 20*time.Millisecond, "kept after its task ended")
 }

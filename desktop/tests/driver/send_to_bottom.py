@@ -21,7 +21,8 @@ def run(script):
 
 
 WHERE = """
-  const s = document.querySelector('main.conversation .slot:not(.parked) .scroller');
+  // The shown chat's list (hidden chats stay drawn, their slot aria-hidden).
+  const s = document.querySelector('[data-timeline-slot]:not([aria-hidden]) [data-testid="vlist-scroller"]');
   if (!s) return null;
   const r = s.getBoundingClientRect();
   return { gap: s.scrollHeight - s.clientHeight - s.scrollTop, top: s.scrollTop, x: r.x + r.width / 2, y: r.y + r.height / 2 };
@@ -48,7 +49,7 @@ for _ in range(40):
     xdo("click", 4)
 up = where(lambda w: w.get("gap", 0) > 200)
 check(up.get("gap", 0) > 200, f"the wheel scrolls it up ({up})")
-field = run("const r = document.querySelector('main.conversation textarea')?.getBoundingClientRect(); return r && [r.x + 30, r.y + r.height / 2];")
+field = run("const r = document.querySelector('textarea[aria-label=\"Message\"]')?.getBoundingClientRect(); return r && [r.x + 30, r.y + r.height / 2];")
 check(bool(field), "the typing box is there")
 xdo("mousemove", round(ox + field[0]), round(oy + field[1]))
 xdo("click", 1)
@@ -57,7 +58,6 @@ type_text("Back to the bottom")
 key("Return")
 end = where(lambda w: w.get("gap", 99) <= 2)
 check(end.get("gap", 99) <= 2, f"sending brings it to its bottom ({end})")
-time.sleep(1)
-later = where(lambda w: w.get("gap", 99) <= 2, 1)
+later = where(lambda w: w.get("gap", 99) > 2, 0.4)
 check(later.get("gap", 99) <= 2, f"and it stays there ({later})")
 finish()

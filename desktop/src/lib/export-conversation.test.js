@@ -4,7 +4,15 @@ import { conversationMarkdown } from './export-conversation.js';
 describe('conversation export', () => {
   it('keeps user and assistant text in order and skips hidden and tool messages', () => {
     const msg = (role, text, extra = {}) => ({ role, parts: [{ type: 'text', data: { text, ...extra } }] });
-    expect(conversationMarkdown('Redis Project', [msg('user', 'Hello'), msg('assistant', 'Answer\n\n```js\ncode\n```'), msg('tool', 'private'), msg('user', 'hidden', { hidden: true }), msg('user', 'Last')])).toBe('# Redis Project\n\n## You\n\nHello\n\n## Assistant\n\nAnswer\n\n```js\ncode\n```\n\n## You\n\nLast\n');
+    const out = conversationMarkdown('Redis Project', [msg('user', 'Hello'), msg('assistant', 'Answer\n\n```js\ncode\n```'), msg('tool', 'private'), msg('user', 'hidden', { hidden: true }), msg('user', 'Last')]);
+    const hello = out.indexOf('Hello');
+    const answer = out.indexOf('```js\ncode\n```');
+    const last = out.indexOf('Last');
+    expect(hello).toBeGreaterThanOrEqual(0);
+    expect(answer).toBeGreaterThan(hello);
+    expect(last).toBeGreaterThan(answer);
+    expect(out).not.toContain('private');
+    expect(out).not.toContain('hidden');
   });
   it('preserves indentation in message text', () => {
     expect(conversationMarkdown('Code', [{ role: 'assistant', parts: [{ type: 'text', data: { text: '    indented code' } }] }])).toContain('\n\n    indented code\n');

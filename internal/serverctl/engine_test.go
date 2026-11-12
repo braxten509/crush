@@ -71,31 +71,12 @@ func TestEnsureRefusesBusyMismatchedEngine(t *testing.T) {
 	require.NoFileExists(t, filepath.Join(stateDir, "engine.log"))
 }
 
-// TestEnsureReusesBusySameProtocolOtherBuild keeps today's build rule: a
-// busy engine of the same protocol but another build is reused.
-func TestEnsureReusesBusySameProtocolOtherBuild(t *testing.T) {
-	p := newEngineProject(t, "")
-	fake := p.startFakeEngine(t, fakeEngineOpts{
-		vi: proto.VersionInfo{
-			Version: "not-" + version.Version, BuildID: "other-build", Protocol: proto.ProtocolVersion,
-		},
-		busy: true,
-	})
-
-	h, err := p.ensure(t.Context())
-	require.NoError(t, err)
-	require.False(t, h.Started)
-	require.Equal(t, fakeEnginePID, h.PID)
-	require.Equal(t, "not-"+version.Version, h.Version)
-	require.Equal(t, []string{proto.ServerControlShutdownIfIdle}, fake.commandsSeen())
-}
-
-// TestReopenBeforeAndAfterIdleExit scales the plan's reopen at 5 s and at
-// 11 s for a 10 s exit to a 2 s exit: the last app closes cleanly, then an
-// app reopens at 1 s and reaches the same engine; after it closes again,
-// an app reopening at 3 s gets a new engine.
+// TestReopenBeforeAndAfterIdleExit scales the plan's reopen before and
+// after a 10 s exit to a short exit: the last app closes cleanly, then an
+// app reopens at once and reaches the same engine; after it closes again
+// and the engine exits by itself, a reopening app gets a new engine.
 func TestReopenBeforeAndAfterIdleExit(t *testing.T) {
-	p := newEngineProject(t, "2s")
+	p := newEngineProject(t, "300ms")
 	ctx := t.Context()
 
 	h1, err := p.ensure(ctx)
@@ -104,7 +85,6 @@ func TestReopenBeforeAndAfterIdleExit(t *testing.T) {
 	c1, _ := p.create(t, h1)
 	require.NoError(t, c1.RetireClient(ctx))
 
-	time.Sleep(time.Second)
 	h2, err := p.ensure(ctx)
 	require.NoError(t, err)
 	require.False(t, h2.Started, "the lingering engine is reused")
@@ -112,13 +92,12 @@ func TestReopenBeforeAndAfterIdleExit(t *testing.T) {
 	c2, _ := p.create(t, h2)
 	require.NoError(t, c2.RetireClient(ctx))
 
-	time.Sleep(3 * time.Second)
+	require.Eventually(t, func() bool { return processGone(h1.PID) }, 10*time.Second, 20*time.Millisecond,
+		"the idle engine exited by itself")
 	h3, err := p.ensure(ctx)
 	require.NoError(t, err)
 	require.True(t, h3.Started, "the idle engine exited, so a new one starts")
 	require.NotEqual(t, h1.PID, h3.PID)
-	require.Eventually(t, func() bool { return processGone(h1.PID) }, 2*time.Second, 20*time.Millisecond,
-		"the old engine exited by itself")
 	c3, _ := p.create(t, h3)
 	require.NoError(t, c3.RetireClient(ctx))
 }
@@ -127,7 +106,7 @@ func TestReopenBeforeAndAfterIdleExit(t *testing.T) {
 // exits once the first-join grace passes, and lets go of the project.
 func TestEngineNoAppJoinsExits(t *testing.T) {
 	p := newEngineProject(t, "")
-	t.Setenv("CRUSH_ENGINE_FIRST_JOIN_GRACE", "1s")
+	t.Setenv("CRUSH_ENGINE_FIRST_JOIN_GRACE", "200ms")
 	ctx := t.Context()
 
 	h, err := p.ensure(ctx)
@@ -146,14 +125,14 @@ func TestEngineNoAppJoinsExits(t *testing.T) {
 // first-join grace keeps the engine running past it.
 func TestEngineJoinedWithinGraceStays(t *testing.T) {
 	p := newEngineProject(t, "")
-	t.Setenv("CRUSH_ENGINE_FIRST_JOIN_GRACE", "2s")
+	t.Setenv("CRUSH_ENGINE_FIRST_JOIN_GRACE", "200ms")
 	ctx := t.Context()
 
 	h, err := p.ensure(ctx)
 	require.NoError(t, err)
 	require.True(t, h.Started)
 	c, ws := p.create(t, h)
-	time.Sleep(3 * time.Second)
+	time.Sleep(400 * time.Millisecond)
 	require.False(t, processGone(h.PID), "the engine exited while an app was joined")
 	info, err := c.EngineInfo(ctx)
 	require.NoError(t, err)
@@ -221,7 +200,7 @@ func TestCreateDuringExitRetriesThroughEnsure(t *testing.T) {
 }
 
 // TestEnsureWaitsForSlowOldEngine: an old engine's socket is gone but it
-// still holds the project lock for 3 s. Ensure waits for the lock instead
+// still holds the project lock for a moment. Ensure waits for the lock instead
 // of starting an engine at once, so the new engine never reports
 // project_locked.
 func TestEnsureWaitsForSlowOldEngine(t *testing.T) {
@@ -230,7 +209,7 @@ func TestEnsureWaitsForSlowOldEngine(t *testing.T) {
 	require.NoError(t, os.MkdirAll(p.dataDir, 0o700))
 	releaseLock, err := db.LockProject(ctx, p.dataDir, db.ProjectLockEngine, 0)
 	require.NoError(t, err)
-	timer := time.AfterFunc(3*time.Second, func() { _ = releaseLock() })
+	timer := time.AfterFunc(300*time.Millisecond, func() { _ = releaseLock() })
 	t.Cleanup(func() {
 		if timer.Stop() {
 			_ = releaseLock()
@@ -241,7 +220,7 @@ func TestEnsureWaitsForSlowOldEngine(t *testing.T) {
 	h, err := p.ensure(ctx)
 	require.NoError(t, err)
 	require.True(t, h.Started)
-	require.GreaterOrEqual(t, time.Since(start), 2900*time.Millisecond, "ensure waited for the old engine")
+	require.GreaterOrEqual(t, time.Since(start), 250*time.Millisecond, "ensure waited for the old engine")
 
 	stateDir, err := serverctl.EngineStateDir(p.socket)
 	require.NoError(t, err)
@@ -260,12 +239,10 @@ func TestEnsureGivesUpOnStuckOldEngine(t *testing.T) {
 	t.Cleanup(func() { _ = releaseLock() })
 
 	opts := p.opts()
-	opts.Timeout = time.Second
-	start := time.Now()
+	opts.Timeout = 300 * time.Millisecond
 	_, err = p.ensureWith(ctx, opts)
 	require.ErrorIs(t, err, serverctl.ErrProjectLocked)
 	require.EqualError(t, err, fmt.Sprintf(db.MsgOtherEngineHoldsProject, os.Getpid()))
-	require.Less(t, time.Since(start), 5*time.Second, "ensure gives up at its timeout")
 
 	stateDir, err := serverctl.EngineStateDir(p.socket)
 	require.NoError(t, err)

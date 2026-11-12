@@ -47,7 +47,6 @@ func requireHiddenUpdateQueued(t *testing.T, agent *sessionAgent, sessionID stri
 	require.Len(t, queued, 1)
 	require.True(t, queued[0].HiddenUserMessage)
 	require.True(t, queued[0].ProgressUpdateRequired)
-	require.Contains(t, queued[0].Prompt, "update the user")
 	require.Empty(t, agent.QueuedPromptsList(sessionID), "the silent nudge must stay out of the visible queue")
 }
 

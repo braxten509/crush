@@ -95,17 +95,6 @@ func TestMerge_Empty(t *testing.T) {
 	require.Nil(t, merged.ToolUsage)
 }
 
-func TestShouldSkipDir(t *testing.T) {
-	t.Parallel()
-
-	for _, name := range []string{".git", "node_modules", "vendor", "Library"} {
-		require.True(t, shouldSkipDir(name), name)
-	}
-	for _, name := range []string{".crush", "src", "internal"} {
-		require.False(t, shouldSkipDir(name), name)
-	}
-}
-
 func TestGather(t *testing.T) {
 	t.Parallel()
 

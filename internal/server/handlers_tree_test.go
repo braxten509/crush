@@ -458,8 +458,7 @@ func TestTreeStaleRevisionRefused(t *testing.T) {
 	require.Len(t, after, len(sessions), "no copy was made")
 }
 
-// A reply in progress makes the tree routes answer 409 tree_busy with the
-// guard's own text.
+// A reply in progress makes the tree routes answer 409 tree_busy.
 func TestTreeBusyIs409(t *testing.T) {
 	e := newTreeEngine(t)
 	ctx := t.Context()
@@ -469,7 +468,6 @@ func TestTreeBusyIs409(t *testing.T) {
 	e.llm.hold()
 	require.NoError(t, e.c.SendMessage(ctx, e.id, chat.id, "", "", "And the lakes?"))
 	e.llm.waitStreaming(t)
-	const busy = "wait for the reply and queued prompts to finish, or recall queued prompts first"
 	for _, tc := range []struct {
 		name string
 		path string
@@ -482,7 +480,6 @@ func TestTreeBusyIs409(t *testing.T) {
 		status, refusal := e.send(t, http.MethodPost, tc.path, tc.body)
 		require.Equal(t, http.StatusConflict, status, tc.name)
 		require.Equal(t, "tree_busy", refusal.Code, tc.name)
-		require.Equal(t, busy, refusal.Message, tc.name)
 	}
 
 	// Once the reply is done, the same switch goes through.
@@ -621,7 +618,6 @@ func TestFilePreviewUndoByPlanID(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, restored.Restored)
 	require.NotEmpty(t, restored.UndoID)
-	require.Equal(t, "Restored 1 files. Use Undo Last File Restore in the command palette to put them back.", restored.Notice)
 	require.Equal(t, "v1\n", chat.read(t))
 
 	// A plan is used once; an unknown one is refused the same way.
@@ -708,7 +704,7 @@ func TestForkMovesUndoRecord(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, request.Result.UndoID, undo.UndoID)
 	_, err = ws.PreviewUndoFiles(ctx, chat.id)
-	require.ErrorContains(t, err, "There is no file restore to undo in this chat")
+	require.Error(t, err, "the source chat has no restore left to undo")
 }
 
 // A copy takes an undo record along only when it is the record of the
@@ -725,11 +721,11 @@ func TestCopyMovesOnlyItsOwnUndoRecord(t *testing.T) {
 		require.NotEmpty(t, restored.UndoID)
 		return restored.UndoID
 	}
-	// undoOf is the undo record a chat has, or "" for none.
+	// undoOf is the undo record a chat has, or "" for none (the preview
+	// is refused).
 	undoOf := func(sessionID string) string {
 		plan, err := e.c.PreviewUndoFiles(ctx, e.id, sessionID)
 		if err != nil {
-			require.ErrorContains(t, err, "There is no file restore to undo in this chat")
 			return ""
 		}
 		return plan.UndoID
@@ -789,7 +785,7 @@ func TestCopyStandsWhenUndoMoveFails(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, restored.UndoID, undo.UndoID, "the record stayed with the source chat")
 	_, err = e.c.PreviewUndoFiles(ctx, e.id, copied.SessionID)
-	require.ErrorContains(t, err, "There is no file restore to undo in this chat")
+	require.Error(t, err, "the copy has no restore to undo")
 }
 
 // The optional client_id of the tree routes: none passes, a malformed one

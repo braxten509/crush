@@ -263,6 +263,7 @@
         title={state.maximized ? "Restore" : "Maximize"}
         aria-label={state.maximized ? "Restore" : "Maximize"}
         data-probe="title-maximize"
+        data-maximized={state.maximized ? "true" : "false"}
         onclick={() => win.toggleMaximize()}
       >
         <Icon name={state.maximized ? "restore" : "maximize"} />
@@ -310,8 +311,7 @@
      alone would crowd the buttons. */
   /* The title, folder and branch share one baseline (owner, 2026-10-20: "not
      aligned"); the run is centred in the bar as a whole, then set so the
-     title's capitals sit on the bar's middle (measured with
-     tests/driver/titlebar_align.py). */
+     title's capitals sit on the bar's middle. */
   .words {
     position: relative;
     top: 0.5px;

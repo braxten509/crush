@@ -47,11 +47,17 @@ type cliSteps struct {
 	inputs   map[string]string
 	open     bool
 	thinking bool
-	content  fantasy.ResponseContent
-	usage    fantasy.Usage
-	tools    int
-	steps    []fantasy.StepResult
-	native   string
+	// thinkingDetail is set while the CLI says the model is thinking and
+	// nothing else has happened since, so a step begun in the middle of it
+	// (a message the user sent mid-turn) still says so. thinkingNow tells
+	// an empty detail from no thinking.
+	thinkingNow    bool
+	thinkingDetail string
+	content        fantasy.ResponseContent
+	usage          fantasy.Usage
+	tools          int
+	steps          []fantasy.StepResult
+	native         string
 	// contextUsed is the CLI's own count of the context in use, when it
 	// reports one. The turn's usage sums every step and is too large.
 	contextUsed int64
@@ -379,7 +385,15 @@ func (s *cliSteps) handleEvent(e cliagent.Event) error {
 		}
 	}
 	switch e.Type {
+	case cliagent.EventText, cliagent.EventToolStart, cliagent.EventToolCall, cliagent.EventToolResult:
+		// The thinking the CLI last spoke of is over.
+		s.thinkingNow, s.thinkingDetail = false, ""
+	}
+	switch e.Type {
 	case cliagent.EventActivity:
+		if e.Activity != "" {
+			s.thinkingNow, s.thinkingDetail = e.Activity == cliagent.ActivityThinking, e.Text
+		}
 		if s.onActivity != nil {
 			return s.onActivity(e.Activity, e.Text)
 		}
@@ -470,7 +484,15 @@ func (s *cliSteps) handleUserMessage(e cliagent.Event) error {
 			return err
 		}
 	}
-	return s.begin()
+	if err := s.begin(); err != nil {
+		return err
+	}
+	// The model was thinking when the message went in, and still is: the
+	// new step says so, where it would say "Waiting for the model".
+	if s.thinkingNow && s.onActivity != nil {
+		return s.onActivity(cliagent.ActivityThinking, s.thinkingDetail)
+	}
+	return nil
 }
 
 func (s *cliSteps) handleReasoning(e cliagent.Event) error {

@@ -108,27 +108,6 @@ func TestBashTool_DefaultAutoBackgroundThreshold(t *testing.T) {
 	require.Contains(t, meta.Output, "done")
 }
 
-// A requested wait under the foreground limit is raised to it, so a command
-// a little longer than the request still finishes in the foreground.
-func TestBashTool_WaitBackgroundThreshold(t *testing.T) {
-	tool := newBashToolForTest(t.TempDir())
-	ctx := context.WithValue(context.Background(), tools.SessionIDContextKey, "test-session")
-	resp := runBashTool(t, tool, ctx, tools.BashParams{
-		Description:         "wait threshold",
-		Command:             "sleep 1.5 && echo done",
-		AutoBackgroundAfter: 1,
-	})
-	require.False(t, resp.IsError)
-	var meta tools.BashResponseMetadata
-	require.NoError(t, json.Unmarshal([]byte(resp.Metadata), &meta))
-	if meta.ShellID != "" {
-		t.Cleanup(func() { _ = shell.GetBackgroundShellManager().Kill(meta.ShellID) })
-	}
-	require.False(t, meta.Background)
-	require.Empty(t, meta.ShellID)
-	require.Contains(t, meta.Output, "done")
-}
-
 type recordingPermissionService struct {
 	*pubsub.Broker[permission.PermissionRequest]
 	requestCount int

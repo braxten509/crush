@@ -2,8 +2,8 @@
 for claude code on the top right of crush and also argon limits for agy"),
 in the real window on the hidden screen with a Fable chat open: the meters
 at the panel's top gain WEEKLY FABLE beside the account's own, and the list
-of every sign-in shows Fable on a line under Claude and Gemini 4 Argon on a
-line under Agy, each set in under its account.
+of every sign-in shows Fable on a line under Claude and Argon on a line
+under Agy, each set in under its account.
 
 Usage: CHECK_ARGS="-s 7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f01" \\
        tests/check.sh --fixture tests/fixtures/limits-families.json limits_families.py
@@ -63,8 +63,8 @@ check([[r["name"], r["family"], r["parts"]] for r in rows] == [
     ["Claude", False, ["74%", "42%", "–"]],
     ["Fable", True, ["–", "57%", "–"]],
     ["Agy", False, ["100%", "90%", "–"]],
-    ["Gemini 4 Argon", True, ["–", "60%", "–"]],
-], f"the list shows Fable under Claude and Gemini 4 Argon under Agy ({rows})")
+    ["Argon", True, ["–", "60%", "–"]],
+], f"the list shows Fable under Claude and Argon under Agy ({rows})")
 own = [r["left"] for r in rows if not r["family"]]
 check(len(set(own)) == 1 and all(r["left"] > own[0] for r in rows if r["family"]),
       f"a family's line is set in under its account ({[(r['name'], r['left']) for r in rows]})")

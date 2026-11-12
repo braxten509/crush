@@ -96,7 +96,7 @@ function windowsOf(kind, reading) {
 
 // A reading's windows as the list shows them (owner, 2026-11-12): the row's
 // own, and under it one line per model family with a limit of its own (Fable
-// under Claude, Gemini 4 Argon under Agy). A family has a limit of its own
+// under Claude, Argon under Agy). A family has a limit of its own
 // when the reading also holds a wider one that covers it: the whole
 // account's windows, or a family named by only some of its words (Gemini
 // for Gemini 4 Argon).
@@ -105,9 +105,17 @@ function splitWindows(kind, reading) {
   const words = new Map(windows.map((w) => [w.model ?? "", nameWords(w.model)]));
   const covers = (wide, family) => words.get(wide).length < words.get(family).length && words.get(wide).every((word) => words.get(family).includes(word));
   const apart = [...words.keys()].filter((family) => [...words.keys()].some((wide) => covers(wide, family)));
+  // A line's name is what tells the family from the row it sits under
+  // (owner, 2026-11-12: "Argon", not "Gemini 4 Argon"): its name without the
+  // wider family's words and without bare version numbers.
+  const name = (family) => {
+    const wide = [...words.keys()].filter((w) => covers(w, family)).flatMap((w) => words.get(w));
+    const kept = family.split(/[^\p{L}\p{N}.]+/u).filter((word) => word && !wide.includes(word.toLowerCase()) && !/^[\d.]+$/u.test(word));
+    return kept.length > 0 ? kept.join(" ") : family;
+  };
   return {
     own: windows.filter((w) => !apart.includes(w.model ?? "")),
-    families: apart.map((family) => ({ family, windows: windows.filter((w) => (w.model ?? "") === family) })),
+    families: apart.map((family) => ({ name: name(family), windows: windows.filter((w) => (w.model ?? "") === family) })),
   };
 }
 
@@ -154,7 +162,7 @@ export function accountGroups({ accounts = [], byKind = {}, inUse = { kind: "", 
           inUse: inUse.kind === kind && (inUse.account ?? "") === a.id,
           state,
           parts: SPAN_WINDOWS.map((name) => (read ? partOf(split.own, name, now) : null)),
-          families: !read || !a.signed_in ? [] : split.families.map((f) => ({ name: f.family, parts: SPAN_WINDOWS.map((name) => partOf(f.windows, name, now)) })),
+          families: !read || !a.signed_in ? [] : split.families.map((f) => ({ name: f.name, parts: SPAN_WINDOWS.map((name) => partOf(f.windows, name, now)) })),
         };
       }),
     };

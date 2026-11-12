@@ -6,7 +6,7 @@
   // in use), each span's part left as a small bar and a percent, amber under
   // 30 % and rose under 10 % as the meters above. A model family with a
   // limit of its own gets a line under its account, set in (Fable under
-  // Claude, Gemini 4 Argon under Agy; owner, 2026-11-12). Shown
+  // Claude, Argon under Agy; owner, 2026-11-12). Shown
   // only while Settings > Appearance > "Show every account's usage" is on;
   // lib/stores/accountmeters.svelte.js reads them.
   import { limitKind } from "../../lib/footer.js";

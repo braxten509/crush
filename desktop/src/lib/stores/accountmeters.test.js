@@ -89,7 +89,7 @@ describe("account meters", () => {
     });
     expect(lines).toEqual([
       ["Claude", [74, 42, null], [["Fable", [null, 57, null]]]],
-      ["Agy", [100, 90, null], [["Gemini 4 Argon", [null, 60, null]]]],
+      ["Agy", [100, 90, null], [["Argon", [null, 60, null]]]],
     ]);
   });
 

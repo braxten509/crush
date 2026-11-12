@@ -1,8 +1,10 @@
 // The fallback order's blocks (config.FallbackBlock, internal/config/
 // accounts.go): plain data the editor shows and changes. A use block runs
 // chats on an account and model, a wait block waits for an account to
-// refill, a refill block spends a Codex account's free refill. Account ""
-// is each tool's own login (Claude 1, Codex 1).
+// refill, a refill block spends a Codex account's free refill. A use block
+// names a model, or keeps the chat's own model (keep_model) and then names
+// only a tool (kind) and one of its accounts. Account "" is each tool's own
+// login (Claude 1, Codex 1).
 
 export const CLAUDE = "claude-code";
 export const CODEX = "codex-cli";
@@ -63,7 +65,7 @@ export function kindsToRefresh(before, after) {
 
 // The tool a block's account belongs to.
 export function blockKind(block, providers) {
-  return block?.type === "use" ? providerKind(providers, block.provider) : (block?.kind ?? "");
+  return block?.type === "use" && !block.keep_model ? providerKind(providers, block.provider) : (block?.kind ?? "");
 }
 
 // An account where both tools' accounts are named together: its label (the
@@ -105,9 +107,9 @@ export function effortsOf(block, providers) {
 }
 
 // The accounts a block's account word may pick: a use block's tool's own, a
-// refill block's Codex ones, a wait block's every one.
+// refill block's Codex ones, a wait or keep-model block's every one.
 export function accountChoices(block, { accounts = [], providers = [] } = {}) {
-  if (block?.type === "use") return accountsOf(accounts, blockKind(block, providers));
+  if (block?.type === "use" && !block.keep_model) return accountsOf(accounts, blockKind(block, providers));
   if (block?.type === "refill") return accountsOf(accounts, CODEX);
   return (accounts ?? []).filter((a) => hasAccounts(a.kind));
 }
@@ -132,6 +134,7 @@ export function sentence(block, ctx = {}) {
   if (accountChoices(block, ctx).length > 1) account.menu = "account";
   switch (block?.type) {
     case "use": {
+      if (block.keep_model) return [{ text: "Keep " }, { text: "the chat's model", menu: "model" }, { text: " on " }, account, { text: ". Move on " }, { text: leaveWords(block), menu: "leave" }, { text: "." }];
       const out = [{ text: "Use " }, { text: modelWithProvider(providers, block.provider, block.model), menu: "model" }];
       if (hasAccounts(kind)) out.push({ text: " on " }, account);
       if (effortsOf(block, providers).length) out.push({ text: " at " }, { text: block.effort || "default", menu: "effort" }, { text: " effort" });
@@ -166,6 +169,21 @@ export function newBlock(type, { providers = [] } = {}) {
   return { type: "refill", kind: CODEX, account: "" };
 }
 
+// A use block turned to keep the chat's own model, on the account it had
+// when its tool has accounts, else on Claude 1.
+export function keepChatModel(block, providers) {
+  const kind = blockKind(block, providers);
+  if (!hasAccounts(kind)) return changeBlock(block, { keep_model: true, kind: CLAUDE, account: "" });
+  return changeBlock(block, { keep_model: true, kind, account: block?.account ?? "" });
+}
+
+// A use block turned to run one model: the effort starts at the default,
+// and the account stays when the model's tool is the same.
+export function pickModel(block, providers, provider, model) {
+  const same = blockKind(block, providers) === providerKind(providers, provider);
+  return changeBlock(block, { keep_model: false, provider, model, effort: "", account: same ? block?.account : "" });
+}
+
 // The blocks with the one at `from` moved to `to`.
 export function moveBlock(blocks, from, to) {
   const list = [...blocks];
@@ -183,11 +201,12 @@ export function changeBlock(block, fields) {
     if (key !== "type" && (value === "" || value === 0 || value === false || value === null || value === undefined)) delete next[key];
   }
   if (next.type === "use") {
-    delete next.kind;
+    // A keep-model block names a tool, never a model.
+    for (const key of next.keep_model ? ["provider", "model", "effort"] : ["kind"]) delete next[key];
     delete next.max_wait_minutes;
     delete next.meanwhile;
   } else {
-    for (const key of ["provider", "model", "effort", "move_at_percent", "refill_first", "come_back"]) delete next[key];
+    for (const key of ["provider", "model", "effort", "keep_model", "move_at_percent", "refill_first", "come_back"]) delete next[key];
   }
   return next;
 }

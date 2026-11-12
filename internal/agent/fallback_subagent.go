@@ -53,7 +53,7 @@ func (h *taskHub) subAgentFallback(ctx context.Context, t *Task, start, cur conf
 	if cfg.Options == nil || cfg.Options.Fallback == nil || !cfg.Options.Fallback.On {
 		return subAgentNext{}, false
 	}
-	order := fallback.For(*cfg.Options.Fallback, start.Provider, start.Model)
+	order := fallback.Keep(fallback.For(*cfg.Options.Fallback, start.Provider, start.Model), c.providerKind, cur, start.Provider, start.Model)
 	at := fallback.Position(order, c.providerKind, cur)
 	if at < 0 {
 		return subAgentNext{}, false

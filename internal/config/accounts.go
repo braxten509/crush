@@ -42,8 +42,12 @@ type FallbackBlock struct {
 	Provider string `json:"provider,omitempty"`
 	Model    string `json:"model,omitempty"`
 	Effort   string `json:"effort,omitempty"`
-	// Kind is the tool a wait or refill block's account belongs to; a use
-	// block's tool is its provider's.
+	// KeepModel makes a use block keep the chat's own model: it names no
+	// model, only a tool (Kind) and one of its sign-ins (Account). A chat
+	// on another tool passes it by (fallback.Keep).
+	KeepModel bool `json:"keep_model,omitempty"`
+	// Kind is the tool a wait, refill or keep-model block's account belongs
+	// to; any other use block's tool is its provider's.
 	Kind catwalk.Type `json:"kind,omitempty"`
 	// Account is the block's sign-in: an options.accounts ID, or empty for
 	// the tool's own login.

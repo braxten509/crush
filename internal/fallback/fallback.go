@@ -1,11 +1,13 @@
 // Package fallback decides where chats go when an account runs out, by the
 // user's fallback order (options.fallback): use blocks run chats on an
 // account and model, wait blocks wait for an account to refill, refill
-// blocks spend a Codex account's free refill. It only decides; the agent's
-// coordinator carries the decisions out.
+// blocks spend a Codex account's free refill. A use block names a model, or
+// keeps the chat's own one on another sign-in of its tool (Keep). It only
+// decides; the agent's coordinator carries the decisions out.
 package fallback
 
 import (
+	"slices"
 	"time"
 
 	"charm.land/catwalk/v3/pkg/catwalk"
@@ -74,10 +76,48 @@ type KindOf func(provider string) catwalk.Type
 // BlockAccount is the account a block runs on or watches.
 func BlockAccount(b config.FallbackBlock, kindOf KindOf) Account {
 	kind := b.Kind
-	if b.Type == config.FallbackUse {
+	if b.Type == config.FallbackUse && !b.KeepModel {
 		kind = kindOf(b.Provider)
 	}
 	return Account{Kind: kind, ID: b.Account}
+}
+
+// Keep fills in the keep-model use blocks of the order a chat on cur
+// follows, start being the model it started on (Chosen). Such a block runs
+// cur's provider, model and effort on its own sign-in when cur is on the
+// block's tool. When the chat has moved on to another tool but started on
+// this one, the block takes it back to the model it started on, so a later
+// or "come back" block of the first tool still works. Any other keep-model
+// block stays as it is, and the order passes it by (passedBy). The order's
+// own blocks are not changed: the filled-in ones are copies.
+func Keep(order config.FallbackOrder, kindOf KindOf, cur config.SelectedModel, startProvider, startModel string) config.FallbackOrder {
+	if !slices.ContainsFunc(order.Blocks, func(b config.FallbackBlock) bool { return b.Type == config.FallbackUse && b.KeepModel }) {
+		return order
+	}
+	curKind, startKind := kindOf(cur.Provider), kindOf(startProvider)
+	order.Blocks = slices.Clone(order.Blocks)
+	for i, b := range order.Blocks {
+		if b.Type != config.FallbackUse || !b.KeepModel || b.Kind == "" {
+			continue
+		}
+		switch b.Kind {
+		case curKind:
+			b.Provider, b.Model, b.Effort = cur.Provider, cur.Model, cur.ReasoningEffort
+		case startKind:
+			b.Provider, b.Model, b.Effort = startProvider, startModel, ""
+		default:
+			continue
+		}
+		b.KeepModel, b.Kind = false, ""
+		order.Blocks[i] = b
+	}
+	return order
+}
+
+// passedBy reports whether the order passes a block by: a keep-model block
+// Keep did not fill in, as the chat is on another tool.
+func passedBy(b config.FallbackBlock) bool {
+	return b.Type == config.FallbackUse && b.KeepModel
 }
 
 // Chosen is the model a chat started on: the one the user picked, which
@@ -112,7 +152,7 @@ func Position(order config.FallbackOrder, kindOf KindOf, m config.SelectedModel)
 	kind := kindOf(m.Provider)
 	loose := -1
 	for i, b := range order.Blocks {
-		if b.Type != config.FallbackUse || b.Account != m.Account {
+		if b.Type != config.FallbackUse || passedBy(b) || b.Account != m.Account {
 			continue
 		}
 		if b.Provider == m.Provider && b.Model == m.Model {
@@ -140,7 +180,7 @@ func Full(r Reading, moveAt float64) bool {
 // useBlockFor is the first use block on acct, or -1.
 func useBlockFor(order config.FallbackOrder, kindOf KindOf, acct Account) int {
 	for i, b := range order.Blocks {
-		if b.Type == config.FallbackUse && BlockAccount(b, kindOf) == acct {
+		if b.Type == config.FallbackUse && !passedBy(b) && BlockAccount(b, kindOf) == acct {
 			return i
 		}
 	}
@@ -169,7 +209,7 @@ func OnOut(order config.FallbackOrder, kindOf KindOf, at int, read Readings, now
 		acct := BlockAccount(b, kindOf)
 		switch b.Type {
 		case config.FallbackUse:
-			if !Full(read(acct), b.MoveAtPercent) {
+			if !passedBy(b) && !Full(read(acct), b.MoveAtPercent) {
 				return Action{Kind: Switch, Block: j, Return: ret}
 			}
 		case config.FallbackRefill:
@@ -217,7 +257,7 @@ func soonestComeBack(order config.FallbackOrder, kindOf KindOf, at int, read Rea
 	}
 	for k := range at {
 		b := order.Blocks[k]
-		if b.Type != config.FallbackUse || !b.ComeBack {
+		if b.Type != config.FallbackUse || !b.ComeBack || passedBy(b) {
 			continue
 		}
 		r := read(BlockAccount(b, kindOf))
@@ -237,7 +277,7 @@ func soonestComeBack(order config.FallbackOrder, kindOf KindOf, at int, read Rea
 func comeBackWithRoom(order config.FallbackOrder, kindOf KindOf, at int, read Readings) int {
 	for k := range at {
 		b := order.Blocks[k]
-		if b.Type == config.FallbackUse && b.ComeBack && !Full(read(BlockAccount(b, kindOf)), b.MoveAtPercent) {
+		if b.Type == config.FallbackUse && b.ComeBack && !passedBy(b) && !Full(read(BlockAccount(b, kindOf)), b.MoveAtPercent) {
 			return k
 		}
 	}
@@ -259,7 +299,7 @@ func BeforeTurn(order config.FallbackOrder, kindOf KindOf, at int, ret *Return, 
 	}
 	if ret != nil && ret.Block != at && ret.Block >= 0 && ret.Block < len(order.Blocks) && !now.Before(ret.At) {
 		b := order.Blocks[ret.Block]
-		if !Full(read(BlockAccount(b, kindOf)), b.MoveAtPercent) {
+		if !passedBy(b) && !Full(read(BlockAccount(b, kindOf)), b.MoveAtPercent) {
 			return Action{Kind: Switch, Block: ret.Block}
 		}
 	}

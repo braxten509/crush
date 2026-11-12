@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -76,6 +77,10 @@ var limitStore struct {
 	// asked is when an account's usage was last asked for (refreshLimits),
 	// which a turn's own update never is.
 	asked map[limitKey]time.Time
+	// seeded marks a reading that is only remembered from an earlier run
+	// (seedLimits): it stands in until any real one arrives, another
+	// engine's included.
+	seeded map[limitKey]bool
 	// hook is told about every new reading and every failed refresh.
 	hook func(kind catwalk.Type, account string)
 	// replaced is set while a test's fetchers stand in for the real ones.
@@ -199,6 +204,7 @@ func forgetKind(kind catwalk.Type) {
 	maps.DeleteFunc(limitStore.lastErr, func(k limitKey, _ string) bool { return of(k) })
 	maps.DeleteFunc(limitStore.refills, func(k limitKey, _ int) bool { return of(k) })
 	maps.DeleteFunc(limitStore.asked, func(k limitKey, _ time.Time) bool { return of(k) })
+	maps.DeleteFunc(limitStore.seeded, func(k limitKey, _ bool) bool { return of(k) })
 }
 
 // SetLimitFetchersForTest makes fetchers the only usage fetchers, with an
@@ -363,7 +369,10 @@ func setLimitsAt(k limitKey, limits []Limit, refills int, at time.Time) {
 		limitStore.refills[k] = refills
 	}
 	delete(limitStore.lastErr, k)
+	delete(limitStore.seeded, k)
+	known := limitStore.refills[k]
 	limitStore.Unlock()
+	saveLimits(k, limits, known, at)
 	limitsChanged(k)
 }
 
@@ -441,7 +450,7 @@ func refreshUsageDuringTurn(ctx context.Context, k limitKey) {
 	limitStore.Lock()
 	recent := time.Since(limitStore.asked[k]) < limitRefresh
 	limitStore.Unlock()
-	if recent || realLimitsOffInTests() {
+	if recent || realLimitsOffInTests() || takeModelLimits(k) {
 		return
 	}
 	ctx = context.WithoutCancel(ctx)
@@ -466,6 +475,9 @@ func ReadAccountLimitsNow(ctx context.Context, kind catwalk.Type, account string
 }
 
 func refreshLimits(ctx context.Context, k limitKey, force bool) (bool, error) {
+	// The last known amounts show while the read is on its way, and stay
+	// if it is refused.
+	seedLimits(k)
 	limitStore.Lock()
 	fetch := limitFetchers[k.kind]
 	if fetch == nil {
@@ -1051,6 +1063,10 @@ func getJSON(ctx context.Context, url string, headers map[string]string, v any) 
 		return err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusTooManyRequests {
+		after, _ := strconv.Atoi(resp.Header.Get("Retry-After"))
+		return refusedError{msg: fmt.Sprintf("%s: %s", url, resp.Status), after: time.Duration(after) * time.Second}
+	}
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("%s: %s", url, resp.Status)
 	}

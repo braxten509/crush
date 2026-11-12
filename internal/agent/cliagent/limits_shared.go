@@ -3,9 +3,12 @@ package cliagent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -24,6 +27,16 @@ import (
 // sharedLimitsFor is how long another engine's reading stands in for
 // asking again.
 const sharedLimitsFor = 30 * time.Second
+
+// sharedLimitsGap is the least time between asking two sign-ins of one
+// tool (owner, 2026-11-12: "a delay between each"): they are asked one
+// after another, never all at once.
+var sharedLimitsGap = 3 * time.Second
+
+// refusalWait is the least time no engine asks a sign-in again after its
+// tool said "too many asks" (Anthropic's usage address allows a few reads,
+// then refuses for a while, and asking on keeps it shut).
+const refusalWait = 5 * time.Minute
 
 // sharedLimitsOwner names this process in the readings it shares: an
 // engine asks again rather than reuse its own.
@@ -63,7 +76,19 @@ type sharedLimits struct {
 	Limits  []Limit   `json:"limits,omitempty"`
 	Refills int       `json:"refills"`
 	Err     string    `json:"error,omitempty"`
+	// Until is set on a "too many asks" refusal: no engine asks again
+	// before it.
+	Until time.Time `json:"until,omitzero"`
 }
+
+// refusedError is a tool's "too many asks" answer (HTTP 429); after is how
+// long it said to wait, when it said.
+type refusedError struct {
+	msg   string
+	after time.Duration
+}
+
+func (e refusedError) Error() string { return e.msg }
 
 // sharedLimitsPath is the file k's reading is shared in, or "".
 func sharedLimitsPath(k limitKey) string {
@@ -78,12 +103,25 @@ func sharedLimitsPath(k limitKey) string {
 	return filepath.Join(dir, url.PathEscape(name)+".json")
 }
 
+// loadSharedLimits is the reading or refusal kept in path, if any.
+func loadSharedLimits(path string) (sharedLimits, bool) {
+	var r sharedLimits
+	data, err := os.ReadFile(path)
+	return r, err == nil && json.Unmarshal(data, &r) == nil
+}
+
+// heldRefusal is a "too many asks" refusal in path that still stands: no
+// engine, this one included, asks before its time is up.
+func heldRefusal(path string) (sharedLimits, bool) {
+	r, ok := loadSharedLimits(path)
+	return r, ok && r.Err != "" && time.Now().Before(r.Until)
+}
+
 // readSharedLimits is another engine's reading in path, when it is fresh
 // and newer than this engine's own (newest).
 func readSharedLimits(path string, newest time.Time) (sharedLimits, bool) {
-	var r sharedLimits
-	data, err := os.ReadFile(path)
-	if err != nil || json.Unmarshal(data, &r) != nil {
+	r, ok := loadSharedLimits(path)
+	if !ok {
 		return r, false
 	}
 	age := time.Since(r.ReadAt)
@@ -102,17 +140,167 @@ func writeSharedLimits(ctx context.Context, path string, limits []Limit, refills
 			return
 		}
 		r.Limits, r.Err = nil, err.Error()
+		if refused := (refusedError{}); errors.As(err, &refused) {
+			r.Until = r.ReadAt.Add(max(refusalWait, refused.after))
+		}
 	} else if len(limits) == 0 {
 		return
 	}
-	data, jsonErr := json.Marshal(r)
-	if jsonErr != nil || os.MkdirAll(filepath.Dir(path), 0o700) != nil {
+	writeLimitsFile(path, r)
+}
+
+// writeLimitsFile puts r in path in one step, so a reader never sees half
+// a file.
+func writeLimitsFile(path string, r sharedLimits) {
+	data, err := json.Marshal(r)
+	if err != nil || os.MkdirAll(filepath.Dir(path), 0o700) != nil {
 		return
 	}
 	tmp := path + "." + sharedLimitsOwner + ".tmp"
 	if os.WriteFile(tmp, data, 0o600) != nil || os.Rename(tmp, path) != nil {
 		_ = os.Remove(tmp)
 	}
+}
+
+// Remembered readings (owner, 2026-11-12: "remember the last amount until
+// the real one is found"). An engine starts with nothing read, so a
+// refused first read left a sign-in's meters at "can't read". Every
+// reading is now also kept in a file of its own, which no refusal
+// overwrites, and an engine with nothing read for a sign-in shows that one
+// until a reading of its own arrives.
+
+// savedLimitsPath is the file k's last reading is remembered in, or "".
+func savedLimitsPath(k limitKey) string {
+	path := sharedLimitsPath(k)
+	if path == "" {
+		return ""
+	}
+	return strings.TrimSuffix(path, ".json") + ".last.json"
+}
+
+// saveLimits remembers a reading of k taken at at.
+func saveLimits(k limitKey, limits []Limit, refills int, at time.Time) {
+	if path := savedLimitsPath(k); path != "" && len(limits) > 0 {
+		writeLimitsFile(path, sharedLimits{Owner: sharedLimitsOwner, ReadAt: at, Limits: limits, Refills: refills})
+	}
+}
+
+// seedLimits gives the store k's remembered reading when it has none, with
+// the time it was really taken. It is no refresh: the next read is as due
+// as before.
+func seedLimits(k limitKey) {
+	path := savedLimitsPath(k)
+	if path == "" {
+		return
+	}
+	limitStore.Lock()
+	have := !limitStore.readAt[k].IsZero()
+	limitStore.Unlock()
+	if have {
+		return
+	}
+	r, ok := loadSharedLimits(path)
+	if !ok || len(r.Limits) == 0 || r.ReadAt.IsZero() {
+		return
+	}
+	limitStore.Lock()
+	if !limitStore.readAt[k].IsZero() {
+		limitStore.Unlock()
+		return
+	}
+	if limitStore.byKind == nil {
+		limitStore.byKind = map[limitKey][]Limit{}
+	}
+	if limitStore.readAt == nil {
+		limitStore.readAt = map[limitKey]time.Time{}
+	}
+	if limitStore.refills == nil {
+		limitStore.refills = map[limitKey]int{}
+	}
+	if limitStore.seeded == nil {
+		limitStore.seeded = map[limitKey]bool{}
+	}
+	limitStore.byKind[k] = r.Limits
+	limitStore.readAt[k] = r.ReadAt
+	limitStore.seeded[k] = true
+	if r.Refills >= 0 {
+		limitStore.refills[k] = r.Refills
+	}
+	limitStore.Unlock()
+	limitsChanged(k)
+}
+
+// waitSignInGap holds an ask for k until sharedLimitsGap has passed since
+// another sign-in of the same tool was asked, by any engine, and notes
+// this ask. Asking the same sign-in again waits for nothing.
+func waitSignInGap(ctx context.Context, k limitKey) {
+	dir := sharedLimitsDir()
+	if dir == "" {
+		return
+	}
+	base := filepath.Join(dir, url.PathEscape(string(k.kind))+".asked")
+	// Bounded like the reading's own lock: a stuck engine holds no one.
+	wait, cancel := context.WithTimeout(ctx, sharedLimitsFor)
+	unlock, err := lock.File(wait, base+".lock")
+	cancel()
+	if err != nil {
+		return
+	}
+	defer unlock()
+	type asked struct {
+		Account string    `json:"account"`
+		At      time.Time `json:"at"`
+	}
+	var last asked
+	if data, err := os.ReadFile(base + ".json"); err == nil && json.Unmarshal(data, &last) == nil && last.Account != k.account {
+		if left := sharedLimitsGap - time.Since(last.At); left > 0 && left <= sharedLimitsGap {
+			select {
+			case <-ctx.Done():
+			case <-time.After(left):
+			}
+		}
+	}
+	if data, err := json.Marshal(asked{Account: k.account, At: time.Now()}); err == nil {
+		_ = os.WriteFile(base+".json", data, 0o600)
+	}
+}
+
+// takeModelLimits reports that some engine asked for k's usage within
+// limitRefresh, so a working chat of this one does not: all engines
+// together ask that often, not each (five engines with a working Claude
+// chat asked five times as often and were refused). Another engine's
+// per-model limits are taken from its reading; its account windows are
+// older than the turn's own and are left.
+func takeModelLimits(k limitKey) bool {
+	path := sharedLimitsPath(k)
+	if path == "" {
+		return false
+	}
+	r, ok := loadSharedLimits(path)
+	if age := time.Since(r.ReadAt); !ok || age < 0 || age >= limitRefresh {
+		return false
+	}
+	limitStore.Lock()
+	if limitStore.asked == nil {
+		limitStore.asked = map[limitKey]time.Time{}
+	}
+	limitStore.asked[k] = r.ReadAt
+	own := limitStore.byKind[k]
+	changed := r.Owner != sharedLimitsOwner && len(r.Limits) > 0 && len(own) > 0
+	if changed {
+		merged := slices.DeleteFunc(slices.Clone(own), func(l Limit) bool { return l.Model != "" })
+		for _, l := range r.Limits {
+			if l.Model != "" {
+				merged = append(merged, l)
+			}
+		}
+		limitStore.byKind[k] = merged
+	}
+	limitStore.Unlock()
+	if changed {
+		limitsChanged(k)
+	}
+	return true
 }
 
 // sharedLimitsError is another engine's refusal, taken as this engine's.
@@ -130,9 +318,16 @@ func readLimits(ctx context.Context, k limitKey, fetch func(context.Context) ([]
 		limits, err := fetch(ctx)
 		return limits, time.Now(), err
 	}
+	if r, held := heldRefusal(path); held {
+		return nil, r.ReadAt, sharedLimitsError(r.Err)
+	}
 	if ctx.Value(freshLimitsKey{}) == nil {
 		limitStore.Lock()
 		newest := limitStore.readAt[k]
+		if limitStore.seeded[k] {
+			// Only remembered: any engine's fresh reading is newer news.
+			newest = time.Time{}
+		}
 		limitStore.Unlock()
 		taken := func() (sharedLimits, bool) { return readSharedLimits(path, newest) }
 		r, ok := taken()
@@ -156,6 +351,7 @@ func readLimits(ctx context.Context, k limitKey, fetch func(context.Context) ([]
 			return r.Limits, r.ReadAt, nil
 		}
 	}
+	waitSignInGap(ctx, k)
 	limits, err := fetch(ctx)
 	writeSharedLimits(ctx, path, limits, *refills, err)
 	return limits, time.Now(), err

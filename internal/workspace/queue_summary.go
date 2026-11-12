@@ -17,3 +17,10 @@ func (w *ClientWorkspace) AgentQueuedPromptSummaries(sessionID string) []message
 	}
 	return entries
 }
+
+// AgentQueuedPromptFiles lists the prompts AgentQueuedPromptsList lists,
+// each with the files sent along. Only the in-process workspace has it: the
+// phone's share, its one reader, runs there.
+func (w *AppWorkspace) AgentQueuedPromptFiles(sessionID string) []message.QueuedPrompt {
+	return w.ops.QueuedPromptFiles(sessionID)
+}

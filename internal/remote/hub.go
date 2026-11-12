@@ -29,7 +29,7 @@ import (
 // so nothing is lost while it was away.
 
 // Fields are sent whole whenever they change; items are sent one by one.
-var fieldNames = []string{"share", "status", "queue", "permission", "question", "tasks", "processes", "model", "clis", "usage", "commands"}
+var fieldNames = []string{"share", "status", "queue", "queue_files", "permission", "question", "tasks", "processes", "model", "clis", "usage", "commands"}
 
 // liteFields are all a lite client gets: enough to list the share and to
 // alert, without the chat itself.
@@ -505,9 +505,23 @@ func (h *hub) stepDetail(id string) (StepDetail, bool) {
 	return stepDetail(h.msgs, id)
 }
 
-// media returns an attachment of a user message (idx "N") or the image of a
-// tool result (idx "rN").
+// media returns an attachment of a user message (idx "N"), the image of a
+// tool result (idx "rN"), a picture file a reply names (idx "pN") or a file
+// of a waiting prompt (msgID "queue").
 func (h *hub) media(msgID, idx string) (string, []byte, bool) {
+	// A waiting file first: its mark is any letters and digits, so it may
+	// start with the "p" of a reply picture.
+	if msgID == queueMedia {
+		return queuedFile(h.src.AgentQueuedPromptFiles(h.currentSession()), idx)
+	}
+	if rest, ok := strings.CutPrefix(idx, "p"); ok {
+		// The file is read outside the lock.
+		path := h.replyPicture(msgID, rest)
+		if path == "" {
+			return "", nil, false
+		}
+		return readPicture(path)
+	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for _, m := range h.msgs {
@@ -534,4 +548,26 @@ func (h *hub) media(msgID, idx string) (string, []byte, bool) {
 		return bins[i].MIMEType, bins[i].Data, true
 	}
 	return "", nil, false
+}
+
+// replyPicture is the file of the Nth picture mark in a reply of the shared
+// chat, or "".
+func (h *hub) replyPicture(msgID, index string) string {
+	i, err := strconv.Atoi(index)
+	if err != nil || i < 0 {
+		return ""
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for _, m := range h.msgs {
+		if m.ID != msgID || m.Role != message.Assistant {
+			continue
+		}
+		targets := pictureTargets(strings.TrimSpace(m.Content().Text))
+		if i >= len(targets) {
+			return ""
+		}
+		return pictureFile(targets[i], h.src.WorkingDir())
+	}
+	return ""
 }

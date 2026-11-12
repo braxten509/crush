@@ -51,6 +51,15 @@ func (o Ops) QueuedPromptsList(sessionID string) []string {
 	return o.App.AgentCoordinator.QueuedPromptsList(sessionID)
 }
 
+// QueuedPromptFiles lists the prompts queued for the session, each with
+// the files sent along.
+func (o Ops) QueuedPromptFiles(sessionID string) []message.QueuedPrompt {
+	if o.App.AgentCoordinator == nil {
+		return nil
+	}
+	return agent.QueueFiles(o.App.AgentCoordinator, sessionID)
+}
+
 // QueuedPromptSummaries describes the prompts queued for the session.
 func (o Ops) QueuedPromptSummaries(sessionID string) []message.QueuedPromptSummary {
 	return agent.QueueSummaries(o.App.AgentCoordinator, sessionID)

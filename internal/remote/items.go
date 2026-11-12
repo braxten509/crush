@@ -30,6 +30,8 @@ type Item struct {
 	Seconds int `json:"seconds,omitempty"`
 
 	Attachments []Attachment `json:"attachments,omitempty"`
+	// Pictures are the picture files a reply names in its Markdown.
+	Pictures []Picture `json:"pictures,omitempty"`
 
 	Steps []Step `json:"steps,omitempty"`
 	// Live marks the group at the end of the chat while the agent works.
@@ -236,6 +238,7 @@ func assistantEntries(m message.Message, last bool, results map[string]resultAt,
 			Time:      m.CreatedAt,
 			Text:      text,
 			Streaming: !finished && st.busy && last,
+			Pictures:  replyPictures(m.ID, text, st.workingDir),
 		}})
 	}
 	for _, tc := range calls {

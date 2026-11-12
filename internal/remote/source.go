@@ -24,7 +24,9 @@ type Source interface {
 	GetSession(ctx context.Context, sessionID string) (session.Session, error)
 	SaveSession(ctx context.Context, sess session.Session) (session.Session, error)
 	AgentIsSessionBusy(sessionID string) bool
-	AgentQueuedPromptsList(sessionID string) []string
+	// AgentQueuedPromptFiles lists the waiting prompts, each with the files
+	// sent along.
+	AgentQueuedPromptFiles(sessionID string) []message.QueuedPrompt
 
 	PendingPermission() (permission.PermissionRequest, bool)
 	PermissionGrant(perm permission.PermissionRequest) bool

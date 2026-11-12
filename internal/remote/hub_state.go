@@ -187,11 +187,18 @@ func (h *hub) stateLocked(items []Item) map[string][]byte {
 	}
 	put("status", status)
 	put("share", h.shareLocked())
+	// queue_files runs beside queue (the files of each waiting prompt) rather
+	// than inside it, so older phones still read queue as a list of texts.
 	queue := []string{}
+	queueFiles := [][]Attachment{}
 	if cur != "" {
-		queue = append(queue, h.src.AgentQueuedPromptsList(cur)...)
+		for _, q := range h.src.AgentQueuedPromptFiles(cur) {
+			queue = append(queue, q.Prompt)
+			queueFiles = append(queueFiles, queuedAttachments(q.Attachments))
+		}
 	}
 	put("queue", queue)
+	put("queue_files", queueFiles)
 	put("permission", perm)
 	put("question", q)
 

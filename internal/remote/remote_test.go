@@ -542,6 +542,7 @@ type fakeSource struct {
 	mu       sync.Mutex
 	sessions map[string]session.Session
 	msgs     map[string][]message.Message
+	queued   []message.QueuedPrompt
 	perm     *permission.PermissionRequest
 	granted  []string
 	q        *question.Request
@@ -614,8 +615,13 @@ func (f *fakeSource) SaveSession(_ context.Context, s session.Session) (session.
 	return s, nil
 }
 
-func (f *fakeSource) AgentIsSessionBusy(string) bool         { return false }
-func (f *fakeSource) AgentQueuedPromptsList(string) []string { return nil }
+func (f *fakeSource) AgentIsSessionBusy(string) bool { return false }
+
+func (f *fakeSource) AgentQueuedPromptFiles(string) []message.QueuedPrompt {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.queued
+}
 
 func (f *fakeSource) PendingPermission() (permission.PermissionRequest, bool) {
 	f.mu.Lock()

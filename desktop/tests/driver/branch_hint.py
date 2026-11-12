@@ -57,6 +57,6 @@ while time.time() < end and not item:
         time.sleep(0.05)
 shot(out_dir, "menu")
 check(picked.startswith(TEXT), f"the triple click selects the whole line ({picked!r})")
-check(bool(item) and item["disabled"] and item["hint"] == UNFINISHED, f"Branch from here is disabled until the reply finishes ({item})")
+check(bool(item) and item.get("disabled") and item.get("hint") == UNFINISHED, f"Branch from here is disabled until the reply finishes ({item})")
 key("Escape")
 finish()

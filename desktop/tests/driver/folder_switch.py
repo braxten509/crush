@@ -132,14 +132,15 @@ key("Escape")
 until(dialogs, lambda d: "sessions" not in d)
 
 # New chat and New terminal ask where to start, on the shown folder.
-for button, kind in [("nav.chats .new-row > button.new-chat:not(.new-terminal)", "chat"), ("nav.chats .new-row > button.new-terminal", "terminal")]:
+# The window's picker calls a new chat "session".
+for button, kind, mode in [("nav.chats .new-row > button.new-chat:not(.new-terminal)", "chat", "session"), ("nav.chats .new-row > button.new-terminal", "terminal", "terminal")]:
     run(f"document.querySelector({button!r}).click(); return true;")
     picker = until(lambda: run("""
       const sheet = document.querySelector('[data-sheet="folder_picker"]:not([inert])');
       return sheet ? { field: sheet.querySelector('input')?.value ?? '' } : null;
     """) or {}, lambda p: bool(p))
     asked = (((read_probe(probe_path) or {}).get("leftlist") or {}).get("picker") or {}).get("kind")
-    check(asked == kind and (picker.get("field") or "").rstrip("/").endswith("beta"), f"New {kind} asks where to start, on beta ({asked}, {picker.get('field')!r})")
+    check(asked == mode and (picker.get("field") or "").rstrip("/").endswith("beta"), f"New {kind} asks where to start, on beta ({asked}, {picker.get('field')!r})")
     key("Escape")
     until(dialogs, lambda d: "folder_picker" not in d)
 finish()

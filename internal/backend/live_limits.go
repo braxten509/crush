@@ -161,17 +161,34 @@ func CurrentLimits() proto.LimitsSnapshot {
 }
 
 // RefreshLimits starts a refresh of kind's limits, for every account of
-// it, and returns at once; the results arrive as limits events. It reports
-// false for a kind that reports no limits.
-func (b *Backend) RefreshLimits(kind string) bool {
+// it, and returns at once; the results arrive as limits events. force asks
+// the tool even when a reading is recent (a click on refresh); without it
+// an account takes any newer reading another engine saved and asks the
+// tool only when due (the window's timers: Anthropic's usage address
+// refuses frequent reads). It reports false for a kind that reports no
+// limits.
+func (b *Backend) RefreshLimits(kind string, force bool) bool {
+	return b.refreshLimits(kind, force, func(string) bool { return true })
+}
+
+// RefreshAccountLimits is RefreshLimits for one account of kind ("" for
+// the tool's own login).
+func (b *Backend) RefreshAccountLimits(kind, account string, force bool) bool {
+	return b.refreshLimits(kind, force, func(id string) bool { return id == account })
+}
+
+// refreshLimits refreshes the accounts of kind that wanted picks.
+func (b *Backend) refreshLimits(kind string, force bool, wanted func(account string) bool) bool {
 	if !slices.ContainsFunc(cliagent.Snapshot(), func(k cliagent.KindLimits) bool { return string(k.Kind) == kind }) {
 		return false
 	}
 	ctx := b.engineContext()
-	go func() { _ = cliagent.RefreshLimitsNow(ctx, catwalk.Type(kind)) }()
+	if wanted("") {
+		go func() { _, _ = cliagent.RefreshAccountLimits(ctx, catwalk.Type(kind), "", force) }()
+	}
 	for _, a := range b.extraAccounts() {
-		if string(a.Kind) == kind {
-			go func() { _, _ = cliagent.RefreshAccountLimits(ctx, a.Kind, a.ID, true) }()
+		if string(a.Kind) == kind && wanted(a.ID) {
+			go func() { _, _ = cliagent.RefreshAccountLimits(ctx, a.Kind, a.ID, force) }()
 		}
 	}
 	return true

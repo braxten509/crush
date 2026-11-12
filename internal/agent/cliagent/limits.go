@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	"net/http"
 	"os"
@@ -77,10 +78,13 @@ var limitStore struct {
 	// asked is when an account's usage was last asked for (refreshLimits),
 	// which a turn's own update never is.
 	asked map[limitKey]time.Time
-	// seeded marks a reading that is only remembered from an earlier run
-	// (seedLimits): it stands in until any real one arrives, another
-	// engine's included.
+	// seeded marks a reading that is only remembered from minutes ago or
+	// an earlier run (adoptSavedLimits): it stands in until any real one
+	// arrives, another engine's included.
 	seeded map[limitKey]bool
+	// modelsAt is when the per-model limits were read (a usage read; a
+	// turn's own update copies the old ones).
+	modelsAt map[limitKey]time.Time
 	// hook is told about every new reading and every failed refresh.
 	hook func(kind catwalk.Type, account string)
 	// replaced is set while a test's fetchers stand in for the real ones.
@@ -205,6 +209,7 @@ func forgetKind(kind catwalk.Type) {
 	maps.DeleteFunc(limitStore.refills, func(k limitKey, _ int) bool { return of(k) })
 	maps.DeleteFunc(limitStore.asked, func(k limitKey, _ time.Time) bool { return of(k) })
 	maps.DeleteFunc(limitStore.seeded, func(k limitKey, _ bool) bool { return of(k) })
+	maps.DeleteFunc(limitStore.modelsAt, func(k limitKey, _ time.Time) bool { return of(k) })
 }
 
 // SetLimitFetchersForTest makes fetchers the only usage fetchers, with an
@@ -370,9 +375,9 @@ func setLimitsAt(k limitKey, limits []Limit, refills int, at time.Time) {
 	}
 	delete(limitStore.lastErr, k)
 	delete(limitStore.seeded, k)
-	known := limitStore.refills[k]
+	known, modelsAt := limitStore.refills[k], limitStore.modelsAt[k]
 	limitStore.Unlock()
-	saveLimits(k, limits, known, at)
+	saveLimits(k, limits, known, at, modelsAt)
 	limitsChanged(k)
 }
 
@@ -475,9 +480,9 @@ func ReadAccountLimitsNow(ctx context.Context, kind catwalk.Type, account string
 }
 
 func refreshLimits(ctx context.Context, k limitKey, force bool) (bool, error) {
-	// The last known amounts show while the read is on its way, and stay
-	// if it is refused.
-	seedLimits(k)
+	// The newest amounts any engine saved show while the read is on its
+	// way, and stay if it is refused; a fresh one makes the read not due.
+	adoptSavedLimits(k)
 	limitStore.Lock()
 	fetch := limitFetchers[k.kind]
 	if fetch == nil {
@@ -524,9 +529,18 @@ func refreshLimits(ctx context.Context, k limitKey, force bool) (bool, error) {
 		limitStore.fetched[k] = time.Now()
 		limitStore.lastErr[k] = err.Error()
 		limitStore.Unlock()
+		slog.Debug("Usage read failed", "kind", k.kind, "account", k.account, "forced", force, "error", err)
 		limitsChanged(k)
 		return false, err
 	}
+	slog.Debug("Usage read", "kind", k.kind, "account", k.account, "forced", force, "read_at", at)
+	// A usage read holds the per-model limits as of its own time.
+	limitStore.Lock()
+	if limitStore.modelsAt == nil {
+		limitStore.modelsAt = map[limitKey]time.Time{}
+	}
+	limitStore.modelsAt[k] = at
+	limitStore.Unlock()
 	setLimitsAt(k, limits, refills, at)
 	return true, nil
 }

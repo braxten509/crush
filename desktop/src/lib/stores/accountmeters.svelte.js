@@ -8,7 +8,12 @@
 // usage address refuses frequent reads and a refusal would also hide the main
 // meters. The engine's refresh route reads every account of a tool
 // (internal/backend/live_limits.go); the readings come back as limits events
-// into limits.svelte.js.
+// into limits.svelte.js. The timers ask only for what is due (owner,
+// 2026-11-12: a working sign-in's meter was behind): the engine first takes
+// any newer reading another engine saved, often a turn's own from moments
+// ago, and asks the tool only when its reading is old. The sign-in the shown
+// chat uses is asked that way every minute, so its meter follows its turns
+// in any folder without asking Anthropic more often.
 import { api } from "../engine/api.js";
 import { ACCOUNT_KINDS, CLAUDE, CODEX } from "../fallback/blocks.js";
 import { fallback, loadFallback } from "../fallback/store.svelte.js";
@@ -34,6 +39,10 @@ const LOGINLESS_KINDS = ["agy-cli", "opencode-cli", "kimi-coding"];
 const LIST_KINDS = [...SIGN_IN_KINDS, ...LOGINLESS_KINDS];
 
 const TEN_MINUTES = 10 * 60_000;
+// The engine asks a tool again no sooner than this after a reading
+// (cliagent limitRefresh): a timer that runs more often forces its asks.
+const ENGINE_FLOOR_MS = 3 * 60_000;
+const IN_USE_EVERY_MS = 60_000;
 export const READ_EVERY_MS = Object.fromEntries(LIST_KINDS.map((kind) => [kind, kind === CODEX ? 60_000 : TEN_MINUTES]));
 
 // A tool with an account still checking is asked again this often: Codex
@@ -154,7 +163,7 @@ export function accountGroups({ accounts = [], byKind = {}, inUse = { kind: "", 
         let state = "ready";
         if (!a.signed_in) state = "signed-out";
         else if (!read) state = reading?.state === "error" ? "error" : "checking";
-        else if (reading.state === "error") state = "idle";
+        else if (reading.error) state = "idle";
         return {
           id: a.id,
           name: at === 0 ? tool : `${tool} ${at + 1}`,
@@ -174,6 +183,12 @@ export function accountGroups({ accounts = [], byKind = {}, inUse = { kind: "", 
 let connected = false;
 let timers = [];
 const askedAt = new Map(); // kind → when this window last asked (ms)
+let inUse = { kind: "", account: "" }; // the sign-in the shown chat uses
+
+// AccountMeters.svelte says which sign-in the shown chat uses.
+export function setInUse(kind, account = "") {
+  inUse = { kind: kind ?? "", account: account ?? "" };
+}
 
 // connection.svelte.js says when the window joins or leaves its engine.
 export function accountPollConnected(on) {
@@ -187,7 +202,15 @@ function readKind(kind) {
   // reading is what lists it.
   if (SIGN_IN_KINDS.includes(kind) && !listedKinds(fallback.accounts).includes(kind)) return;
   askedAt.set(kind, Date.now());
-  api.refreshLimits(kind).catch((error) => console.error("account limits refresh failed", error));
+  api.refreshLimits(kind, { due: READ_EVERY_MS[kind] >= ENGINE_FLOOR_MS }).catch((error) => console.error("account limits refresh failed", error));
+}
+
+// The shown chat's sign-in, when it is due: a newer reading any engine has
+// saved shows within a minute.
+function readInUse() {
+  const { kind, account } = inUse;
+  if (!LIST_KINDS.includes(kind) || globalThis.document?.visibilityState === "hidden") return;
+  api.refreshLimits(kind, { due: true, account }).catch((error) => console.error("account limits refresh failed", error));
 }
 
 // Ask again for the tools with an account still checking, no more often than
@@ -214,6 +237,7 @@ function restart() {
   });
   for (const kind of LIST_KINDS) timers.push(setInterval(() => readKind(kind), READ_EVERY_MS[kind]));
   timers.push(setInterval(readMissing, 60_000));
+  timers.push(setInterval(readInUse, IN_USE_EVERY_MS));
 }
 
 // A window that was hidden while the first read was due takes one as soon as

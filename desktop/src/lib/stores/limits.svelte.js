@@ -75,21 +75,22 @@ export function agentProviderChanged(provider) {
 
 const askedAt = new Map(); // kind → when this window last asked for a refresh (ms)
 
-function refreshLimitsFor(kind) {
+function refreshLimitsFor(kind, { due = false } = {}) {
   if (!loaded) {
     wanted = kind;
     return;
   }
   if (!limits.byKind[kind]) return;
   askedAt.set(kind, Date.now());
-  api.refreshLimits(kind).catch((error) => console.error("limits refresh failed", error));
+  api.refreshLimits(kind, { due }).catch((error) => console.error("limits refresh failed", error));
 }
 
 // The terminal's poll (internal/ui/model/polling.go:15, update_ui.go:268-280):
 // every 60 s while the window is visible and the shown chat is idle, the
 // current provider's kind is refreshed once its reading is 3 min old
-// (cliagent/limits.go:40,207). The engine's refresh route skips that throttle
-// (internal/server/handlers_live.go:149), so the page keeps it: a kind is also
+// (cliagent/limits.go:40,207). The poll asks with due, so the engine keeps
+// that throttle too (internal/server/handlers_live.go); the page also keeps
+// it, for a forced ask from a model change: a kind is also
 // asked again only 3 min after this window last asked, as cliagent backs off a
 // failed fetch like a success (limits.go:224-228), since a failure keeps the
 // old read_at. A kind without read_at counts as stale, as the terminal's
@@ -108,7 +109,9 @@ export function startLimitsPoll({ idle = () => true } = {}) {
     const now = Date.now();
     if (read && now - read[0] < STALE_MS) return;
     if (askedAt.has(kind) && now - askedAt.get(kind) < STALE_MS) return;
-    refreshLimitsFor(kind);
+    // A timer, so only what is due: the engine first takes any newer
+    // reading another engine saved, and asks the tool only after 3 min.
+    refreshLimitsFor(kind, { due: true });
   }, POLL_MS);
 }
 

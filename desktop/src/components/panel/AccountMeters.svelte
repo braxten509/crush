@@ -11,18 +11,22 @@
   // lib/stores/accountmeters.svelte.js reads them.
   import { limitKind } from "../../lib/footer.js";
   import { fallback } from "../../lib/fallback/store.svelte.js";
-  import { SPANS, accountGroups, accountMeters } from "../../lib/stores/accountmeters.svelte.js";
+  import { SPANS, accountGroups, accountMeters, setInUse } from "../../lib/stores/accountmeters.svelte.js";
   import { limits } from "../../lib/stores/limits.svelte.js";
   import { ws } from "../../lib/stores/workspace.svelte.js";
   import { agentNow } from "./panel.svelte.js";
+
+  // The shown chat's agent: a sub-agent's chat marks its own account.
+  const inUse = $derived({ kind: limitKind(agentNow(), ws.providers) ?? "", account: agentNow()?.model_cfg?.account ?? "" });
+  // Its sign-in is read every minute (accountmeters.svelte.js).
+  $effect(() => setInUse(inUse.kind, inUse.account));
 
   const groups = $derived(
     accountMeters.on
       ? accountGroups({
           accounts: fallback.accounts,
           byKind: limits.byKind,
-          // The shown chat's agent: a sub-agent's chat marks its own account.
-          inUse: { kind: limitKind(agentNow(), ws.providers) ?? "", account: agentNow()?.model_cfg?.account ?? "" },
+          inUse,
         })
       : [],
   );

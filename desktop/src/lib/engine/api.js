@@ -108,7 +108,12 @@ export const api = {
   // dir: the joined folder whose engine answers ("" for the shown folder).
   engine: (dir = "") => commands.api("GET", "/v1/engine", undefined, undefined, undefined, dir),
   limits: () => get("/v1/limits"),
-  refreshLimits: (kind) => post(`/v1/limits/${seg(kind)}/refresh`),
+  // due: ask the tool only if a reading is due (the timers); a click forces.
+  // account: only that sign-in ("" for the tool's own login).
+  refreshLimits: (kind, { due = false, account } = {}) => {
+    const query = { ...(due ? { due: "1" } : {}), ...(account !== undefined ? { account } : {}) };
+    return post(`/v1/limits/${seg(kind)}/refresh`, undefined, Object.keys(query).length ? query : undefined);
+  },
 
   config: () => get("config"),
   providers: () => get("providers"),

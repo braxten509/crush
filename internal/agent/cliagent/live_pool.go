@@ -55,6 +55,14 @@ func newLivePool[K comparable, L parkable[K]]() *livePool[K, L] {
 	return &livePool[K, L]{m: map[string]L{}}
 }
 
+// peek is the session's parked process, left where it is.
+func (pool *livePool[K, L]) peek(sessionID string) (L, bool) {
+	pool.mu.Lock()
+	defer pool.mu.Unlock()
+	l, ok := pool.m[sessionID]
+	return l, ok
+}
+
 // take hands over the session's live process if it can run a turn started
 // with key that resumes resume, closing it otherwise. It returns the zero
 // L when there is none to hand over.

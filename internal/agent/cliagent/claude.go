@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -120,7 +121,8 @@ type claudeKey struct {
 	// the old limit, so a change starts a new one.
 	stall time.Duration
 	// background is [Turn.AutoBackground]; it reaches the process as
-	// environment, so a change starts a new one.
+	// environment, so a change starts a new one, but only once the old
+	// one has no task running (see [keptBackground]).
 	background time.Duration
 }
 
@@ -431,6 +433,7 @@ func runClaude(ctx context.Context, m *Model, t Turn) error {
 	keep := !t.NoTools && t.SessionID != "" && !m.Guarded
 	var live *claudeLive
 	if keep {
+		key.background = keptBackground(t.SessionID, key.background)
 		live = claudeSessions.take(t.SessionID, key, t.Resume)
 		if live != nil {
 			// This turn now holds the session's run.
@@ -495,6 +498,18 @@ func runClaude(ctx context.Context, m *Model, t Turn) error {
 		return ErrResume
 	}
 	return exitError("claude", p)
+}
+
+// keptBackground is the background time a turn's key takes: the session's
+// kept process's own while a task it started still runs, so a changed
+// setting doesn't close that process and end its tasks; the new time is
+// taken up by the first turn after they finish. Until then Crush's own
+// watcher still moves a command at the new time when that is the shorter.
+func keptBackground(sessionID string, want time.Duration) time.Duration {
+	if kept, ok := claudeSessions.peek(sessionID); ok && kept.busy() {
+		return kept.key.background
+	}
+	return want
 }
 
 // background handles Ctrl+B by asking Claude Code to move its running
@@ -570,14 +585,18 @@ const claudeBashTimeout = 2 * time.Minute
 // claudeAutoBackground caps Claude Code's foreground Bash wait (its own
 // setting): past it the command moves to the background. Claude Code moves
 // a command at its time limit too, so a cap longer than that limit raises
-// the limit with it.
+// the limit with it, unless the user's own environment already sets a limit
+// at least that long. Claude Code's own helpers never move a command to the
+// background, so for them the raised limit is how long a command may run
+// before it is stopped: the user's time instead of 2 minutes.
 func claudeAutoBackground(after time.Duration) []string {
 	if after <= 0 {
 		after = autoBackgroundAfter
 	}
 	ms := strconv.FormatInt(after.Milliseconds(), 10)
 	env := []string{"CLAUDE_CODE_AUTO_BACKGROUND_TIMEOUT_MS=" + ms}
-	if after > claudeBashTimeout {
+	own, _ := strconv.ParseInt(os.Getenv("BASH_DEFAULT_TIMEOUT_MS"), 10, 64)
+	if after > claudeBashTimeout && own < after.Milliseconds() {
 		env = append(env, "BASH_DEFAULT_TIMEOUT_MS="+ms)
 	}
 	return env

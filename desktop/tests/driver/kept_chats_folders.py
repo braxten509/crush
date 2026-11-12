@@ -1,5 +1,8 @@
 """Real app check: empty chats stay listed; every sidebar folder stays live.
-Run through gpu-screen and run-in-sandbox.sh --no-app, with the real test engine.
+The app runs on Wayland with the real test engine, so it needs the private
+hidden KWin screen.
+
+Usage: tests/check.sh --no-app --kwin kept_chats_folders.py
 """
 import json, os, sys
 

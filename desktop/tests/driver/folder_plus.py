@@ -1,10 +1,14 @@
 """Folder + creates and keeps a new chat, in this folder and another one.
 
-Every frame for a second after each click is recorded too (owner,
+Every state of the list for a second after each click is recorded too (owner,
 2026-10-23, from a screencast of a wrong-frame flash): the new row must never
 show under another folder, never go missing from its own folder once drawn,
 no folder may lose its rows for a frame, and no row may be drawn without its
-title."""
+title.
+
+Usage: tests/check.sh --no-app --kwin folder_plus.py
+(the app runs on Wayland, so it needs the private hidden KWin screen)
+"""
 import json
 import os
 import sys
@@ -32,8 +36,11 @@ def run_async(script):
                       + "})() ?? null; } catch (e) { window.__probeEval = { error: String(e && e.stack || e) }; } })();")
 
 
-# Every frame for a second after the click: the groups as drawn, in order,
-# with each row's id and title. Started without waiting; read back later.
+# Every state the list takes for a second after the click: the groups as
+# shown, in order, with each row's id and title, sampled after each change
+# to the list (a MutationObserver runs once the page's update is done, so
+# each sample is a state that gets drawn; no drawn frames are needed, which
+# the hidden KWin screen does not give). Started without waiting; read back later.
 RECORD = """
   window.__frames = null;
   const frames = [];
@@ -44,14 +51,11 @@ RECORD = """
       title: (r.querySelector('.title')?.textContent || '').trim(),
     })),
   }));
-  let framesLeft = 60;
-  const tick = () => {
-    frames.push(sample());
-    framesLeft -= 1;
-    if (framesLeft <= 0) window.__frames = frames;
-    else requestAnimationFrame(tick);
-  };
-  requestAnimationFrame(tick);
+  frames.push(sample());
+  const list = document.querySelector('nav.chats');
+  const watch = new MutationObserver(() => frames.push(sample()));
+  watch.observe(list, { subtree: true, childList: true, characterData: true, attributes: true });
+  setTimeout(() => { watch.disconnect(); window.__frames = frames; }, 1000);
   return true;
 """
 
@@ -106,6 +110,14 @@ try:
         clicked = run('const button = document.querySelector(' + json.dumps('section[data-folder="' + folder + '"] .folder-new')
                       + '); button?.click(); return !!button;')
         check(clicked is True, "folder + clicked: " + folder)
+        # The + opens the folder's menu (owner, 2026-11-09); New Chat starts the chat.
+        picked = False
+        end = time.monotonic() + 5
+        while time.monotonic() < end and not picked:
+            picked = run('const item = document.querySelector(\'[data-plus-menu] [data-plus="session"]\'); item?.click(); return !!item;') is True
+            if not picked:
+                time.sleep(0.05)
+        check(picked, "the folder's menu offers New Chat: " + folder)
         p = app.wait_window(lambda p: shown(p) and shown(p) != previous, timeout=8)
         current = shown(p)
         check(bool(current) and current != previous, "+ shows a new saved chat in " + folder)

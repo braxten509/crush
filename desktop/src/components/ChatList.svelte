@@ -416,10 +416,10 @@
       style:visibility={plusPlace ? null : "hidden"}
       transition:unfold={{ from: "top" }}
     >
-      <button class="plus-entry" type="button" role="menuitem" onclick={() => pickPlus("session")}>New Chat</button>
-      <button class="plus-entry" type="button" role="menuitem" onclick={() => pickPlus("open")}>Open Chat</button>
-      <button class="plus-entry" type="button" role="menuitem" onclick={() => pickPlus("terminal")}>New Terminal</button>
-      <button class="plus-entry" type="button" role="menuitem" onclick={() => pickPlus("todo")}>New Todo</button>
+      <button class="plus-entry" type="button" role="menuitem" data-plus="session" onclick={() => pickPlus("session")}>New Chat</button>
+      <button class="plus-entry" type="button" role="menuitem" data-plus="open" onclick={() => pickPlus("open")}>Open Chat</button>
+      <button class="plus-entry" type="button" role="menuitem" data-plus="terminal" onclick={() => pickPlus("terminal")}>New Terminal</button>
+      <button class="plus-entry" type="button" role="menuitem" data-plus="todo" onclick={() => pickPlus("todo")}>New Todo</button>
     </div>
   {/if}
 

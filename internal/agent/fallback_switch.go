@@ -84,14 +84,15 @@ func (c *coordinator) chatReturn(sessionID string) *fallback.Return {
 }
 
 // fallbackOrder is the order a chat on cur follows (its picked model's
-// list, else every other model's) when the order is on.
+// list, else every other model's) when the order is on, its keep-model
+// blocks filled in with the chat's model (fallback.Keep).
 func (c *coordinator) fallbackOrder(cur config.SelectedModel) (config.FallbackOrder, bool) {
 	cfg := c.cfg.Config()
 	if cfg.Options == nil || cfg.Options.Fallback == nil || !cfg.Options.Fallback.On {
 		return config.FallbackOrder{}, false
 	}
 	provider, model := fallback.Chosen(cur)
-	return fallback.For(*cfg.Options.Fallback, provider, model), true
+	return fallback.Keep(fallback.For(*cfg.Options.Fallback, provider, model), c.providerKind, cur, provider, model), true
 }
 
 func (c *coordinator) providerKind(provider string) catwalk.Type {
@@ -234,7 +235,8 @@ func fallbackHolds(store *config.ConfigStore, m config.SelectedModel) bool {
 		return p.Type
 	}
 	provider, model := fallback.Chosen(m)
-	return fallback.Position(fallback.For(*cfg.Options.Fallback, provider, model), kindOf, m) >= 0
+	order := fallback.Keep(fallback.For(*cfg.Options.Fallback, provider, model), kindOf, m, provider, model)
+	return fallback.Position(order, kindOf, m) >= 0
 }
 
 // fallbackBeforeTurn moves the chat first when the order says so: back to

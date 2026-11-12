@@ -115,8 +115,16 @@ func checkFallbackBlocks(cfg *config.Config, blocks []config.FallbackBlock, wher
 	for i, blk := range blocks {
 		n := i + 1
 		kind := blk.Kind
-		switch blk.Type {
-		case config.FallbackUse:
+		switch {
+		case blk.Type == config.FallbackUse && blk.KeepModel:
+			// Keeps the chat's model: only a tool and one of its sign-ins.
+			if !config.HasAccounts(kind) {
+				return invalidFallback("block %d: pick a Claude or Codex account", n)
+			}
+			if blk.Provider != "" || blk.Model != "" || blk.Effort != "" {
+				return invalidFallback("block %d: keeps the chat's model, so it names none", n)
+			}
+		case blk.Type == config.FallbackUse:
 			p, ok := cfg.Providers.Get(blk.Provider)
 			if !ok {
 				return invalidFallback("block %d: unknown provider %q", n, blk.Provider)
@@ -128,7 +136,7 @@ func checkFallbackBlocks(cfg *config.Config, blocks []config.FallbackBlock, wher
 			if blk.Account != "" && !config.HasAccounts(kind) {
 				return invalidFallback("block %d: %s has no other accounts", n, p.Name)
 			}
-		case config.FallbackWait, config.FallbackRefill:
+		case blk.Type == config.FallbackWait || blk.Type == config.FallbackRefill:
 			if !config.HasAccounts(kind) {
 				return invalidFallback("block %d: pick a Claude or Codex account", n)
 			}

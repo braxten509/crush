@@ -12,7 +12,7 @@
   // setting on, nothing slides.
   import { onMount, tick } from "svelte";
   import { fallback, loadFallback, saveOrder } from "../../lib/fallback/store.svelte.js";
-  import { accountChoices, addList, blockKind, changeBlock, CODEX, effortsOf, fallbackProviders, listBlocks, listsOf, menuProviders, modelWithProvider, moveBlock, newBlock, removeList, sentence, withListBlocks } from "../../lib/fallback/blocks.js";
+  import { accountChoices, addList, blockKind, changeBlock, CODEX, effortsOf, fallbackProviders, keepChatModel, listBlocks, listsOf, menuProviders, modelWithProvider, moveBlock, newBlock, pickModel, removeList, sentence, withListBlocks } from "../../lib/fallback/blocks.js";
   import { modelData, watchModels } from "../../lib/models/store.svelte.js";
   import { MOTION_MS, reducedMotion, settle } from "../../lib/motion.js";
   import WordMenu from "./WordMenu.svelte";
@@ -122,8 +122,12 @@
   const unlisted = $derived(tools.map((p) => ({ ...p, models: p.models.filter((m) => !lists.some((l) => l.provider === p.id && l.model === m.id)) })).filter((p) => p.models.length));
 
   function change(i, fields) {
+    replace(i, changeBlock(blocks[i], fields));
+  }
+
+  function replace(i, block) {
     const next = [...blocks];
-    next[i] = changeBlock(next[i], fields);
+    next[i] = block;
     save(next);
   }
 
@@ -281,11 +285,15 @@
 
 {#snippet menuOf(name, i, block, done)}
   {#if name === "model"}
+    {@render pick(Boolean(block.keep_model), "the chat's own model", () => {
+      replace(i, keepChatModel(block, providers));
+      done();
+    })}
     {#each tools as p (p.id)}
       <span class="heading" role="presentation">{p.name}</span>
       {#each p.models as m (m.id)}
-        {@render pick(block.provider === p.id && block.model === m.id, m.name || m.id, () => {
-          change(i, p.id === block.provider ? { model: m.id, effort: "" } : { provider: p.id, model: m.id, account: "", effort: "" });
+        {@render pick(!block.keep_model && block.provider === p.id && block.model === m.id, m.name || m.id, () => {
+          replace(i, pickModel(block, providers, p.id, m.id));
           done();
         })}
       {/each}
@@ -293,7 +301,7 @@
   {:else if name === "account"}
     {#each accountChoices(block, ctx) as a (`${a.kind}/${a.id}`)}
       {@render pick(blockKind(block, providers) === a.kind && (block.account ?? "") === a.id, a.label || a.name, () => {
-        change(i, block.type === "use" ? { account: a.id } : { kind: a.kind, account: a.id });
+        change(i, block.type === "use" && !block.keep_model ? { account: a.id } : { kind: a.kind, account: a.id, refill_first: a.kind === CODEX && block.refill_first });
         done();
       })}
     {/each}

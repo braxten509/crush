@@ -188,6 +188,9 @@
         "effort": {
           "type": "string"
         },
+        "keep_model": {
+          "type": "boolean"
+        },
         "kind": {
           "type": "string"
         },

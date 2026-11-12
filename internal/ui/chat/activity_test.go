@@ -92,7 +92,7 @@ func TestWritingCommandStatus(t *testing.T) {
 	msg.AppendContent("I'll run the tests.")
 	msg.Activity, msg.ActivityAt = "writing", time.Now().Unix()
 	item := NewAssistantMessageItem(&sty, msg).(*AssistantMessageItem)
-	require.NotEmpty(t, ansi.Strip(item.renderSpinning()))
+	require.Equal(t, StatusWritingCommand, item.activityStatus(time.Now()))
 
 	call := message.ToolCall{ID: "done", Name: "bash", Input: `{"command":"true"}`, Finished: true}
 	tool := NewToolMessageItem(&sty, "message", call, nil, false, "")

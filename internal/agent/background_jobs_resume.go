@@ -156,6 +156,13 @@ func (h *taskHub) reportInterruptedJobs(ctx context.Context, claimed []savedJob)
 	}
 }
 
+// How a job's line in the notice says it ended: the agent restarts work
+// differently after a crash than after a clean close.
+const (
+	jobEndedInCrash = "ended when Crush stopped unexpectedly"
+	jobEndedAtClose = "ended when Crush closed"
+)
+
 func interruptedJobsNotification(jobs []savedJob) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Crush stopped while %d of your crush bg jobs were still running, which ended them. Crush will never report their completion:\n", len(jobs))
@@ -167,9 +174,9 @@ func interruptedJobsNotification(jobs []savedJob) string {
 		}
 		fmt.Fprintf(&b, "\n- Job %s (%s), started %s", s.ID, name, s.Started.Local().Format("2006-01-02 15:04"))
 		if s.Interrupted.IsZero() {
-			b.WriteString(", ended when Crush stopped unexpectedly")
+			b.WriteString(", " + jobEndedInCrash)
 		} else {
-			fmt.Fprintf(&b, ", ended when Crush closed at %s", s.Interrupted.Local().Format("15:04"))
+			fmt.Fprintf(&b, ", "+jobEndedAtClose+" at %s", s.Interrupted.Local().Format("15:04"))
 		}
 		if s.Service {
 			fmt.Fprint(&b, "\n  Long-running service; use crush bg --service if restarting it.")

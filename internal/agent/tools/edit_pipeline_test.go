@@ -102,6 +102,11 @@ func TestCheckFreshWording(t *testing.T) {
 	stale := &mockEditFileTracker{lastRead: info.ModTime().Add(-time.Hour)}
 	require.NotEmpty(t, checkFresh(ctx, stale, "s", path, info, staleEdit), "a file changed since its read is refused")
 	require.NotEmpty(t, checkFresh(ctx, stale, "s", path, info, staleWrite), "a file changed since its read is refused")
+	// The two refusals give different advice (read it first; read it
+	// again), so they must not say the same thing.
+	for _, mode := range []staleStyle{staleEdit, staleWrite} {
+		require.NotEqual(t, checkFresh(ctx, never, "s", path, info, mode), checkFresh(ctx, stale, "s", path, info, mode))
+	}
 
 	fresh := &mockEditFileTracker{lastRead: info.ModTime().Add(time.Second)}
 	require.Empty(t, checkFresh(ctx, fresh, "s", path, info, staleEdit))

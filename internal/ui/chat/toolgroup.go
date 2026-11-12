@@ -21,6 +21,11 @@ const toolGroupShown = 5
 const (
 	StatusThinking   = "Thinking"
 	StatusCompacting = "Compacting conversation"
+	// StatusWritingCommand shows while the model writes a tool call.
+	StatusWritingCommand = "Writing command"
+	// StatusFilesDeleted is a group header's note that its tools deleted
+	// files, when there is no diff to link.
+	StatusFilesDeleted = "Some files were deleted"
 )
 
 // ToolGroupItem folds a run of tool calls (and the thinking-only steps
@@ -315,7 +320,7 @@ func (g *ToolGroupItem) status() string {
 				return status
 			}
 			if last.message.Activity == "writing" {
-				return "Writing command"
+				return StatusWritingCommand
 			}
 			return StatusThinking
 		}

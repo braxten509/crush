@@ -53,8 +53,11 @@ func TestTestConnection(t *testing.T) {
 		// offline Bedrock key check.
 		legacyBedrock := catwalk.Type("bedrock")
 		require.NoError(t, TestConnection(Endpoint{ID: "b", Type: legacyBedrock, APIKey: "ABSK123"}, identity))
-		require.Error(t, TestConnection(Endpoint{ID: "b", Type: legacyBedrock, APIKey: "nope"}, identity))
-		require.Error(t, TestConnection(Endpoint{ID: string(catwalk.InferenceProviderAlibabaSingapore), APIKey: "nope"}, identity))
+		// Refused by its format alone: without that check the key would go
+		// out in a request, which fails too.
+		var format *KeyFormatError
+		require.ErrorAs(t, TestConnection(Endpoint{ID: "b", Type: legacyBedrock, APIKey: "nope"}, identity), &format)
+		require.ErrorAs(t, TestConnection(Endpoint{ID: string(catwalk.InferenceProviderAlibabaSingapore), APIKey: "nope"}, identity), &format)
 	})
 
 	// Since catwalk v3, provider types without an SDK of their own (custom

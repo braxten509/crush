@@ -49,7 +49,10 @@ func TestCapabilitiesReportModelSupport(t *testing.T) {
 	}
 	opus := liveJSON[proto.AgentCapabilities](t, h, http.MethodGet, path+"opus", nil, http.StatusOK)
 	plain := liveJSON[proto.AgentCapabilities](t, h, http.MethodGet, path+"plain", nil, http.StatusOK)
-	require.NotEqual(t, opus, plain, "each chat answers for its own model")
+	require.True(t, opus.SupportsFast)
+	require.True(t, opus.CanBackground)
+	require.False(t, plain.SupportsFast)
+	require.False(t, plain.CanBackground, "each chat answers for its own model")
 }
 
 // TestPendingQuestionRoute: the question a chat waits on can be read

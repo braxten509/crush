@@ -543,8 +543,17 @@ describe("agent tools' chats (CHAT-078)", () => {
       chunks.push(ev("message", "updated", msg("n2", { sid: "a1$$call-2", text: `two ${i}`, at: 5 })));
     }
     await deliver(...chunks);
-    slow.resolve([msg("a1", { calls: [["call-1", "agent"], ["call-2", "agent"]] })]);
-    await loading;
+    // The final text alone would be right with all 80 held too: count the
+    // replays, one per message.
+    const { SvelteMap } = await import("svelte/reactivity");
+    const set = vi.spyOn(SvelteMap.prototype, "set");
+    try {
+      slow.resolve([msg("a1", { calls: [["call-1", "agent"], ["call-2", "agent"]] })]);
+      await loading;
+      expect(set.mock.calls.filter(([id]) => id === "n1" || id === "n2")).toHaveLength(2);
+    } finally {
+      set.mockRestore();
+    }
     expect(textOf(chatOf("a1$$call-1").byId.get("n1"))).toBe("one 40");
     expect(textOf(chatOf("a1$$call-2").byId.get("n2"))).toBe("two 40");
   });

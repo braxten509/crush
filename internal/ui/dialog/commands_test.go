@@ -1,6 +1,7 @@
 package dialog
 
 import (
+	tea "charm.land/bubbletea/v2"
 	"testing"
 
 	"github.com/charmbracelet/crush/internal/config"
@@ -26,5 +27,7 @@ func TestCommandsRefreshKeepsTheFilter(t *testing.T) {
 	require.Equal(t, "remot", c.input.Value())
 	c.HandleMsg(kittest.KeyMsg('e'))
 
-	require.Equal(t, "remote", c.input.Value())
+	// The list is still filtered too, not only the typed text kept: Enter
+	// runs the one command that matches.
+	require.Equal(t, ActionOpenDialog{RemoteID}, c.HandleMsg(tea.KeyPressMsg{Code: tea.KeyEnter}))
 }

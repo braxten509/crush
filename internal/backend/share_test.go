@@ -697,25 +697,25 @@ func TestRemoteEngineActionRefusals(t *testing.T) {
 		return answerOn(srv, a)
 	}
 
-	require.Error(t, answer(ShareAction{Kind: ShareSend, SessionID: "chat-2", Text: "x"}))
+	require.ErrorIs(t, answer(ShareAction{Kind: ShareSend, SessionID: "chat-2", Text: "x"}), errPhoneOtherChat)
 
 	coord.setBusy(true)
 	for _, kind := range []ShareActionKind{ShareModel, ShareEffort, ShareThink, ShareFast, ShareUltracode, ShareSummarize} {
-		require.Error(t, answer(ShareAction{Kind: kind, SessionID: "chat-1"}), "kind %d", kind)
+		require.ErrorIs(t, answer(ShareAction{Kind: kind, SessionID: "chat-1"}), errPhoneAgentBusy, "kind %d", kind)
 	}
 	coord.setBusy(false)
 
-	require.Error(t, answer(ShareAction{Kind: ShareFast, SessionID: "chat-1"}))
+	require.ErrorIs(t, answer(ShareAction{Kind: ShareFast, SessionID: "chat-1"}), errPhoneFastNeedsCodex)
 	require.Error(t, answer(ShareAction{Kind: ShareActionKind(42), SessionID: "chat-1"}))
-	require.Error(t, answer(ShareAction{Kind: ShareModel, SessionID: "chat-1", Provider: "nope", Model: "m"}))
-	require.Error(t, answer(ShareAction{Kind: ShareModel, SessionID: "chat-1", Provider: "plain", Model: "nope"}))
-	require.Error(t, answer(ShareAction{Kind: ShareBackground, SessionID: "chat-1"}))
+	require.ErrorIs(t, answer(ShareAction{Kind: ShareModel, SessionID: "chat-1", Provider: "nope", Model: "m"}), errPhoneNoCLI)
+	require.ErrorIs(t, answer(ShareAction{Kind: ShareModel, SessionID: "chat-1", Provider: "plain", Model: "nope"}), errPhoneNoModel)
+	require.ErrorIs(t, answer(ShareAction{Kind: ShareBackground, SessionID: "chat-1"}), errPhoneNoBackground)
 
 	// The window moved to its new chat; chat-1's share stays there.
 	shareTestView(t, b, ws, owner, "")
-	require.Error(t, answer(ShareAction{Kind: ShareSummarize}))
+	require.ErrorIs(t, answer(ShareAction{Kind: ShareSummarize}), errPhoneOtherChat)
 	newChat := shareTestStart(t, b, ws, owner, "")
-	require.Error(t, answerOn(newChat, ShareAction{Kind: ShareSummarize}))
+	require.ErrorIs(t, answerOn(newChat, ShareAction{Kind: ShareSummarize}), errPhoneNothingToSummarize)
 
 	// Before the agent started, a send has no agent to go to.
 	b2, ws2 := shareTestWorkspace(t, nil)
@@ -724,7 +724,7 @@ func TestRemoteEngineActionRefusals(t *testing.T) {
 	srv2 := shareTestStart(t, b2, ws2, owner2, "chat-1")
 	action, reply := shareTestAction(t, ShareAction{Kind: ShareSend, SessionID: "chat-1", Text: "x"})
 	srv2.offer(t, action)
-	require.Error(t, shareTestReply(t, reply))
+	require.ErrorIs(t, shareTestReply(t, reply), errPhoneAgentNotReady)
 }
 
 // TestRemoteActionNotTakenFailsFast: a forwarded action that no stream takes
@@ -740,7 +740,7 @@ func TestRemoteActionNotTakenFailsFast(t *testing.T) {
 		t.Helper()
 		action, reply := shareTestAction(t, ShareAction{Kind: ShareYolo})
 		srv.offer(t, action)
-		require.Error(t, shareTestRecv(t, reply, 5*time.Second), name)
+		require.ErrorIs(t, shareTestRecv(t, reply, 5*time.Second), errPhoneNotResponding, name)
 	}
 
 	check("no stream")
@@ -772,8 +772,8 @@ func TestRemoteActionTimeout(t *testing.T) {
 	hanging, hangingReply := shareTestAction(t, ShareAction{Kind: ShareInterrupt, SessionID: "chat-1"})
 	srv.offer(t, hanging)
 
-	require.Error(t, shareTestReply(t, forwardedReply))
-	require.Error(t, shareTestReply(t, hangingReply))
+	require.ErrorIs(t, shareTestReply(t, forwardedReply), errPhoneWindowNoAnswer)
+	require.ErrorIs(t, shareTestReply(t, hangingReply), errPhoneEngineNoAnswer)
 	elapsed := time.Since(start)
 	require.GreaterOrEqual(t, elapsed, 200*time.Millisecond, "the answers wait for the timer")
 	require.Less(t, elapsed, 30*time.Second)
@@ -837,7 +837,7 @@ func TestRemoteShareOutlivesTheAppThatStartedIt(t *testing.T) {
 		shareTestWaitEvent(t, events, pubsub.PayloadTypeRemoteAction)
 
 		require.NoError(t, b.RetireClient(owner))
-		require.Error(t, shareTestReply(t, reply))
+		require.ErrorIs(t, shareTestReply(t, reply), errPhoneWindowClosed)
 		require.Zero(t, srv.stops.Load(), "the share keeps going")
 		got, err := b.RemoteShares(ws.ID, other)
 		require.NoError(t, err)
@@ -901,7 +901,7 @@ func TestRemoteShareOutlivesTheAppThatStartedIt(t *testing.T) {
 		shareTestWaitEvent(t, events, pubsub.PayloadTypeRemoteAction)
 
 		require.NoError(t, b.RetireClient(owner))
-		require.Error(t, shareTestReply(t, reply))
+		require.ErrorIs(t, shareTestReply(t, reply), errPhoneWindowClosed)
 		require.EqualValues(t, 1, srv.stops.Load())
 	})
 }

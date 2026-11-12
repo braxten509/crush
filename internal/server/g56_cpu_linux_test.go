@@ -35,10 +35,20 @@ func TestCPUAffinityRoute(t *testing.T) {
 	liveError(t, g.h, http.MethodPost, "/v1/cpu-affinity", proto.CPUAffinityRequest{Enabled: true}, http.StatusForbidden, "local_only", "")
 	require.False(t, store.Config().Options.AgentCPUsEnabled, "a TCP request changes nothing")
 
-	// Nor can TCP remove the CPU list through the ordinary config routes
-	// (TestCPUConfigWritesMatchLoaderSpelling covers every spelling), while
-	// other keys still work there.
+	// Nor can TCP reach the CPU setting through the ordinary config routes,
+	// by its plain key, with a leading colon or inside a whole object
+	// (TestCPUConfigWritesMatchLoaderSpelling covers the letter cases),
+	// while other keys still work there.
 	cfgPath := "/v1/workspaces/" + g.ws.ID + "/config/"
+	for _, key := range []string{"options.agent_cpus_enabled", ":options.agent_cpus_enabled", "options"} {
+		value := any(true)
+		if key == "options" {
+			value = map[string]any{"agent_cpus_enabled": true}
+		}
+		liveError(t, g.h, http.MethodPost, cfgPath+"set",
+			proto.ConfigSetRequest{Scope: config.ScopeGlobal, Key: key, Value: value}, http.StatusForbidden, "local_only", "")
+	}
+	require.False(t, store.Config().Options.AgentCPUsEnabled, "a TCP config set changes nothing")
 	liveError(t, g.h, http.MethodPost, cfgPath+"remove",
 		proto.ConfigRemoveRequest{Scope: config.ScopeGlobal, Key: "options.agent_cpus"}, http.StatusForbidden, "local_only", "")
 	require.Equal(t, agentCPUs, store.Config().Options.AgentCPUs, "a TCP config remove changes nothing")

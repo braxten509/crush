@@ -3,6 +3,7 @@ package chat
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/ui/styles"
@@ -61,10 +62,12 @@ func TestCompactingStatus(t *testing.T) {
 		msg.AppendReasoningContent("Preparing context.")
 		item := NewAssistantMessageItem(&sty, msg).(*AssistantMessageItem)
 		require.False(t, Foldable(item), "compaction must stay visible outside tool groups")
+		require.Equal(t, StatusCompacting, item.activityStatus(time.Now()))
 
 		if !summary {
 			msg.IsCompacting = false
 			item.SetMessage(msg)
+			require.Equal(t, StatusThinking, item.activityStatus(time.Now()), "compaction over: the reply's own status is back")
 		}
 		for _, reason := range []message.FinishReason{message.FinishReasonEndTurn, message.FinishReasonCanceled, message.FinishReasonError} {
 			finished := msg.Clone()
@@ -86,6 +89,7 @@ func TestCompactionShowsOnlyStatus(t *testing.T) {
 		msg.AppendReasoningContent("Internal summary reasoning")
 		item := newAssistantMessageItem(&sty, msg, false).(*AssistantMessageItem)
 		requireSummaryHidden(t, ansi.Strip(item.RawRender(100)))
+		require.Contains(t, ansi.Strip(item.RawRender(100)), StatusCompacting, "the status is what shows")
 		require.Empty(t, item.CopySource())
 		if summary {
 			msg.AddFinish(message.FinishReasonEndTurn, "", "")

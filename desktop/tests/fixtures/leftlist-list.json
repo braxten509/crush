@@ -101,7 +101,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "fake-large",
+     "provider": "fake",
+     "reasoning_effort": "high"
+    }
    },
    {
     "id": "done",
@@ -124,7 +129,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "fake-large",
+     "provider": "fake",
+     "reasoning_effort": "high"
+    }
    },
    {
     "id": "wait",
@@ -147,7 +157,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": "permission"
+    "pending_prompt": "permission",
+    "model": {
+     "model": "fake-large",
+     "provider": "fake",
+     "reasoning_effort": "high"
+    }
    },
    {
     "id": "bg",
@@ -170,7 +185,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": true,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "fake-large",
+     "provider": "fake",
+     "reasoning_effort": "high"
+    }
    },
    {
     "id": "ready",
@@ -193,7 +213,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "fake-large",
+     "provider": "fake",
+     "reasoning_effort": "high"
+    }
    },
    {
     "id": "untitled",
@@ -216,7 +241,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "fake-large",
+     "provider": "fake",
+     "reasoning_effort": "high"
+    }
    },
    {
     "id": "pic",
@@ -239,7 +269,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "fake-large",
+     "provider": "fake",
+     "reasoning_effort": "high"
+    }
    },
    {
     "id": "yday",
@@ -262,7 +297,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "fake-large",
+     "provider": "fake",
+     "reasoning_effort": "high"
+    }
    },
    {
     "id": "note-01",
@@ -285,7 +325,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "fake-large",
+     "provider": "fake",
+     "reasoning_effort": "high"
+    }
    },
    {
     "id": "note-02",
@@ -308,7 +353,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "fake-large",
+     "provider": "fake",
+     "reasoning_effort": "high"
+    }
    },
    {
     "id": "note-03",
@@ -331,7 +381,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "fake-large",
+     "provider": "fake",
+     "reasoning_effort": "high"
+    }
    },
    {
     "id": "note-04",
@@ -354,7 +409,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "fake-large",
+     "provider": "fake",
+     "reasoning_effort": "high"
+    }
    },
    {
     "id": "note-05",
@@ -377,7 +437,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "fake-large",
+     "provider": "fake",
+     "reasoning_effort": "high"
+    }
    },
    {
     "id": "note-06",
@@ -400,7 +465,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "fake-large",
+     "provider": "fake",
+     "reasoning_effort": "high"
+    }
    },
    {
     "id": "note-07",
@@ -423,7 +493,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "fake-large",
+     "provider": "fake",
+     "reasoning_effort": "high"
+    }
    },
    {
     "id": "note-08",
@@ -446,7 +521,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "fake-large",
+     "provider": "fake",
+     "reasoning_effort": "high"
+    }
    },
    {
     "id": "note-09",
@@ -469,7 +549,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "fake-large",
+     "provider": "fake",
+     "reasoning_effort": "high"
+    }
    },
    {
     "id": "note-10",
@@ -492,7 +577,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "fake-large",
+     "provider": "fake",
+     "reasoning_effort": "high"
+    }
    },
    {
     "id": "note-11",
@@ -515,7 +605,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "fake-large",
+     "provider": "fake",
+     "reasoning_effort": "high"
+    }
    },
    {
     "id": "note-12",
@@ -538,7 +633,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "fake-large",
+     "provider": "fake",
+     "reasoning_effort": "high"
+    }
    },
    {
     "id": "note-13",
@@ -561,7 +661,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "fake-large",
+     "provider": "fake",
+     "reasoning_effort": "high"
+    }
    },
    {
     "id": "note-14",
@@ -584,7 +689,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "fake-large",
+     "provider": "fake",
+     "reasoning_effort": "high"
+    }
    },
    {
     "id": "note-15",
@@ -607,7 +717,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "fake-large",
+     "provider": "fake",
+     "reasoning_effort": "high"
+    }
    },
    {
     "id": "note-16",
@@ -630,7 +745,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "fake-large",
+     "provider": "fake",
+     "reasoning_effort": "high"
+    }
    },
    {
     "id": "note-17",
@@ -653,7 +773,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "fake-large",
+     "provider": "fake",
+     "reasoning_effort": "high"
+    }
    },
    {
     "id": "note-18",
@@ -676,7 +801,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "fake-large",
+     "provider": "fake",
+     "reasoning_effort": "high"
+    }
    },
    {
     "id": "note-19",
@@ -699,7 +829,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "fake-large",
+     "provider": "fake",
+     "reasoning_effort": "high"
+    }
    },
    {
     "id": "note-20",
@@ -722,7 +857,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "fake-large",
+     "provider": "fake",
+     "reasoning_effort": "high"
+    }
    },
    {
     "id": "note-21",
@@ -745,7 +885,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "fake-large",
+     "provider": "fake",
+     "reasoning_effort": "high"
+    }
    },
    {
     "id": "note-22",
@@ -768,7 +913,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "fake-large",
+     "provider": "fake",
+     "reasoning_effort": "high"
+    }
    },
    {
     "id": "note-23",
@@ -791,7 +941,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "fake-large",
+     "provider": "fake",
+     "reasoning_effort": "high"
+    }
    },
    {
     "id": "note-24",
@@ -814,7 +969,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "fake-large",
+     "provider": "fake",
+     "reasoning_effort": "high"
+    }
    }
   ],
   "sessions/spin": {
@@ -838,7 +998,12 @@
    },
    "estimated_usage": false,
    "has_unfinished_work": false,
-   "pending_prompt": ""
+   "pending_prompt": "",
+   "model": {
+    "model": "fake-large",
+    "provider": "fake",
+    "reasoning_effort": "high"
+   }
   },
   "sessions/done": {
    "id": "done",
@@ -861,7 +1026,12 @@
    },
    "estimated_usage": false,
    "has_unfinished_work": false,
-   "pending_prompt": ""
+   "pending_prompt": "",
+   "model": {
+    "model": "fake-large",
+    "provider": "fake",
+    "reasoning_effort": "high"
+   }
   },
   "sessions/wait": {
    "id": "wait",
@@ -884,7 +1054,12 @@
    },
    "estimated_usage": false,
    "has_unfinished_work": false,
-   "pending_prompt": "permission"
+   "pending_prompt": "permission",
+   "model": {
+    "model": "fake-large",
+    "provider": "fake",
+    "reasoning_effort": "high"
+   }
   },
   "sessions/bg": {
    "id": "bg",
@@ -907,7 +1082,12 @@
    },
    "estimated_usage": false,
    "has_unfinished_work": true,
-   "pending_prompt": ""
+   "pending_prompt": "",
+   "model": {
+    "model": "fake-large",
+    "provider": "fake",
+    "reasoning_effort": "high"
+   }
   },
   "sessions/ready": {
    "id": "ready",
@@ -930,7 +1110,12 @@
    },
    "estimated_usage": false,
    "has_unfinished_work": false,
-   "pending_prompt": ""
+   "pending_prompt": "",
+   "model": {
+    "model": "fake-large",
+    "provider": "fake",
+    "reasoning_effort": "high"
+   }
   },
   "sessions/untitled": {
    "id": "untitled",
@@ -953,7 +1138,12 @@
    },
    "estimated_usage": false,
    "has_unfinished_work": false,
-   "pending_prompt": ""
+   "pending_prompt": "",
+   "model": {
+    "model": "fake-large",
+    "provider": "fake",
+    "reasoning_effort": "high"
+   }
   },
   "sessions/pic": {
    "id": "pic",
@@ -976,7 +1166,12 @@
    },
    "estimated_usage": false,
    "has_unfinished_work": false,
-   "pending_prompt": ""
+   "pending_prompt": "",
+   "model": {
+    "model": "fake-large",
+    "provider": "fake",
+    "reasoning_effort": "high"
+   }
   },
   "sessions/yday": {
    "id": "yday",
@@ -999,7 +1194,12 @@
    },
    "estimated_usage": false,
    "has_unfinished_work": false,
-   "pending_prompt": ""
+   "pending_prompt": "",
+   "model": {
+    "model": "fake-large",
+    "provider": "fake",
+    "reasoning_effort": "high"
+   }
   },
   "sessions/done/messages": [
    {
@@ -1385,7 +1585,12 @@
     "pid": 4242,
     "session_id": "wait"
    }
-  ]
+  ],
+  "last-pick": {
+   "model": "fake-large",
+   "provider": "fake",
+   "reasoning_effort": "high"
+  }
  },
  "events": [
   {
@@ -1434,6 +1639,13 @@
     "channels": [],
     "skills": [],
     "protocol": 1
+   },
+   "get": {
+    "last-pick": {
+     "model": "fake-large",
+     "provider": "fake",
+     "reasoning_effort": "high"
+    }
    }
   }
  }

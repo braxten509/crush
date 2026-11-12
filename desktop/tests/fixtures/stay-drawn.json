@@ -57,7 +57,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "opus",
+     "provider": "claude-code",
+     "reasoning_effort": "max"
+    }
    },
    {
     "id": "7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f02",
@@ -80,7 +85,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "opus",
+     "provider": "claude-code",
+     "reasoning_effort": "max"
+    }
    },
    {
     "id": "7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f01",
@@ -103,7 +113,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "opus",
+     "provider": "claude-code",
+     "reasoning_effort": "max"
+    }
    },
    {
     "id": "7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f04",
@@ -126,7 +141,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": true,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "opus",
+     "provider": "claude-code",
+     "reasoning_effort": "max"
+    }
    },
    {
     "id": "7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f05",
@@ -149,7 +169,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": "permission"
+    "pending_prompt": "permission",
+    "model": {
+     "model": "opus",
+     "provider": "claude-code",
+     "reasoning_effort": "max"
+    }
    }
   ],
   "sessions/7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f01": {
@@ -173,7 +198,12 @@
    },
    "estimated_usage": false,
    "has_unfinished_work": false,
-   "pending_prompt": ""
+   "pending_prompt": "",
+   "model": {
+    "model": "opus",
+    "provider": "claude-code",
+    "reasoning_effort": "max"
+   }
   },
   "sessions/7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f01/messages": [
    {
@@ -2134,7 +2164,12 @@
    },
    "estimated_usage": false,
    "has_unfinished_work": false,
-   "pending_prompt": ""
+   "pending_prompt": "",
+   "model": {
+    "model": "opus",
+    "provider": "claude-code",
+    "reasoning_effort": "max"
+   }
   },
   "sessions/7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f04/messages": [
    {
@@ -2311,7 +2346,12 @@
    },
    "estimated_usage": false,
    "has_unfinished_work": false,
-   "pending_prompt": ""
+   "pending_prompt": "",
+   "model": {
+    "model": "opus",
+    "provider": "claude-code",
+    "reasoning_effort": "max"
+   }
   },
   "sessions/7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f05/messages": [
    {
@@ -2643,7 +2683,12 @@
     "created_at": 1792320240,
     "updated_at": 1792320250
    }
-  ]
+  ],
+  "last-pick": {
+   "model": "opus",
+   "provider": "claude-code",
+   "reasoning_effort": "max"
+  }
  },
  "events": [
   {
@@ -2741,7 +2786,12 @@
       },
       "estimated_usage": false,
       "has_unfinished_work": false,
-      "pending_prompt": ""
+      "pending_prompt": "",
+      "model": {
+       "model": "opus",
+       "provider": "claude-code",
+       "reasoning_effort": "max"
+      }
      }
     ],
     "sessions/b0b0b0b0-1111-4222-8333-000000000001": {
@@ -2765,7 +2815,12 @@
      },
      "estimated_usage": false,
      "has_unfinished_work": false,
-     "pending_prompt": ""
+     "pending_prompt": "",
+     "model": {
+      "model": "opus",
+      "provider": "claude-code",
+      "reasoning_effort": "max"
+     }
     },
     "sessions/b0b0b0b0-1111-4222-8333-000000000001/messages": [
      {
@@ -2925,7 +2980,12 @@
      "branch": "beta-branch"
     },
     "sessions/7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f05": null,
-    "sessions/7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f05/messages": null
+    "sessions/7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f05/messages": null,
+    "last-pick": {
+     "model": "opus",
+     "provider": "claude-code",
+     "reasoning_effort": "max"
+    }
    }
   }
  }

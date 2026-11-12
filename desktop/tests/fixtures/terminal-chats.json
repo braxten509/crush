@@ -56,7 +56,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "fake-large",
+     "provider": "fake",
+     "reasoning_effort": "high"
+    }
    },
    {
     "id": "busy",
@@ -79,7 +84,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "fake-large",
+     "provider": "fake",
+     "reasoning_effort": "high"
+    }
    }
   ],
   "sessions/idle": {
@@ -103,7 +113,12 @@
    },
    "estimated_usage": false,
    "has_unfinished_work": false,
-   "pending_prompt": ""
+   "pending_prompt": "",
+   "model": {
+    "model": "fake-large",
+    "provider": "fake",
+    "reasoning_effort": "high"
+   }
   },
   "sessions/idle/messages": [
    {
@@ -169,7 +184,12 @@
    },
    "estimated_usage": false,
    "has_unfinished_work": false,
-   "pending_prompt": ""
+   "pending_prompt": "",
+   "model": {
+    "model": "fake-large",
+    "provider": "fake",
+    "reasoning_effort": "high"
+   }
   },
   "sessions/busy/messages": [
    {
@@ -257,7 +277,12 @@
   },
   "lsps": {},
   "mcp/states": {},
-  "skills": []
+  "skills": [],
+  "last-pick": {
+   "model": "fake-large",
+   "provider": "fake",
+   "reasoning_effort": "high"
+  }
  },
  "events": []
 }

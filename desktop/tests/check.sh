@@ -43,7 +43,22 @@ mkdir -p "$OUT"
 snap="$OUT/outside-before.json"
 python3 -I tests/outside-check.py snapshot "$snap"
 
-# CHECK_ARGS adds app arguments, such as -s CHAT to open a chat.
+# CHECK_ARGS adds app arguments, such as -s CHAT to open a chat. When it is
+# not set at all, the driver's own Usage line gives it (CHECK_ARGS="..." in
+# its docstring), so a check that needs a chat open gets it without the
+# caller remembering; CHECK_ARGS= (set, empty) starts with no arguments.
+if [ -z "${CHECK_ARGS+set}" ]; then
+  CHECK_ARGS="$(python3 -I - "$ROOT/tests/driver/$(basename "$DRIVER")" <<'PY'
+import ast, re, sys
+try:
+    doc = ast.get_docstring(ast.parse(open(sys.argv[1]).read())) or ""
+except OSError:
+    doc = ""
+m = re.search(r'CHECK_ARGS="([^"]*)"', doc)
+print(m.group(1) if m else "")
+PY
+)"
+fi
 export DESKTOP_ARGS="${FIXTURE:+--fixture $FIXTURE}${CHECK_ARGS:+ $CHECK_ARGS}"
 if [ -x "$CRUSH" ]; then export DESKTOP_CRUSH="$CRUSH"; fi
 tests/sandbox.sh ${SIZE:+-s "$SIZE"} $KWIN tests/run-in-sandbox.sh $NO_APP "$DRIVER" "$@" 2>&1 | tee "$OUT/check.log"

@@ -47,7 +47,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "gpt-6.1-sol",
+     "provider": "codex-cli",
+     "reasoning_effort": "high"
+    }
    },
    {
     "id": "7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f02",
@@ -70,7 +75,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "gpt-6.1-sol",
+     "provider": "codex-cli",
+     "reasoning_effort": "high"
+    }
    },
    {
     "id": "7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f01",
@@ -93,7 +103,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "gpt-6.1-sol",
+     "provider": "codex-cli",
+     "reasoning_effort": "high"
+    }
    },
    {
     "id": "7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f04",
@@ -116,7 +131,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": true,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "gpt-6.1-sol",
+     "provider": "codex-cli",
+     "reasoning_effort": "high"
+    }
    },
    {
     "id": "7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f05",
@@ -139,7 +159,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": "permission"
+    "pending_prompt": "permission",
+    "model": {
+     "model": "gpt-6.1-sol",
+     "provider": "codex-cli",
+     "reasoning_effort": "high"
+    }
    }
   ],
   "sessions/7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f01": {
@@ -163,7 +188,12 @@
    },
    "estimated_usage": false,
    "has_unfinished_work": false,
-   "pending_prompt": ""
+   "pending_prompt": "",
+   "model": {
+    "model": "gpt-6.1-sol",
+    "provider": "codex-cli",
+    "reasoning_effort": "high"
+   }
   },
   "sessions/7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f01/messages": [
    {
@@ -527,6 +557,11 @@
      }
     ]
    }
+  },
+  "last-pick": {
+   "model": "gpt-6.1-sol",
+   "provider": "codex-cli",
+   "reasoning_effort": "high"
   }
  },
  "events": []

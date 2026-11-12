@@ -29,6 +29,7 @@
   }
  },
  "get": {
+  "last-pick": {"model": "fake-large", "provider": "fake", "reasoning_effort": "high"},
   "sessions": [],
   "chat-links": [],
   "/v1/limits": {

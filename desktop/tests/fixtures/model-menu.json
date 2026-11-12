@@ -35,6 +35,7 @@
   }
  },
  "get": {
+  "last-pick": {"model": "opus", "provider": "claude-code", "reasoning_effort": "max"},
   "sessions": [
    {
     "id": "7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f03",

@@ -505,7 +505,12 @@
   },
   "lsps": {},
   "mcp/states": {},
-  "skills": []
+  "skills": [],
+  "last-pick": {
+   "model": "opus",
+   "provider": "claude-code",
+   "reasoning_effort": "max"
+  }
  },
  "events": []
 }

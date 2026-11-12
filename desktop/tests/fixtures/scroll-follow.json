@@ -107,7 +107,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "sonnet",
+     "provider": "claude-code",
+     "reasoning_effort": "high"
+    }
    },
    {
     "id": "1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e02",
@@ -130,7 +135,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "sonnet",
+     "provider": "claude-code",
+     "reasoning_effort": "high"
+    }
    }
   ],
   "sessions/1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e01": {
@@ -154,7 +164,12 @@
    },
    "estimated_usage": false,
    "has_unfinished_work": false,
-   "pending_prompt": ""
+   "pending_prompt": "",
+   "model": {
+    "model": "sonnet",
+    "provider": "claude-code",
+    "reasoning_effort": "high"
+   }
   },
   "sessions/1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e01/messages": [
    {
@@ -221,7 +236,12 @@
    },
    "estimated_usage": false,
    "has_unfinished_work": false,
-   "pending_prompt": ""
+   "pending_prompt": "",
+   "model": {
+    "model": "sonnet",
+    "provider": "claude-code",
+    "reasoning_effort": "high"
+   }
   },
   "sessions/1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e11/messages": [
    {
@@ -869,7 +889,12 @@
    },
    "estimated_usage": false,
    "has_unfinished_work": false,
-   "pending_prompt": ""
+   "pending_prompt": "",
+   "model": {
+    "model": "sonnet",
+    "provider": "claude-code",
+    "reasoning_effort": "high"
+   }
   },
   "sessions/1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e02/messages": [
    {
@@ -915,7 +940,12 @@
    }
   ],
   "sessions/1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e02/helpers": [],
-  "sessions/1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e02/jobs": []
+  "sessions/1f0c6a2e-5b7d-4c11-9e3a-7a5d2b8c4e02/jobs": [],
+  "last-pick": {
+   "model": "sonnet",
+   "provider": "claude-code",
+   "reasoning_effort": "high"
+  }
  },
  "events": [
   {

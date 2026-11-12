@@ -30,6 +30,7 @@
   }
  },
  "get": {
+  "last-pick": {"model": "sonnet", "provider": "claude-code", "reasoning_effort": "high"},
   "config": {
    "models": {
     "large": {"model": "sonnet", "provider": "claude-code", "reasoning_effort": "high"},
@@ -64,6 +65,7 @@
     "updated_at": 1792411140,
     "is_busy": false,
     "attached_clients": 0,
+    "model": {"model": "sonnet", "provider": "claude-code", "reasoning_effort": "high"},
     "context_budget": {"provider": "claude-code", "model": "sonnet", "tokens": 18400, "estimated": false},
     "estimated_usage": false,
     "has_unfinished_work": false,
@@ -82,6 +84,7 @@
     "updated_at": 1792410540,
     "is_busy": false,
     "attached_clients": 0,
+    "model": {"model": "sonnet", "provider": "claude-code", "reasoning_effort": "high"},
     "context_budget": {"provider": "claude-code", "model": "sonnet", "tokens": 9200, "estimated": false},
     "estimated_usage": false,
     "has_unfinished_work": false,
@@ -101,6 +104,7 @@
    "updated_at": 1792411140,
    "is_busy": false,
    "attached_clients": 0,
+   "model": {"model": "sonnet", "provider": "claude-code", "reasoning_effort": "high"},
    "context_budget": {"provider": "claude-code", "model": "sonnet", "tokens": 18400, "estimated": false},
    "estimated_usage": false,
    "has_unfinished_work": false,
@@ -145,6 +149,7 @@
    "updated_at": 1792410180,
    "is_busy": false,
    "attached_clients": 0,
+   "model": {"model": "sonnet", "provider": "claude-code", "reasoning_effort": "high"},
    "context_budget": {"provider": "claude-code", "model": "haiku", "tokens": 42000, "estimated": false},
    "estimated_usage": false,
    "has_unfinished_work": false,
@@ -191,6 +196,7 @@
    "updated_at": 1792410540,
    "is_busy": false,
    "attached_clients": 0,
+   "model": {"model": "sonnet", "provider": "claude-code", "reasoning_effort": "high"},
    "context_budget": {"provider": "claude-code", "model": "sonnet", "tokens": 9200, "estimated": false},
    "estimated_usage": false,
    "has_unfinished_work": false,

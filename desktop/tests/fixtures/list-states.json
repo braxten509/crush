@@ -57,7 +57,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "fake-large",
+     "provider": "fake",
+     "reasoning_effort": "high"
+    }
    },
    {
     "id": "live",
@@ -80,7 +85,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "fake-large",
+     "provider": "fake",
+     "reasoning_effort": "high"
+    }
    },
    {
     "id": "permission",
@@ -103,7 +113,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": "permission"
+    "pending_prompt": "permission",
+    "model": {
+     "model": "fake-large",
+     "provider": "fake",
+     "reasoning_effort": "high"
+    }
    },
    {
     "id": "background",
@@ -126,7 +141,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": true,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "fake-large",
+     "provider": "fake",
+     "reasoning_effort": "high"
+    }
    },
    {
     "id": "question",
@@ -149,7 +169,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": "question"
+    "pending_prompt": "question",
+    "model": {
+     "model": "fake-large",
+     "provider": "fake",
+     "reasoning_effort": "high"
+    }
    },
    {
     "id": "long",
@@ -172,7 +197,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "fake-large",
+     "provider": "fake",
+     "reasoning_effort": "high"
+    }
    },
    {
     "id": "cookie",
@@ -195,7 +225,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "fake-large",
+     "provider": "fake",
+     "reasoning_effort": "high"
+    }
    },
    {
     "id": "signal",
@@ -218,7 +253,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "fake-large",
+     "provider": "fake",
+     "reasoning_effort": "high"
+    }
    },
    {
     "id": "prism",
@@ -241,7 +281,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "fake-large",
+     "provider": "fake",
+     "reasoning_effort": "high"
+    }
    },
    {
     "id": "tutor",
@@ -264,7 +309,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "fake-large",
+     "provider": "fake",
+     "reasoning_effort": "high"
+    }
    },
    {
     "id": "old",
@@ -287,7 +337,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "fake-large",
+     "provider": "fake",
+     "reasoning_effort": "high"
+    }
    },
    {
     "id": "kopia",
@@ -310,7 +365,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "fake-large",
+     "provider": "fake",
+     "reasoning_effort": "high"
+    }
    }
   ],
   "sessions/cookie": {
@@ -334,7 +394,12 @@
    },
    "estimated_usage": false,
    "has_unfinished_work": false,
-   "pending_prompt": ""
+   "pending_prompt": "",
+   "model": {
+    "model": "fake-large",
+    "provider": "fake",
+    "reasoning_effort": "high"
+   }
   },
   "sessions/cookie/messages": [
    {
@@ -971,7 +1036,12 @@
     "CreatedAt": 1792088400,
     "UpdatedAt": 1792089000
    }
-  ]
+  ],
+  "last-pick": {
+   "model": "fake-large",
+   "provider": "fake",
+   "reasoning_effort": "high"
+  }
  },
  "events": [
   {

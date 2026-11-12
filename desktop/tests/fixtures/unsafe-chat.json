@@ -68,7 +68,12 @@
     },
     "estimated_usage": false,
     "has_unfinished_work": false,
-    "pending_prompt": ""
+    "pending_prompt": "",
+    "model": {
+     "model": "opus",
+     "provider": "claude-code",
+     "reasoning_effort": "max"
+    }
    }
   ],
   "sessions/5afe0000-0000-4000-8000-0000000000a1": {
@@ -92,7 +97,12 @@
    },
    "estimated_usage": false,
    "has_unfinished_work": false,
-   "pending_prompt": ""
+   "pending_prompt": "",
+   "model": {
+    "model": "opus",
+    "provider": "claude-code",
+    "reasoning_effort": "max"
+   }
   },
   "sessions/5afe0000-0000-4000-8000-0000000000a1/messages": [
    {
@@ -356,7 +366,12 @@
   },
   "lsps": {},
   "mcp/states": {},
-  "skills": []
+  "skills": [],
+  "last-pick": {
+   "model": "opus",
+   "provider": "claude-code",
+   "reasoning_effort": "max"
+  }
  },
  "events": []
 }

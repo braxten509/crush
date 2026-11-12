@@ -595,6 +595,11 @@
         "on": false,
         "blocks": []
       }
+    },
+    "last-pick": {
+      "model": "fable",
+      "provider": "claude-code",
+      "reasoning_effort": "max"
     }
   },
   "events": []

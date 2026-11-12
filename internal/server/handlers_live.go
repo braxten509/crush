@@ -145,9 +145,19 @@ func (c *controllerV1) limits(*http.Request, rpc.Empty) (proto.LimitsSnapshot, e
 	return c.backend.Limits(), nil
 }
 
-// refreshLimits starts a refresh of one AI tool's usage limits.
+// refreshLimits starts a refresh of one AI tool's usage limits: forced,
+// unless ?due=1 asks only for what is due; ?account=ID limits it to one
+// account ("" for the tool's own login).
 func (c *controllerV1) refreshLimits(r *http.Request, _ rpc.Empty) (rpc.Empty, error) {
-	if !c.backend.RefreshLimits(r.PathValue("kind")) {
+	q := r.URL.Query()
+	kind, force := r.PathValue("kind"), q.Get("due") == ""
+	var started bool
+	if q.Has("account") {
+		started = c.backend.RefreshAccountLimits(kind, q.Get("account"), force)
+	} else {
+		started = c.backend.RefreshLimits(kind, force)
+	}
+	if !started {
 		return rpc.Empty{}, badRequest("This CLI does not report usage limits")
 	}
 	return rpc.Empty{}, nil

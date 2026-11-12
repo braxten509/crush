@@ -149,8 +149,8 @@ describe("the account meter timer", () => {
     calls.refreshLimits.mockClear();
 
     await vi.advanceTimersByTimeAsync(60_000);
-    expect(calls.refreshLimits).not.toHaveBeenCalledWith("claude-code");
+    expect(calls.refreshLimits).not.toHaveBeenCalledWith("claude-code", expect.anything());
     await vi.advanceTimersByTimeAsync(2 * 60_000);
-    expect(calls.refreshLimits).toHaveBeenCalledWith("claude-code");
+    expect(calls.refreshLimits).toHaveBeenCalledWith("claude-code", expect.anything());
   });
 });

@@ -1,11 +1,13 @@
 package tools
 
+import "github.com/charmbracelet/crush/internal/config"
+
 type BashParams struct {
 	Description         string `json:"description" description:"A brief description of what the command does, try to keep it under 30 characters or so"`
 	Command             string `json:"command" description:"The command to execute"`
 	WorkingDir          string `json:"working_dir,omitempty" description:"The working directory to execute the command in (defaults to current directory)"`
 	RunInBackground     bool   `json:"run_in_background,omitempty" description:"Set to true (boolean) to run this command in the background. Use job_output to read the output later."`
-	AutoBackgroundAfter int    `json:"auto_background_after,omitempty" description:"Seconds to wait before automatically moving the command to a background job (default: 60)"`
+	AutoBackgroundAfter int    `json:"auto_background_after,omitempty" description:"Seconds to wait before automatically moving the command to a background job (default and longest: the user's setting, 120 unless they changed it)"`
 }
 
 type BashPermissionsParams struct {
@@ -29,10 +31,12 @@ type BashResponseMetadata struct {
 const (
 	BashToolName = "bash"
 
-	DefaultAutoBackgroundAfter = 60  // Commands taking longer automatically become background jobs
-	MaxAutoBackgroundAfter     = 120 // No command stays in the foreground longer
-	MaxOutputLength            = 30000
-	BashNoOutput               = "no output"
+	// MaxAutoBackgroundAfter is how many seconds a command stays in the
+	// foreground until the user saves another time
+	// (options.auto_background_seconds).
+	MaxAutoBackgroundAfter = config.DefaultAutoBackgroundSeconds
+	MaxOutputLength        = 30000
+	BashNoOutput           = "no output"
 )
 
 const (

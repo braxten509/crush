@@ -52,6 +52,7 @@ type (
 	ActionToggleThinking          struct{}
 	ActionToggleFastMode          struct{}
 	ActionSetAutocompact          struct{ Tokens int64 }
+	ActionSetAutoBackground       struct{ Seconds int }
 	ActionSetMemoryLimit          struct{ GB float64 }
 	ActionToggleUltracode         struct{}
 	ActionTogglePills             struct{}

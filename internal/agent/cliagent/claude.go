@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -119,6 +120,10 @@ type claudeKey struct {
 	// stall is [Turn.StallRetry]; a process started with another keeps
 	// the old limit, so a change starts a new one.
 	stall time.Duration
+	// background is [Turn.AutoBackground]; it reaches the process as
+	// environment, so a change starts a new one, but only once the old
+	// one has no task running (see [keptBackground]).
+	background time.Duration
 }
 
 // claudeLive is a Claude process kept open between the turns of one Crush
@@ -361,10 +366,11 @@ func startClaude(m *Model, t Turn, key claudeKey) (*claudeLive, error) {
 	// shows it as the chat's to-do list. TodoWrite, which sends the whole
 	// list each time, rather than the step-by-step Task tools.
 	env = append(env, "CLAUDE_CODE_ENABLE_TODO_TOOLS=1", "CLAUDE_CODE_ENABLE_TASKS=0")
-	// A command still running after 2 minutes becomes a background task
-	// instead of holding the turn (owner, 2026-10-21: "if a command has been
-	// running for 2 minutes or more it is forced to background").
-	env = append(env, claudeAutoBackground)
+	// A command still running after the user's time (2 minutes unless
+	// changed) becomes a background task instead of holding the turn
+	// (owner, 2026-10-21: "if a command has been running for 2 minutes or
+	// more it is forced to background").
+	env = append(env, claudeAutoBackground(key.background)...)
 	if ms := claudeStallMillis(key.stall); ms > 0 {
 		// Claude Code's own watchdog drops a reply whose bytes stopped
 		// arriving and asks again on a fresh connection. Its default waits 3
@@ -422,11 +428,12 @@ type claudeRun struct {
 }
 
 func runClaude(ctx context.Context, m *Model, t Turn) error {
-	key := claudeKey{dir: m.Dir, model: m.ID, effort: t.Effort, account: m.Account, fast: m.ServiceTier == "fast", ultracode: m.Ultracode, bypass: !t.NoTools && m.autoApproved(t.SessionID), noMCP: m.NoMCP, stall: t.StallRetry}
+	key := claudeKey{dir: m.Dir, model: m.ID, effort: t.Effort, account: m.Account, fast: m.ServiceTier == "fast", ultracode: m.Ultracode, bypass: !t.NoTools && m.autoApproved(t.SessionID), noMCP: m.NoMCP, stall: t.StallRetry, background: t.AutoBackground}
 	// A sub-agent runs one turn, so its process isn't kept for more.
 	keep := !t.NoTools && t.SessionID != "" && !m.Guarded
 	var live *claudeLive
 	if keep {
+		key.background = keptBackground(t.SessionID, key.background)
 		live = claudeSessions.take(t.SessionID, key, t.Resume)
 		if live != nil {
 			// This turn now holds the session's run.
@@ -491,6 +498,18 @@ func runClaude(ctx context.Context, m *Model, t Turn) error {
 		return ErrResume
 	}
 	return exitError("claude", p)
+}
+
+// keptBackground is the background time a turn's key takes: the session's
+// kept process's own while a task it started still runs, so a changed
+// setting doesn't close that process and end its tasks; the new time is
+// taken up by the first turn after they finish. Until then Crush's own
+// watcher still moves a command at the new time when that is the shorter.
+func keptBackground(sessionID string, want time.Duration) time.Duration {
+	if kept, ok := claudeSessions.peek(sessionID); ok && kept.busy() {
+		return kept.key.background
+	}
+	return want
 }
 
 // background handles Ctrl+B by asking Claude Code to move its running
@@ -559,6 +578,26 @@ func claudeStallMillis(d time.Duration) int64 {
 	return max(d.Milliseconds(), 10_000)
 }
 
+// claudeBashTimeout is Claude Code's own time limit for a foreground Bash
+// command that names none (BASH_DEFAULT_TIMEOUT_MS).
+const claudeBashTimeout = 2 * time.Minute
+
 // claudeAutoBackground caps Claude Code's foreground Bash wait (its own
-// setting): past it the command moves to the background.
-const claudeAutoBackground = "CLAUDE_CODE_AUTO_BACKGROUND_TIMEOUT_MS=120000"
+// setting): past it the command moves to the background. Claude Code moves
+// a command at its time limit too, so a cap longer than that limit raises
+// the limit with it, unless the user's own environment already sets a limit
+// at least that long. Claude Code's own helpers never move a command to the
+// background, so for them the raised limit is how long a command may run
+// before it is stopped: the user's time instead of 2 minutes.
+func claudeAutoBackground(after time.Duration) []string {
+	if after <= 0 {
+		after = autoBackgroundAfter
+	}
+	ms := strconv.FormatInt(after.Milliseconds(), 10)
+	env := []string{"CLAUDE_CODE_AUTO_BACKGROUND_TIMEOUT_MS=" + ms}
+	own, _ := strconv.ParseInt(os.Getenv("BASH_DEFAULT_TIMEOUT_MS"), 10, 64)
+	if after > claudeBashTimeout && own < after.Milliseconds() {
+		env = append(env, "BASH_DEFAULT_TIMEOUT_MS="+ms)
+	}
+	return env
+}

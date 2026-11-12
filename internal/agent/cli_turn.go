@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"time"
 
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
@@ -159,6 +160,7 @@ func (a *sessionAgent) cliStream(m *cliagent.Model, call SessionAgentCall, histo
 		turn := cliagent.Turn{SessionID: call.SessionID, Prompt: text, Continue: call.CLIContinue, Attachments: call.Attachments, Resume: resume, Effort: effort, Emit: s.handle, Steer: s.steer, SteerInput: s.steerWithImages, SteerReady: s.steerReady, Env: env, Instructions: instructions}
 		if a.cfg != nil {
 			turn.StallRetry = a.cfg.Config().Options.GetStallRetry()
+			turn.AutoBackground = a.cfg.Config().Options.GetAutoBackground()
 		}
 		if fork != nil {
 			// The fork starts from the source's session; that session itself
@@ -220,7 +222,13 @@ func (a *sessionAgent) cliSummarize(ctx context.Context, m *cliagent.Model, sess
 		return nil, nil
 	}
 	var total, last fantasy.Usage
-	err = m.Run(ctx, cliagent.Turn{SessionID: sessionID, Prompt: text, Resume: resume, Effort: effort, Emit: func(e cliagent.Event) error {
+	// The same limits as the chat's own turns, so the summary can use the
+	// chat's kept process instead of closing it.
+	var stallRetry, autoBackground time.Duration
+	if a.cfg != nil {
+		stallRetry, autoBackground = a.cfg.Config().Options.GetStallRetry(), a.cfg.Config().Options.GetAutoBackground()
+	}
+	err = m.Run(ctx, cliagent.Turn{SessionID: sessionID, Prompt: text, Resume: resume, Effort: effort, StallRetry: stallRetry, AutoBackground: autoBackground, Emit: func(e cliagent.Event) error {
 		switch e.Type {
 		case cliagent.EventText:
 			summary.AppendContent(e.Text)

@@ -144,6 +144,40 @@ export async function setLaunchTarget(target) {
   }
 }
 
+// -- Time before a command is moved to the background
+// (internal/config/auto_background.go) --
+
+export const AUTO_BACKGROUND = { fallback: 120, min: 11, max: 3600 };
+
+// Options.GetAutoBackground: the saved whole seconds within the accepted
+// range, else the default.
+export function autoBackgroundSeconds(options) {
+  const saved = options?.auto_background_seconds;
+  if (!Number.isInteger(saved)) return AUTO_BACKGROUND.fallback;
+  return Math.min(AUTO_BACKGROUND.max, Math.max(AUTO_BACKGROUND.min, saved));
+}
+
+// → {value} or {error}
+export function parseSeconds(text) {
+  const digits = String(text).trim();
+  if (!/^\d+$/.test(digits)) return { error: "Enter a whole number of seconds" };
+  const value = Number(digits);
+  if (value < AUTO_BACKGROUND.min) return { error: `Enter at least ${AUTO_BACKGROUND.min} seconds` };
+  if (value > AUTO_BACKGROUND.max) return { error: `Enter at most ${AUTO_BACKGROUND.max} seconds` };
+  return { value };
+}
+
+export async function saveAutoBackground(value) {
+  try {
+    await setOption("options.auto_background_seconds", value);
+    notify("info", `Commands move to the background after ${value} seconds`);
+    return true;
+  } catch (error) {
+    notify("error", errorText(error));
+    return false;
+  }
+}
+
 // -- Fallback compaction (autocompact.go:42-64) --
 
 // → {value} or {error}

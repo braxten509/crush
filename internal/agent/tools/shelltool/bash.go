@@ -232,8 +232,8 @@ func blockFuncs(blocked []string) []shell.BlockFunc {
 // configured safe commands (safe_commands); nil keeps the built-in lists.
 // jobStarted, when set, is told about the jobs its calls leave running in
 // the background.
-func NewBashTool(permissions permission.Service, workingDir, spillDir string, attribution *config.Attribution, maxBackgroundJobs int, perms *config.Permissions, jobStarted tools.JobStarted) fantasy.AgentTool {
-	t := newBashTool(permissions, workingDir, spillDir, maxBackgroundJobs, perms, jobStarted)
+func NewBashTool(permissions permission.Service, workingDir, spillDir string, attribution *config.Attribution, maxBackgroundJobs int, perms *config.Permissions, jobStarted tools.JobStarted, opts ...BashOption) fantasy.AgentTool {
+	t := newBashTool(permissions, workingDir, spillDir, maxBackgroundJobs, perms, jobStarted, opts...)
 	return fantasy.NewAgentTool(
 		tools.BashToolName,
 		bashDescription(attribution, t.blocked),
@@ -244,8 +244,8 @@ func NewBashTool(permissions permission.Service, workingDir, spillDir string, at
 // NewReadOnlyBashTool returns a bash tool whose commands run inside the
 // read-only sandbox: they can read anything but can't change the project.
 // Its other arguments are those of [NewBashTool].
-func NewReadOnlyBashTool(permissions permission.Service, workingDir, spillDir string, attribution *config.Attribution, maxBackgroundJobs int, perms *config.Permissions, jobStarted tools.JobStarted) fantasy.AgentTool {
-	t := newBashTool(permissions, workingDir, spillDir, maxBackgroundJobs, perms, jobStarted)
+func NewReadOnlyBashTool(permissions permission.Service, workingDir, spillDir string, attribution *config.Attribution, maxBackgroundJobs int, perms *config.Permissions, jobStarted tools.JobStarted, opts ...BashOption) fantasy.AgentTool {
+	t := newBashTool(permissions, workingDir, spillDir, maxBackgroundJobs, perms, jobStarted, opts...)
 	t.readOnly = true
 	return fantasy.NewAgentTool(
 		tools.BashToolName,
@@ -254,8 +254,18 @@ func NewReadOnlyBashTool(permissions permission.Service, workingDir, spillDir st
 	)
 }
 
-func newBashTool(permissions permission.Service, workingDir, spillDir string, maxBackgroundJobs int, perms *config.Permissions, jobStarted tools.JobStarted) *bashTool {
-	return &bashTool{
+// BashOption adjusts a bash tool as it is built.
+type BashOption func(*bashTool)
+
+// WithAutoBackground gives the tool the user's time before a foreground
+// command is moved to the background (config.Options.GetAutoBackground).
+// It is read at every command, so a saved change applies at once.
+func WithAutoBackground(after func() time.Duration) BashOption {
+	return func(t *bashTool) { t.autoBackground = after }
+}
+
+func newBashTool(permissions permission.Service, workingDir, spillDir string, maxBackgroundJobs int, perms *config.Permissions, jobStarted tools.JobStarted, opts ...BashOption) *bashTool {
+	t := &bashTool{
 		permissions:       permissions,
 		workingDir:        workingDir,
 		spillDir:          spillDir,
@@ -264,6 +274,10 @@ func newBashTool(permissions permission.Service, workingDir, spillDir string, ma
 		blocked:           resolveBlockedCommands(perms),
 		userSafe:          userSafeCommands(perms),
 	}
+	for _, opt := range opts {
+		opt(t)
+	}
+	return t
 }
 
 // bashTool holds what the bash tool needs to run a command.
@@ -275,6 +289,9 @@ type bashTool struct {
 	readOnly    bool
 	// maxBackgroundJobs caps how many jobs may run at once.
 	maxBackgroundJobs int
+	// autoBackground reads the user's time before a foreground command is
+	// moved to the background; nil means the default.
+	autoBackground func() time.Duration
 	// blocked is the resolved dangerous-command list.
 	blocked []string
 	// userSafe are the configured commands that skip the prompt.
@@ -489,7 +506,7 @@ func (t *bashTool) runInForeground(ctx context.Context, r *bashRun) (fantasy.Too
 	unregisterBackground := tools.RegisterShellBackground(r.sessionID, r.marker, backgroundSignal)
 	defer unregisterBackground()
 	manuallyBackgrounded := false
-	timer := time.NewTimer(autoBackgroundWait(r.params.AutoBackgroundAfter))
+	timer := time.NewTimer(autoBackgroundWait(r.params.AutoBackgroundAfter, t.autoBackgroundLimit()))
 	defer timer.Stop()
 
 	select {
@@ -641,13 +658,26 @@ func normalizeWorkingDir(path string) string {
 	return filepath.ToSlash(path)
 }
 
+// autoBackgroundLimit is the user's time before a foreground command is
+// moved to the background.
+func (t *bashTool) autoBackgroundLimit() time.Duration {
+	if t.autoBackground != nil {
+		if after := t.autoBackground(); after > 0 {
+			return after
+		}
+	}
+	return time.Duration(tools.MaxAutoBackgroundAfter) * time.Second
+}
+
 // autoBackgroundWait is how long a command runs in the foreground before it
-// becomes a background job: the requested seconds (default 60), never under
-// the protected foreground wait and never over 2 minutes (owner,
+// becomes a background job: the user's time (limit), or the shorter time
+// the command asked for, never under the protected foreground wait (owner,
 // 2026-10-21: "if a command has been running for 2 minutes or more it is
-// forced to background").
-func autoBackgroundWait(requested int) time.Duration {
-	secs := cmp.Or(requested, tools.DefaultAutoBackgroundAfter)
-	secs = min(tools.MaxAutoBackgroundAfter, max(int(ForegroundWaitLimit/time.Second)+1, secs))
-	return time.Duration(secs) * time.Second
+// forced to background"; 2026-11-12: the time is a setting).
+func autoBackgroundWait(requested int, limit time.Duration) time.Duration {
+	wait := limit
+	if requested > 0 {
+		wait = min(limit, time.Duration(requested)*time.Second)
+	}
+	return max(ForegroundWaitLimit+time.Second, wait)
 }

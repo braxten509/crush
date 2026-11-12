@@ -46,6 +46,7 @@ export function systemEntries({ summarize, toggleYolo, initProject }) {
     sheet("switch_model", "Switch model", "models", { shortcut: "ctrl+l" }),
     sheet("usage", "Usage", "usage"),
     sheet("autocompact", "Compaction limit for API chats", "autocompact"),
+    sheet("auto_background", "Move commands to the background after…", "auto_background"),
     action("undo-file-restore", "Undo last file restore", "restore.undo", { when: hasSession }),
     action("tree", "Chat tree", "tree.open", { when: hasSession }),
     action("fork", "Fork from prompt", "tree.fork", { when: hasSession }),

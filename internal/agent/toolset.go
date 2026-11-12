@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/agent/tools"
@@ -116,7 +117,7 @@ func (c *coordinator) builtinToolsInDir(allowed []string, workingDir string) []f
 	logFile := filepath.Join(cfg.Options.DataDirectory, "logs", "crush.log")
 
 	allTools := []fantasy.AgentTool{
-		shelltool.NewBashTool(c.permissions, workingDir, cfg.Options.DataDirectory, cfg.Options.Attribution, cfg.Options.GetMaxBackgroundJobs(), cfg.Permissions, reportStartedJob),
+		shelltool.NewBashTool(c.permissions, workingDir, cfg.Options.DataDirectory, cfg.Options.Attribution, cfg.Options.GetMaxBackgroundJobs(), cfg.Permissions, reportStartedJob, shelltool.WithAutoBackground(c.autoBackground)),
 		tools.NewCrushInfoTool(c.cfg, c.lspManager, c.allSkills, c.activeSkills, c.skillTracker),
 		tools.NewCrushLogsTool(logFile),
 		shelltool.NewJobOutputTool(c.cfg.Config().Options.DataDirectory),
@@ -196,4 +197,10 @@ func (c *coordinator) allowedMCPToolsInDir(agent config.Agent, workingDir string
 		}
 	}
 	return allowed
+}
+
+// autoBackground is the user's time before a command an agent runs is
+// moved to the background, read from the config as it is now.
+func (c *coordinator) autoBackground() time.Duration {
+	return c.cfg.Config().Options.GetAutoBackground()
 }

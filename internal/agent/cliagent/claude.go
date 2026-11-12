@@ -416,6 +416,8 @@ type claudeRun struct {
 	// thinking deltas. Hold those deltas so narration never enters reasoning.
 	thinking    strings.Builder
 	recordUsage func(claudeLine) error
+	// lastThinkingPing keeps "still thinking" activity to one a second.
+	lastThinkingPing time.Time
 
 	lastContextRequest time.Time
 	contextSupported   bool

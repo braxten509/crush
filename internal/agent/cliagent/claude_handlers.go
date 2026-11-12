@@ -106,7 +106,23 @@ func (r *claudeRun) handleLine(line claudeLine, raw []byte) (done bool, err erro
 	return err != nil, err
 }
 
+// stillThinking says the model is thinking, at most once a second. While
+// Claude Code holds a model's thinking back, the only word of it is progress
+// with no text: thinking deltas that carry a token estimate, and Claude
+// Code's own "thinking_tokens" lines. Without this the chat says "Waiting
+// for the model" for the whole stretch (owner, 2026-11-12).
+func (r *claudeRun) stillThinking() error {
+	if time.Since(r.lastThinkingPing) < time.Second {
+		return nil
+	}
+	r.lastThinkingPing = time.Now()
+	return r.t.Emit(Event{Type: EventActivity, Activity: ActivityThinking, Text: lastLine(r.thinking.String())})
+}
+
 func (r *claudeRun) handleSystem(line claudeLine) error {
+	if line.Subtype == "thinking_tokens" {
+		return r.stillThinking()
+	}
 	if line.Subtype == "status" || line.Subtype == "compact_boundary" {
 		if err := r.t.Emit(Event{Type: EventCompacting, Compacting: line.Status == "compacting"}); err != nil {
 			return err
@@ -148,7 +164,7 @@ func (r *claudeRun) handleStreamEvent(line claudeLine) error {
 		// newest line along. Summaries come in bursts with long pauses
 		// between, so each delta is passed on, as text deltas are.
 		if ev.Delta.Thinking == "" {
-			return nil
+			return r.stillThinking()
 		}
 		return r.t.Emit(Event{Type: EventActivity, Activity: ActivityThinking, Text: lastLine(r.thinking.String())})
 	}

@@ -218,6 +218,13 @@ fn merge_key(ty: &str, payload: &Value) -> Option<String> {
             }
         }
     }
+    // A tool's sign-ins each have their own reading, and the tool's own
+    // login sends no account: read together, they must not fold into the
+    // last one (owner, 2026-11-12: the others stayed on "checking").
+    if ty == "limits" {
+        key.push('\0');
+        key.push_str(payload.get("account").and_then(Value::as_str).unwrap_or_default());
+    }
     Some(key)
 }
 
@@ -582,6 +589,30 @@ mod tests {
         assert_eq!(
             parse_sse_line(r#"data: {"type":"t","payload":{"type":"deleted"}}"#),
             Some(ev("t", Kind::Deleted, Value::Null))
+        );
+    }
+
+    #[test]
+    fn limits_merge_per_sign_in() {
+        let mut b = Batcher::new(5_000);
+        let reading = |account: Option<&str>, used: u32| {
+            let mut payload = json!({"kind": "claude-code", "used": used});
+            if let Some(account) = account {
+                payload["account"] = json!(account);
+            }
+            ev("limits", Kind::Updated, payload)
+        };
+        b.push(reading(None, 1));
+        b.push(reading(Some("claude-3"), 2));
+        b.push(reading(Some("claude-2"), 3));
+        b.push(reading(None, 4));
+        assert_eq!(
+            b.take(),
+            vec![
+                Entry::Event(reading(None, 4)),
+                Entry::Event(reading(Some("claude-3"), 2)),
+                Entry::Event(reading(Some("claude-2"), 3)),
+            ]
         );
     }
 

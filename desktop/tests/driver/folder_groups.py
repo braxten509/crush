@@ -30,9 +30,11 @@ def run(script):
 
 
 def groups():
+    """The real folders' groups; No project (data-folder "", always drawn last
+    since 2026-11-09) is left out."""
     return run("""
       const rect = (el) => { if (!el) return null; const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; };
-      return [...document.querySelectorAll('nav.chats section.group')].map((g) => ({
+      return [...document.querySelectorAll('nav.chats section.group')].filter((g) => g.dataset.folder).map((g) => ({
         dir: g.dataset.folder, label: g.querySelector('.folder-name')?.textContent.trim(),
         ids: [...g.querySelectorAll('.chat')].map((c) => c.dataset.id),
         plus: rect(g.querySelector('.folder-new')), drop: rect(g.querySelector('.folder-drop')),

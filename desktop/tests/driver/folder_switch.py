@@ -7,16 +7,15 @@ chats (proj's, beta's and gamma's; the window is on proj):
   the file for every app;
 - picking beta's chat switches the window to beta in place: no reload, the
   top bar and the connection follow, a terminal tab stays;
-- the search (the Sessions sheet) lists the 5 newest chats in a first
-  group, then the shown folder's newest 10 in a second; the rest behind
-  "Show more" (a search finds them);
+- the search (the Sessions sheet) lists every folder's chats newest first,
+  10 at a time; the rest behind "Show more" (a search finds them);
 - New chat and New terminal ask where to start (the folder picker), on the
   shown folder.
 
 Usage: CHECK_ARGS="-s 7c1e5a90-3d2b-4f6e-9a41-0b8c2d4e6f01" \\
        tests/check.sh --fixture tests/fixtures/folder-switch.json folder_switch.py
 """
-import os, sys, time
+import json, os, sys, time
 
 sys.path.insert(0, os.path.dirname(__file__))
 from harness import check, finish, key, list_open_chat, open_chat_ids, probe_eval, read_probe, shot, type_text, wait_for
@@ -101,33 +100,35 @@ order = [r["id"] for r in rows() if r["depth"] == 0]
 check(BETA in order and DELTA in order and order.index(BETA) < order.index(DELTA), f"the list keeps its order across the switch ({order})")
 shot(out_dir, "list-beta")
 
-# The search: first the 5 newest chats of any folder, then under beta's name
-# the rest of beta's chats (owner, 2026-10-20).
+# The search: one list of every folder's chats, newest first, a page of 10
+# at a time (owner, 2026-11-04: no Current folder part).
+with open(os.path.join(os.path.dirname(__file__), "..", "fixtures", "folder-switch.json")) as f:
+    saved = json.load(f)["get"]["saved-sessions"]
+newest = [s["Title"] for s in sorted(saved, key=lambda s: -s["UpdatedAt"])]
+PAGE = 10
 run("document.querySelector('nav.chats button.search').click(); return true;")
 sheet = until(lambda: run("""
   const s = document.querySelector('[data-sheet="sessions"]');
-  return s && { groups: [...s.querySelectorAll('[data-group]')].map((el) => el.textContent.trim()),
-                rows: [...s.querySelectorAll('[data-index]')].map((el) => el.textContent.trim()) };
-""") or {}, lambda sh: len(sh.get("rows") or []) >= 15)
-want = ["Beta chat", "Is SameSite=Lax safe?", "Cookie lifetime", "Gamma chat", "Login keeps redirecting", "Beta notes"] + [f"Beta old {i:02d}" for i in range(1, 10)]
-got = [next((w for w in want if r.startswith(w)), r) for r in sheet.get("rows") or []]
-groups = sheet.get("groups") or []
-check(len(groups) == 2 and groups[1].endswith("beta") and got == want,
-      f"the search shows the 5 newest chats, then beta's newest 10 under beta's group ({groups}, {got})")
+  return s && { rows: [...s.querySelectorAll('[data-index]')].map((el) => el.textContent.trim()) };
+""") or {}, lambda sh: len(sh.get("rows") or []) >= PAGE)
+got = [next((w for w in newest if r.startswith(w)), r) for r in sheet.get("rows") or []]
+check(got == newest[:PAGE], f"the search lists every folder's {PAGE} newest chats, newest first ({got})")
 # The rest wait behind "Show more" at the end; a search finds them anyway.
 MORE = "return !!document.querySelector('[data-sheet=\"sessions\"] [data-show-more]');"
 FOUND = "return [...document.querySelectorAll('[data-sheet=\"sessions\"] [data-index]')].map((el) => el.textContent.trim());"
 COUNT = "return document.querySelectorAll('[data-sheet=\"sessions\"] [data-index]').length;"
-check(run(MORE) is True, "the folder's other chats wait behind Show more")
-type_text("old 12")
-found = until(lambda: run(FOUND) or [], lambda f: any(r.startswith("Beta old 12") for r in f))
-check(any(r.startswith("Beta old 12") for r in found) and run(MORE) is False, f"a search finds a chat behind Show more ({found})")
-for _ in range(len("old 12")):
+check(run(MORE) is True, "the older chats wait behind Show more")
+oldest = newest[-1]
+type_text(oldest.split(" ", 1)[1])
+found = until(lambda: run(FOUND) or [], lambda f: any(r.startswith(oldest) for r in f))
+check(any(r.startswith(oldest) for r in found) and run(MORE) is False, f"a search finds a chat behind Show more ({oldest}: {found})")
+for _ in range(len(oldest.split(" ", 1)[1])):
     key("BackSpace")
 until(lambda: run(MORE), lambda m: m is True)
 run("document.querySelector('[data-sheet=\"sessions\"] [data-show-more]').click(); return true;")
-rows_now = until(lambda: run(COUNT), lambda n: n == 5 + 13)
-check(rows_now == 5 + 13 and run(MORE) is False, f"Show more shows the rest ({rows_now} rows)")
+want_rows = min(len(newest), 2 * PAGE)
+rows_now = until(lambda: run(COUNT), lambda n: n == want_rows)
+check(rows_now == want_rows and (run(MORE) is True) == (len(newest) > 2 * PAGE), f"Show more shows the next page ({rows_now} of {len(newest)} rows)")
 key("Escape")
 until(dialogs, lambda d: "sessions" not in d)
 

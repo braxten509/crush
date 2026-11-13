@@ -114,11 +114,29 @@ export function formatReasoningEffort(effort) {
     .replace(/(^|[^\p{L}\p{N}'])(\p{L})/gu, (_, before, letter) => before + letter.toUpperCase());
 }
 
-// A window's id among the footer's stats.
-function windowId(name) {
-  if (name === "5h") return FOOTER.limit5h;
-  if (name === "Weekly" || name === "Monthly") return FOOTER.limitWeekly;
+// The span a window covers ("5h", "Weekly"). A model family's own limit is
+// named with its family after the span ("Weekly Fable", family "Fable").
+function windowSpan(window) {
+  const name = String(window.name ?? "");
+  return window.family && name.endsWith(` ${window.family}`) ? name.slice(0, -String(window.family).length - 1) : name;
+}
+
+// A window's id among the footer's stats. A model family's own limit goes
+// with its span's switch (owner, 2026-11-12: the Fable limit belongs with
+// 5-HOUR and WEEK): it is the chat's own limit, not one of the "other" ones.
+function windowId(window) {
+  const span = windowSpan(window);
+  if (span === "5h") return FOOTER.limit5h;
+  if (span === "Weekly" || span === "Monthly") return FOOTER.limitWeekly;
   return FOOTER.limitOther;
+}
+
+// A meter's label: "5-HOUR", "WEEK", else the window's name; a family's own
+// limit leads with the family ("FABLE WEEK").
+function windowLabel(window) {
+  const span = windowSpan(window);
+  const label = span === "5h" ? "5-HOUR" : span === "Weekly" ? "WEEK" : span.toUpperCase();
+  return span === window.name ? label : `${String(window.family).toUpperCase()} ${label}`;
 }
 
 // The tokens and context words of a chat (composer_footer.go:289-317).
@@ -174,7 +192,7 @@ export function footerFields({ items = DEFAULT_FOOTER_ITEMS, agent = null, sessi
     if (show(FOOTER.context)) fields.push({ id: FOOTER.context, text: words.context });
   }
   for (const window of windows) {
-    const id = windowId(window.name);
+    const id = windowId(window);
     if (!show(id)) continue;
     const words = windowWords(window, show(FOOTER.resets));
     fields.push({ id, name: window.name, text: words.resets ? `${words.text} ${words.resets}` : words.text });
@@ -247,7 +265,7 @@ export function meterModel({ items = DEFAULT_FOOTER_ITEMS, session = null, limit
   }
   const seen = new Set();
   for (const window of limits) {
-    const id = windowId(window.name);
+    const id = windowId(window);
     if (!show(id)) continue;
     // A provider can report a weekly and a monthly window under the same
     // footer id (OpenCode Go): the second keeps its name in the id so the
@@ -257,7 +275,7 @@ export function meterModel({ items = DEFAULT_FOOTER_ITEMS, session = null, limit
     const limitWords = windowWords(window, show(FOOTER.resets));
     meters.push({
       id: meterID,
-      label: id === FOOTER.limit5h ? "5-HOUR" : window.name === "Weekly" ? "WEEK" : String(window.name).toUpperCase(),
+      label: windowLabel(window),
       left: window.left,
       text: `${goFixed(window.left, 0)}% left`,
       // Under 20 % left (sidebar.go:136-139).
@@ -382,7 +400,8 @@ export function limitWindows(reading, model, now = Date.now()) {
     .map((w) => {
       const resets = goTime(w.resets_at);
       const left = resets !== null && now > resets ? 100 : Math.max(0, 100 - (Number(w.used) || 0));
-      return { name: String(w.name ?? ""), left, resetsIn: resets === null ? null : resets - now };
+      // family: the model family the limit is for, when it has one.
+      return { name: String(w.name ?? ""), left, resetsIn: resets === null ? null : resets - now, ...(w.model ? { family: String(w.model) } : {}) };
     });
 }
 

@@ -312,7 +312,7 @@ describe("limitWindows (cliagent.Limits and Limit.Left)", () => {
     expect(limitWindows(reading(), "opus", now)).toEqual([
       { name: "5h", left: 14, resetsIn: (2 * 60 + 41) * 60_000 },
       { name: "Weekly", left: 69, resetsIn: 3 * 24 * 3_600_000 + 500 },
-      { name: "Opus", left: 60, resetsIn: null },
+      { name: "Opus", left: 60, resetsIn: null, family: "opus" },
     ]);
   });
 
@@ -376,7 +376,11 @@ describe("limitWindows (cliagent.Limits and Limit.Left)", () => {
     const claude = reading({ windows: [
       { name: "5h", used: 26 }, { name: "Weekly", used: 58 }, { name: "Weekly Fable", used: 43, model: "Fable" },
     ] });
-    expect(labels(claude, "fable")).toEqual([["context", 0], ["limit_5h", 74], ["limit_weekly", 42], ["limit_other:Weekly Fable", 57]]);
+    expect(labels(claude, "fable")).toEqual([["context", 0], ["limit_5h", 74], ["limit_weekly", 42], ["limit_weekly:Weekly Fable", 57]]);
+    // The family's own limit goes with the weekly switch, not "Other usage
+    // limits" (owner, 2026-11-12: it stands with 5-HOUR and WEEK as a box).
+    const weekly = meterModel({ items: ["context", "limit_5h", "limit_weekly"], limits: limitWindows(claude, "fable", now) }).meters;
+    expect(weekly.map((m) => m.label)).toEqual(["CONTEXT", "5-HOUR", "WEEK", "FABLE WEEK"]);
     expect(labels(claude, "opus")).toEqual([["context", 0], ["limit_5h", 74], ["limit_weekly", 42]]);
     const agy = reading({ kind: "agy-cli", windows: [
       { name: "Weekly", used: 10, model: "gemini" }, { name: "5h", used: 0, model: "gemini" },

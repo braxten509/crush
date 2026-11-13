@@ -257,6 +257,16 @@ func (b *Backend) CancelSession(workspaceID, sessionID string) error {
 	return nil
 }
 
+// StopChat ends everything a closing chat runs ([Ops.StopChat]).
+func (b *Backend) StopChat(workspaceID, sessionID string) error {
+	o, err := b.ops(workspaceID)
+	if err != nil {
+		return err
+	}
+	o.StopChat(sessionID)
+	return nil
+}
+
 // SummarizeSession triggers a session summarization.
 func (b *Backend) SummarizeSession(ctx context.Context, workspaceID, sessionID string) error {
 	o, err := b.ops(workspaceID)

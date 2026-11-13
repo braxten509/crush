@@ -199,6 +199,10 @@ export const api = {
   // Esc posts interrupt every time (TYPE-046). cancel stays for a Stop item in a
   // chat menu, which no phase 3-4 surface has.
   cancel: (sid) => post(`${run(sid)}/cancel`),
+  // Closing a chat stops everything it runs: its reply, its helpers (and
+  // theirs) and their background jobs (owner, 2026-11-13). Sent to the
+  // chat's own folder's engine.
+  stopChat: (sid) => commands.api("POST", `${run(sid)}/stop-all`, undefined, undefined, undefined, folderOf(sid)),
   interrupt(sid) {
     tell(interruptWatchers, sid);
     return post(`${run(sid)}/interrupt`);

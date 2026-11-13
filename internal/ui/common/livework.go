@@ -46,6 +46,14 @@ func (c *Common) BackgroundJobs(ctx context.Context, sessionID string) []agent.P
 	return procs
 }
 
+// StopChat ends everything chat sessionID runs: its reply, its helpers
+// (and theirs) and their background jobs. The chat is being closed.
+func (c *Common) StopChat(sessionID string) {
+	if s, ok := c.Workspace.(interface{ StopChat(string) }); ok {
+		s.StopChat(sessionID)
+	}
+}
+
 // KillJob stops a background process for the user; its agent is told the
 // user stopped it.
 func (c *Common) KillJob(ctx context.Context, p agent.Process) error {

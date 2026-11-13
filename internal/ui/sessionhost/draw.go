@@ -505,11 +505,11 @@ func confirmDetail(st Status) string {
 	detail := ""
 	switch st.State {
 	case StateWorking:
-		detail = "It is still working. "
+		detail = "It is still working. Closing stops it and its helpers. "
 	case StateBackground:
-		detail = "It is waiting for background work. "
+		detail = "Its helpers or background jobs are still running. Closing stops them. "
 	case StateWaiting:
-		detail = "It is waiting for your answer. "
+		detail = "It is waiting for your answer. Closing stops it and its helpers. "
 	}
 	return detail + "The chat stays saved and can be reopened later."
 }

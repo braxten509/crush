@@ -85,6 +85,13 @@ func (c *Client) CancelAgentSession(ctx context.Context, id string, sessionID st
 	return err
 }
 
+// StopChat ends everything a closing chat runs: its reply, sub-agents and
+// background jobs.
+func (c *Client) StopChat(ctx context.Context, id string, sessionID string) error {
+	_, err := newCall(c, rpc.StopChat, "stop chat", "").at(id, sessionID).get(ctx)
+	return err
+}
+
 // InterruptAgentSession stops the active run and lets the next queued prompt run.
 func (c *Client) InterruptAgentSession(ctx context.Context, id string, sessionID string) error {
 	_, err := newCall(c, rpc.InterruptAgent, "interrupt session agent", "").at(id, sessionID).get(ctx)

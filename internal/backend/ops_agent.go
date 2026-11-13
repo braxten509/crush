@@ -26,6 +26,12 @@ func (o Ops) CancelSession(sessionID string) {
 	}
 }
 
+// StopChat ends the chat's reply, its sub-agents (theirs too) and the
+// background jobs of all of them, for good: the chat is being closed.
+func (o Ops) StopChat(sessionID string) {
+	agent.StopChatWork(o.App.AgentCoordinator, sessionID)
+}
+
 // Interrupt stops the session's active run and lets the next queued
 // prompt run.
 func (o Ops) Interrupt(sessionID string) {

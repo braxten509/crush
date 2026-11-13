@@ -263,6 +263,13 @@ func (w *ClientWorkspace) AgentCancel(sessionID string) {
 	_ = w.client.CancelAgentSession(context.Background(), w.workspaceID(), sessionID)
 }
 
+// StopChat ends everything a closing chat runs, through the engine.
+func (w *ClientWorkspace) StopChat(sessionID string) {
+	if err := w.client.StopChat(context.Background(), w.workspaceID(), sessionID); err != nil {
+		slog.Warn("Could not stop a closing chat's work", "session", sessionID, "error", err)
+	}
+}
+
 // AgentBackground moves the session's running command to the background
 // (Ctrl+B) through the engine. A failed call is logged and reports false.
 func (w *ClientWorkspace) AgentBackground(sessionID string) bool {

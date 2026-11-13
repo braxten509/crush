@@ -62,6 +62,7 @@ var wantRequests = map[string]string{
 	"ListUserMessages":                     "GET /v1/workspaces/ws1/sessions/sess1/messages/user",
 	"ListAllUserMessages":                  "GET /v1/workspaces/ws1/messages/user",
 	"CancelAgentSession":                   "POST /v1/workspaces/ws1/agent/sessions/sess1/cancel",
+	"StopChat":                             "POST /v1/workspaces/ws1/agent/sessions/sess1/stop-all",
 	"GetAgentSessionQueuedPromptsList":     "GET /v1/workspaces/ws1/agent/sessions/sess1/prompts/list",
 	"GetAgentSessionQueuedPromptSummaries": "GET /v1/workspaces/ws1/agent/sessions/sess1/prompts/list details=true",
 	"FileTrackerRecordRead":                "POST /v1/workspaces/ws1/filetracker/read",

@@ -139,6 +139,7 @@ func clientCalls() map[string]func(context.Context, *Client) error {
 			return err
 		},
 		"CancelAgentSession": func(ctx context.Context, c *Client) error { return c.CancelAgentSession(ctx, ws, sid) },
+		"StopChat":           func(ctx context.Context, c *Client) error { return c.StopChat(ctx, ws, sid) },
 		"GetAgentSessionQueuedPromptsList": func(ctx context.Context, c *Client) error {
 			_, err := c.GetAgentSessionQueuedPromptsList(ctx, ws, sid)
 			return err

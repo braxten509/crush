@@ -92,6 +92,22 @@ func (m *UI) hasUntrackedProcess() bool {
 }
 
 // stopHostServer stops the server on port, as the session list asked.
+// stopChatAndQuit is the host's close of this chat: everything the chat
+// runs stops (its reply, helpers and jobs), then this session quits.
+func (m *UI) stopChatAndQuit() tea.Cmd {
+	id := ""
+	if m.session != nil {
+		id = m.session.ID
+	}
+	com := m.com
+	return tea.Sequence(func() tea.Msg {
+		if id != "" {
+			com.StopChat(id)
+		}
+		return nil
+	}, tea.Quit)
+}
+
 func (m *UI) stopHostServer(port int) tea.Cmd {
 	i := slices.IndexFunc(m.taskRow.hostServers, func(s agent.Server) bool { return s.Port == port })
 	if i < 0 {

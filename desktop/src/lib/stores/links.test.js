@@ -231,7 +231,7 @@ describe("closing (3.3, 4.8)", () => {
     expect(shape(rows("b2", C.isClosed))).toEqual(["s1@0", "b1@1", "b2@2", "s2@0"]);
   });
 
-  it("closing the shown chat takes it off the shared list and opens the next listed chat; the last leaves the landing state, busy or not", async () => {
+  it("closing the shown chat takes it off the shared list and opens the next listed chat; the last leaves the landing state", async () => {
     await family(["s1", "s2"]);
     for (const id of ["s1", "b1", "b2", "s2"]) openable(id);
     await S.openChat("s1");
@@ -239,7 +239,6 @@ describe("closing (3.3, 4.8)", () => {
     expect(await C.closeChat("s1")).toBe(true);
     await settle();
     expect([S.sessions.currentId, h.open.map((c) => c.id)]).toEqual(["s2", ["s2"]]);
-    S.sessions.live.s2 = true; // a reply is running
     const { ui } = await import("./ui.svelte.js");
     await C.closeChat("s2");
     await settle();

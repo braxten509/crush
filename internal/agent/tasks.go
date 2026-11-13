@@ -170,6 +170,9 @@ type taskHub struct {
 	// userStops marks the managed jobs (by job ID) the user is stopping,
 	// so each job's watcher tells the agent the user chose it.
 	userStops map[string]bool
+	// droppedJobs marks the managed jobs (by job ID) a closed chat's stop
+	// killed (StopChatWork): forgotten with no turn and no resume.
+	droppedJobs map[string]bool
 	// interruptedDetached marks the detached processes InterruptJob
 	// killed, so their end is not reported to the agent.
 	interruptedDetached map[detachedKey]bool

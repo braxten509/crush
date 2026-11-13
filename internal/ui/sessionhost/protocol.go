@@ -28,6 +28,11 @@ const statusOSC = 7373
 // input, to stop one of its [Status.Servers].
 const stopServerOSC = 7374
 
+// stopChatOSC is the private OSC number the host sends a chat session, as
+// input, when the user closes it: the session stops everything its chat
+// runs (its reply, helpers and jobs) and then quits.
+const stopChatOSC = 7375
+
 // State is what a session is doing.
 type State string
 
@@ -118,6 +123,16 @@ func parseStatus(data []byte) (Status, bool) {
 // stopServerSequence asks a session to stop its server on port.
 func stopServerSequence(port int) string {
 	return fmt.Sprintf("\x1b]%d;%d\x07", stopServerOSC, port)
+}
+
+// stopChatSequence asks a chat session to stop its chat and quit.
+func stopChatSequence() string {
+	return fmt.Sprintf("\x1b]%d;stop\x07", stopChatOSC)
+}
+
+// ParseStopChat reports whether seq is the host asking to stop the chat.
+func ParseStopChat(seq string) bool {
+	return strings.HasPrefix(seq, "\x1b]"+strconv.Itoa(stopChatOSC)+";")
 }
 
 // ParseStopServer reads the port out of a whole sequence from the host

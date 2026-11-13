@@ -140,6 +140,11 @@ func (w *AppWorkspace) AgentCancel(sessionID string) {
 	w.ops.CancelSession(sessionID)
 }
 
+// StopChat ends everything a closing chat runs.
+func (w *AppWorkspace) StopChat(sessionID string) {
+	w.ops.StopChat(sessionID)
+}
+
 func (w *AppWorkspace) AgentBackground(sessionID string) bool {
 	return cliagent.Background(sessionID) || tools.BackgroundShell(sessionID)
 }

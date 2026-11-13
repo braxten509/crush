@@ -4,7 +4,8 @@
 // these names: isClosed, reopen (lists the chat again) and closeChat (the
 // list's ×: the shown chat makes way for the next listed chat of its folder,
 // else the landing state).
-import { closeListed, listChat, openChats } from "./openchats.svelte.js";
+import { askCloseChat } from "./closechat.js";
+import { listChat, openChats } from "./openchats.svelte.js";
 import { sessions } from "./sessions.svelte.js";
 
 export function isClosed(sessionId) {
@@ -22,6 +23,8 @@ export async function reopen(sessionId) {
   return listChat(sessionId);
 }
 
+// It stops what the chat runs, asking first while that is something.
 export async function closeChat(sessionId) {
-  return closeListed(sessionId);
+  askCloseChat(sessionId);
+  return Boolean(sessionId);
 }

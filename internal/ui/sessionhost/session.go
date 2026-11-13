@@ -407,6 +407,18 @@ func (s *session) cursorState() (visible bool, shape vt.CursorStyle, blink bool)
 
 // stop asks Crush to exit the way closing its terminal would, and kills it
 // and everything it started if it hasn't ended after stopGrace.
+// stopChatGrace is how long a closed chat session gets to stop its chat's
+// work and quit on its own before it is stopped like any other session.
+const stopChatGrace = 5 * time.Second
+
+// stopChat closes a chat session the user closed: the session stops its
+// chat's reply, helpers and jobs, then quits (owner, 2026-11-13). One that
+// has not ended after stopChatGrace is stopped.
+func (s *session) stopChat() {
+	go func() { _, _ = io.WriteString(s.emu.InputPipe(), stopChatSequence()) }()
+	time.AfterFunc(stopChatGrace, s.stop)
+}
+
 func (s *session) stop() {
 	s.mu.Lock()
 	if s.stopped {

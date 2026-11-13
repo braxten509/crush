@@ -503,6 +503,14 @@ func (c *controllerV1) agentEndpoints() []apigen.Endpoint {
 			Fails(404, 500).
 			Build(),
 
+		route(c, rpc.StopChat, c.stopChat).
+			Summary("Stop everything a closed chat runs").
+			Tags("agent").
+			PathParam("id", "Workspace ID").
+			PathParam("sid", "Session ID").
+			Fails(404, 500).
+			Build(),
+
 		route(c, rpc.QueuedCount, c.getQueuedCount).
 			Summary("Get queued prompt status").
 			Description("Returns the number of queued prompts for the session.").

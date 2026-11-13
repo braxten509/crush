@@ -60,6 +60,11 @@ func (c *controllerV1) cancelAgent(r *http.Request, _ rpc.Empty) (rpc.Empty, err
 	return rpc.Empty{}, c.backend.CancelSession(r.PathValue("id"), r.PathValue("sid"))
 }
 
+// stopChat ends a closing chat's reply, sub-agents and background jobs.
+func (c *controllerV1) stopChat(r *http.Request, _ rpc.Empty) (rpc.Empty, error) {
+	return rpc.Empty{}, c.backend.StopChat(r.PathValue("id"), r.PathValue("sid"))
+}
+
 // getQueuedCount returns the number of queued prompts for a session.
 func (c *controllerV1) getQueuedCount(r *http.Request, _ rpc.Empty) (int, error) {
 	return c.backend.QueuedPrompts(r.PathValue("id"), r.PathValue("sid"))

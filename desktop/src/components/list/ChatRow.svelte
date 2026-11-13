@@ -21,7 +21,8 @@
   // desktop-design-5-6 2.20) in the same slot: its icon and text.
   import Icon from "../Icon.svelte";
   import { rowState } from "../../lib/rowstates.js";
-  import { closeListed, openInFolder } from "../../lib/stores/openchats.svelte.js";
+  import { openInFolder } from "../../lib/stores/openchats.svelte.js";
+  import { askCloseChat } from "../../lib/stores/closechat.js";
   import { hideHelperChat } from "../../lib/stores/helperchats.svelte.js";
   import { focusField } from "../../lib/stores/composer.svelte.js";
   import { openChat, sessions } from "../../lib/stores/sessions.svelte.js";
@@ -31,7 +32,8 @@
 
   // A row of another folder (row.folder) opens in that folder: the window
   // switches to it first. The × closes the chat for every app (the open
-  // chats shared with the terminal).
+  // chats shared with the terminal) and stops what it runs, asking first
+  // while it runs something (lib/stores/closechat.js).
   // The empty new chat (row.draft) is the landing page: a click shows it, the
   // × takes the row away.
   function open() {
@@ -51,7 +53,7 @@
       hideHelperChat(row.id);
       return;
     }
-    closeListed(row.id).catch((error) => console.error("closing a chat failed", error));
+    askCloseChat(row.id, row.stateKind);
   }
 
   // ↑ and ↓ on the × move from its row, as from the row itself (the list's keys).

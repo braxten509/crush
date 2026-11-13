@@ -50,6 +50,10 @@ func (m *UI) handleTerminalMsg(msg tea.Msg) (tea.Cmd, updateFlow, bool) {
 	case tea.ModeReportMsg:
 		m.updateNotificationBackend()
 	case uv.UnknownOscEvent:
+		if sessionhost.ParseStopChat(string(msg)) && m.inSessionHost {
+			cmds = append(cmds, m.stopChatAndQuit())
+			break
+		}
 		if port, ok := sessionhost.ParseStopServer(string(msg)); ok && m.inSessionHost {
 			cmds = append(cmds, m.stopHostServer(port))
 			break

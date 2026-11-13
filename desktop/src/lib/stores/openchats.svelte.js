@@ -13,6 +13,7 @@ import { chatClosed } from "../remote/share.js";
 import { conn, inFolder, joinedFolder, switchFolder } from "./connection.svelte.js";
 import { keepFolders } from "./listfolders.svelte.js";
 import { load, messages, rootChatOf } from "./messages.svelte.js";
+import { notify } from "./ui.svelte.js";
 import { isHelperChat, isKept, openChat, preloadChat, sessions, setOpenChats, showKept, showLanding, shownJoined } from "./sessions.svelte.js";
 
 export const openChats = $state({ list: [], loaded: false });
@@ -147,9 +148,22 @@ function leaveShown(id) {
 }
 
 // The list's ×: off the list for every app, with its phone share; the shown
-// chat makes way.
-export async function closeListed(id) {
+// chat makes way. Everything the chat still runs stops with it (owner,
+// 2026-11-13); askCloseChat asks first when that is something. With
+// mustStop (the chat runs something), a stop the engine refused keeps the
+// chat listed, with the error shown.
+export async function closeListed(id, { mustStop = false } = {}) {
   if (!id) return false;
+  try {
+    await api.stopChat(id);
+  } catch (error) {
+    const text = error?.message ?? String(error);
+    console.error("stopping a closed chat's work failed", text);
+    if (mustStop) {
+      notify("error", `Could not stop the chat: ${text}`);
+      return false;
+    }
+  }
   const wasShown = sessions.currentId === id;
   api.closeSessionBranch(id).catch(() => {});
   openChats.list = openChats.list.filter((c) => c.id !== id);

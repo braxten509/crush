@@ -502,7 +502,11 @@ func (h *Host) answerClose(close bool) {
 			h.dropRow(s.id)
 			return
 		}
-		s.stop()
+		if s.kind == chatSession && s.chatID != "" {
+			s.stopChat()
+		} else {
+			s.stop()
+		}
 		if s.kind == terminalSession {
 			if h.closing == nil {
 				h.closing = make(map[int]*session)

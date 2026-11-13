@@ -115,8 +115,10 @@ var (
 	SetMainAgent = Op[proto.AgentSetMainRequest, Empty]{Method: post, Path: "/v1/workspaces/{id}/agent/main"}
 	AgentSession = Op[Empty, proto.AgentSession]{Method: get, Path: "/v1/workspaces/{id}/agent/sessions/{sid}"}
 	CancelAgent  = Op[Empty, Empty]{Method: post, Path: "/v1/workspaces/{id}/agent/sessions/{sid}/cancel"}
-	QueuedCount  = Op[Empty, int]{Method: get, Path: "/v1/workspaces/{id}/agent/sessions/{sid}/prompts/queued"}
-	QueuedList   = Op[Empty, []string]{Method: get, Path: "/v1/workspaces/{id}/agent/sessions/{sid}/prompts/list"}
+	// StopChat ends everything a closed chat runs (agent.StopChatWork).
+	StopChat    = Op[Empty, Empty]{Method: post, Path: "/v1/workspaces/{id}/agent/sessions/{sid}/stop-all"}
+	QueuedCount = Op[Empty, int]{Method: get, Path: "/v1/workspaces/{id}/agent/sessions/{sid}/prompts/queued"}
+	QueuedList  = Op[Empty, []string]{Method: get, Path: "/v1/workspaces/{id}/agent/sessions/{sid}/prompts/list"}
 	// QueuedSummaries shares QueuedList's route; the details=true query
 	// parameter selects this richer response.
 	QueuedSummaries  = Op[Empty, []message.QueuedPromptSummary]{Method: get, Path: "/v1/workspaces/{id}/agent/sessions/{sid}/prompts/list"}

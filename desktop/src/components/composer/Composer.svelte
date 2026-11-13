@@ -21,7 +21,7 @@
   import { findPhone, phone, startRecording, stopRecording, watchPhone } from "../../lib/stores/phone.svelte.js";
   import { helperChats } from "../../lib/stores/helperchats.svelte.js";
   import { hasDialog, openDialog } from "../../lib/dialogs.js";
-  import { closeListed } from "../../lib/stores/openchats.svelte.js";
+  import { askCloseChat } from "../../lib/stores/closechat.js";
   import { sessions } from "../../lib/stores/sessions.svelte.js";
   import { prompts } from "../../lib/stores/prompts.svelte.js";
   import { closeSlot, openSlot, ui } from "../../lib/stores/ui.svelte.js";
@@ -133,7 +133,7 @@
   }
 
   function complete() {
-    closeListed(sessionId).catch((error) => console.error("completing a chat failed", error));
+    askCloseChat(sessionId);
   }
 
   function submit(event) {

@@ -122,7 +122,7 @@ func TestNativeBackgroundJobListedOnceAndUserStopIsReported(t *testing.T) {
 	require.NoError(t, StopBackgroundProcess(listed[0]))
 	select {
 	case notice := <-notices:
-		require.Contains(t, notice, "Job "+job.ID+" ")
+		require.Contains(t, notice, "The user stopped background job "+job.ID+" ")
 	case <-time.After(5 * time.Second):
 		t.Fatal("a stop from the background list must reach the agent")
 	}

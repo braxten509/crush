@@ -203,7 +203,8 @@ func TestBackgroundJobStopFromProcessListCancelsWholeScript(t *testing.T) {
 	require.ErrorIs(t, err, os.ErrNotExist)
 	select {
 	case notice := <-notices:
-		require.Contains(t, notice, "<status>failed</status>")
+		require.Contains(t, notice, "<status>stopped</status>", "the user's stop is not a failure")
+		require.Contains(t, notice, "The user stopped background job "+job.ID)
 	case <-time.After(5 * time.Second):
 		t.Fatal("stopped job did not report completion")
 	}

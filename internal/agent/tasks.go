@@ -509,7 +509,7 @@ func (h *taskHub) finishRun(ctx context.Context, t *Task, output string, err err
 	}
 	switch {
 	case stopped:
-		output = "The user stopped this task before it finished."
+		output = userStopNote("this sub-agent") + " It had not finished its task."
 	case err != nil:
 		output = "Error: " + err.Error()
 	}

@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -171,8 +172,9 @@ func hubForJob(env []string, sessionID string) *taskHub {
 
 // watchJob is the one place background jobs are tracked, whichever way they
 // started: it lists the job as the session's, saves it so a restart can
-// report it, sends progress check-ins, and tells the agent when it ends,
-// unless the agent stopped it itself. marker is the environment value the
+// report it, sends progress check-ins, and tells the agent when it ends
+// (as the user's choice when the user stopped it), unless the agent stopped
+// it itself. marker is the environment value the
 // job's processes carry. release is called once the job is reported.
 func (h *taskHub) watchJob(ctx context.Context, release func(), sessionID, marker string, job *shell.BackgroundShell, service bool) {
 	h.mu.Lock()
@@ -221,6 +223,7 @@ func (h *taskHub) watchJob(ctx context.Context, release func(), sessionID, marke
 		waited := job.WaitContext(ctx)
 		removeCheckIn()
 		stoppedByAgent := tools.StoppedByAgent(job.ID)
+		byUser := stoppedByUser(job.ID)
 		if !waited {
 			return
 		}
@@ -237,6 +240,9 @@ func (h *taskHub) watchJob(ctx context.Context, release func(), sessionID, marke
 			return
 		}
 		notice := backgroundJobNotification(job, marker, spillDir)
+		if byUser {
+			notice = userStoppedJobNotification(job, spillDir)
+		}
 		accept := h.acceptHandoff(sessionID, func() { delete(h.jobHandoffs, marker) })
 		_, err := h.c.RunAccepted(ctx, accept, sessionID, notice)
 		accept.Close()
@@ -249,6 +255,21 @@ func (h *taskHub) watchJob(ctx context.Context, release func(), sessionID, marke
 		}
 		h.forgetJob(job.ID)
 	}()
+}
+
+// userStoppedJobNotification tells the agent the user stopped its job: not
+// a failure with an exit code to explain.
+func userStoppedJobNotification(job *shell.BackgroundShell, spillDir string) string {
+	stdout, stderr, _, _ := job.GetOutput()
+	what := "background job " + job.ID
+	if name := cmp.Or(job.Description, job.Command); name != "" {
+		what += " (" + name + ")"
+	}
+	body := userStopNote(what)
+	if output := strings.TrimSpace(stdout + "\n" + stderr); output != "" {
+		body += "\nIts output before the stop:\n" + shelltool.TruncateOutput(output, spillDir)
+	}
+	return taskResult{Name: BackgroundProcessName, Status: string(TaskStopped), Body: body}.String()
 }
 
 func backgroundJobNotification(job *shell.BackgroundShell, marker, spillDir string) string {

@@ -108,8 +108,7 @@ func InterruptTask(id string) error {
 // killed, and its end is not reported to the agent.
 func InterruptJob(p Process) error {
 	if p.JobID == "" {
-		markInterruptedDetached(p.PID)
-		return KillProcess(p.PID)
+		return killProcess(p.PID, false)
 	}
 	h := hubWithJob(p.JobID)
 	if h == nil {
@@ -173,9 +172,10 @@ func hubWithJob(id string) *taskHub {
 }
 
 // markInterruptedDetached records the process tree at pid, in the hub whose
-// agents started it, as killed by InterruptJob, so that a detached process
-// among it is not reported as ended.
-func markInterruptedDetached(pid int) {
+// agents started it, as killed by Crush (InterruptJob, or the user's stop,
+// which is told on its own), so that a detached process among it is not
+// reported as ended. It returns that hub, or nil when no hub has the process.
+func markInterruptedDetached(pid int) *taskHub {
 	hubsMu.Lock()
 	listed := slices.Clone(hubs)
 	hubsMu.Unlock()
@@ -200,6 +200,7 @@ func markInterruptedDetached(pid int) {
 			h.interruptedDetached[detachedKey{p, procs[p].started}] = true
 		}
 		h.mu.Unlock()
-		return
+		return h
 	}
+	return nil
 }

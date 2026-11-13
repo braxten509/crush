@@ -10,6 +10,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -269,7 +270,8 @@ func (h *taskHub) reportDetached(k detachedKey, d detachedProc, ended time.Time)
 	if h.c == nil {
 		return
 	}
-	// InterruptJob killed it: its app left, so no agent waits for news.
+	// InterruptJob killed it (its app left, so no agent waits for news),
+	// or the user stopped it, which the agent was told at the stop.
 	h.mu.Lock()
 	interrupted := h.interruptedDetached[k]
 	delete(h.interruptedDetached, k)
@@ -344,13 +346,42 @@ func commandText(args []string) string {
 	return cliagent.CommandText(args)
 }
 
-// StopBackgroundProcess also handles managed scripts running shell builtins,
-// which have no separate PID to kill.
+// userJobStops holds the managed jobs the user is stopping, so that each
+// job's watcher tells the agent the user chose it instead of calling it a
+// failure.
+var userJobStops sync.Map
+
+// stopJobForUser ends a managed job as the user's stop.
+func stopJobForUser(id string) error {
+	userJobStops.Store(id, struct{}{})
+	err := shell.GetBackgroundShellManager().Kill(id)
+	if err != nil {
+		userJobStops.Delete(id)
+	}
+	return err
+}
+
+// stoppedByUser reports, once, whether the user's stop ended the job.
+func stoppedByUser(id string) bool {
+	_, ok := userJobStops.LoadAndDelete(id)
+	return ok
+}
+
+// userStopNote is what an agent is told about work the user stopped: it was
+// the user's choice, so there is nothing to look into and nothing to start
+// again, and the rest of the agent's work goes on (owner, 2026-11-12).
+func userStopNote(what string) string {
+	return "The user stopped " + what + " on purpose. Nothing went wrong with it: do not look into why it ended and do not debug it. Do not start it again, continue it or start another one for the same work unless the user tells you to. Keep going with the rest of your work without it; if a part of your work needs it, leave that part out and say so in your reply."
+}
+
+// StopBackgroundProcess is the user's stop of a listed background process;
+// its agent is told the user stopped it. It also handles managed scripts
+// running shell builtins, which have no separate PID to kill.
 func StopBackgroundProcess(process Process) error {
 	if process.JobID != "" {
 		for _, running := range managedBackgroundProcesses() {
 			if running.JobID == process.JobID {
-				return shell.GetBackgroundShellManager().Kill(process.JobID)
+				return stopJobForUser(process.JobID)
 			}
 		}
 		return fmt.Errorf("background job %q is no longer running", process.JobID)
@@ -362,19 +393,42 @@ func StopBackgroundProcess(process Process) error {
 // SIGKILL; a variable so tests can shorten it.
 var killGrace = 3 * time.Second
 
-// KillProcess ends a listed background process and everything it started:
-// SIGTERM first, then SIGKILL for whatever is left a few seconds later.
+// KillProcess is the user's stop of a listed background process by PID. It
+// ends the process and everything it started: SIGTERM first, then SIGKILL
+// for whatever is left a few seconds later. The agent that started it is
+// told the user stopped it.
 func KillProcess(pid int) error {
+	return killProcess(pid, true)
+}
+
+// killProcess ends a listed background process and its tree. byUser tells
+// the process's agent that the user stopped it; without it nothing is said
+// here (InterruptJob, whose agent's app left).
+func killProcess(pid int, byUser bool) error {
 	markers := hubMarkers()
 	procs := markedProcs(markers)
 	if process, ok := procs[pid]; ok {
 		if job := managedBackgroundJob(cmp.Or(process.managedJobID, process.nativeShellID)); job != nil {
+			if byUser {
+				return stopJobForUser(job.ID)
+			}
 			return shell.GetBackgroundShellManager().Kill(job.ID)
 		}
 	}
 	root, ok := procs[pid]
 	if !ok || !isCommandRoot(root, procs) {
 		return fmt.Errorf("process %d is not one of the agents' background processes", pid)
+	}
+	// The stop is told once, here: a detached process in the tree is not
+	// also reported as ended on its own.
+	h := markInterruptedDetached(pid)
+	if byUser && h != nil && h.c != nil && root.session != "" {
+		notice := taskResult{Name: BackgroundProcessName, Status: string(TaskStopped), Body: userStopNote(fmt.Sprintf("the background process `%s` (PID %d)", commandText(root.args), pid))}.String()
+		go func() {
+			if _, err := h.c.Run(context.Background(), root.session, notice); err != nil && !errors.Is(err, context.Canceled) {
+				slog.Error("Failed to report a background process the user stopped", "error", err)
+			}
+		}()
 	}
 	tree := []int{pid}
 	for i := 0; i < len(tree); i++ {

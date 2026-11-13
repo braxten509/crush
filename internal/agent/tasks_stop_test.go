@@ -44,6 +44,7 @@ func TestStopSessionTaskTellsParent(t *testing.T) {
 		require.True(t, ok)
 		require.Equal(t, "worker", name)
 		require.Equal(t, string(TaskStopped), status)
+		require.Contains(t, prompt, "The user stopped this sub-agent on purpose")
 	case <-time.After(5 * time.Second):
 		t.Fatal("the parent was not told")
 	}

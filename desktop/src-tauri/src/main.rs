@@ -73,17 +73,11 @@ fn main() {
     let ui_debug = std::env::var("CRUSH_UI_DEBUG").is_ok_and(|v| v == "true");
     let launch = match parse_launch(&args, &here, ui_debug) {
         Ok(launch) => launch,
-        Err(message) => {
-            eprintln!("{message}");
-            std::process::exit(1);
-        }
+        Err(message) => fatal(output, &message),
     };
     let fixture = match launch.fixture.as_deref().map(fixture::Fixture::load).transpose() {
         Ok(fixture) => fixture,
-        Err(message) => {
-            eprintln!("{message}");
-            std::process::exit(1);
-        }
+        Err(message) => fatal(output, &message),
     };
     let opened_log = launch.probe_side_file("opened.jsonl");
     let first_window = windows::WindowLaunch::first(&launch);
@@ -141,6 +135,17 @@ fn refresh_models_at_start(app: &AppHandle) {
             applog::write("warn", "app", "the model lists could not be refreshed");
         }
     });
+}
+
+/// Ends a start that cannot go on. The reason goes to Electron as a "fatal"
+/// message, which its error box shows (owner, 2026-11-12: a bad command
+/// line said only "helper stopped (code 1)"), and to stderr as before.
+fn fatal(mut output: std::fs::File, message: &str) -> ! {
+    use std::io::Write;
+    let _ = writeln!(output, "{}", serde_json::json!({ "t": "fatal", "message": message }));
+    let _ = output.flush();
+    eprintln!("{message}");
+    std::process::exit(1);
 }
 
 fn take_lines() -> (std::io::BufReader<std::fs::File>, std::fs::File) {

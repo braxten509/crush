@@ -428,7 +428,11 @@ def main():
     try:
         with step("connect-1-flags", out_dir):
             p = subprocess.run([APP, "--probe", "/tmp/probe-flags.json", "-s", "abc", "-C"], capture_output=True, text=True, timeout=30)
-            check(p.returncode == 1, f"START-006: -s with -C exits 1 (exit {p.returncode}: {p.stderr.strip()[:120]})")
+            # The app's own last word is the reason, naming both flags, not
+            # only that its helper stopped (owner, 2026-11-12).
+            said = [line for line in p.stderr.splitlines() if line.startswith("crush-desktop: ")]
+            why = said[-1] if said else ""
+            check(p.returncode == 1 and "session" in why and "continue" in why, f"START-006: -s with -C exits 1 and says why (exit {p.returncode}: {why[:200]})")
             check(not os.path.exists("/tmp/probe-flags.json"), "and opens no window (it wrote no probe file)")
             print("NOTE START-010 (-d), START-011 (-H) and START-013 (--channels) are Rust only (6.5): "
                   "they show only in the requests the app sends, which P3.1's Rust tests check", flush=True)

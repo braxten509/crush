@@ -95,13 +95,13 @@ app.commandLine.appendSwitch("ozone-platform-hint", "auto");
 // drag this and a lot of text scrolls, the entire chat goes blank until I
 // stop"): dragging the chat's scroll bar jumps thousands of pixels a frame,
 // and Chromium otherwise draws the parts it has not painted yet as empty
-// paper (tests/driver/scroll_drag.py records them).
+// paper.
 app.commandLine.appendSwitch("run-all-compositor-stages-before-draw");
 // The window stays bright after the screen dims (owner, 2026-11-01: "when my
 // screen darkens the entire crush GUI darkens until I move it"). KWin dims by
 // announcing a dimmer white over Wayland's color protocol, many times a
-// second; Chromium followed it and kept the dark one until the window moved
-// (tests/driver/screen_dim.py). Without the protocol KWin draws the window
+// second; Chromium followed it and kept the dark one until the window
+// moved. Without the protocol KWin draws the window
 // as plain sRGB, as it does for apps that never use it.
 app.commandLine.appendSwitch("disable-features", "WaylandWpColorManagerV1");
 // The window's class (X11) and app id (Wayland) is "crush-desktop", the name
@@ -135,7 +135,11 @@ function startHelper() {
   helper.on("error", (e) => fail(`The Crush Desktop helper could not start: ${e.message}`));
   helper.on("exit", (code, signal) => {
     helper = null;
-    if (!quitting) fail(`The Crush Desktop helper stopped (${signal ?? `code ${code}`}).`);
+    // A moment for the helper's last line: a start that cannot go on says
+    // why in a "fatal" message (fromHelper), which may arrive after this.
+    setTimeout(() => {
+      if (!quitting) fail(`The Crush Desktop helper stopped (${signal ?? `code ${code}`}).`);
+    }, 200);
   });
   readline.createInterface({ input: helper.stdout }).on("line", (line) => {
     let message;
@@ -164,6 +168,11 @@ function fromHelper(message) {
   switch (message.t) {
     case "ready":
       createWindow("main");
+      break;
+    // The helper cannot start (a bad command line, an unreadable fixture):
+    // its own reason, not "the helper stopped".
+    case "fatal":
+      fail(String(message.message || "The Crush Desktop helper could not start."));
       break;
     case "result": {
       const resolve = calls.get(message.id);

@@ -151,6 +151,28 @@ func TestRunningOutSwitchesToTheNextAccountAndContinues(t *testing.T) {
 	}
 }
 
+// The owner's report (2026-11-13): Fable ran out on an account whose other
+// usage had plenty left, and every chat on its Opus was moved away. A
+// model's own limit leaves the account's other models where they are.
+func TestAModelsOwnLimitLeavesTheAccountsOtherModels(t *testing.T) {
+	blocks := []config.FallbackBlock{
+		useBlock(config.TypeClaudeCode, "", "opus"),
+		useBlock(config.TypeClaudeCode, "claude-2", "opus"),
+	}
+	c, sid := fallbackCoordinator(t, blocks, map[string]float64{}, nil)
+	setChatModel(t, c, sid, config.SelectedModel{Provider: string(config.TypeClaudeCode), Model: "fable"})
+	c.fallbackOnOut(t.Context(), sid, errors.New("You've hit your Fable limit · resets 11:59pm"))
+
+	// The user picks Opus on the same account: it has room, the chat stays.
+	setChatModel(t, c, sid, fallbackModelOf(blocks[0]))
+	c.fallbackBeforeTurn(t.Context(), sid)
+	require.Equal(t, "", chatModelOf(t, c, sid).Account)
+
+	// A limit of the whole account still moves every model on it.
+	require.True(t, c.fallbackOnOut(t.Context(), sid, errOut))
+	require.Equal(t, "claude-2", chatModelOf(t, c, sid).Account)
+}
+
 func TestWaitBlockWaitsThenReturnsToTheAccount(t *testing.T) {
 	blocks := []config.FallbackBlock{
 		useBlock(config.TypeClaudeCode, "", "opus"),

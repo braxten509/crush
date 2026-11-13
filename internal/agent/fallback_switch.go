@@ -41,10 +41,18 @@ type fallbackOut struct {
 	known bool
 }
 
+// outKey is what ran out: a whole account (model ""), or one model on it
+// when the limit named that model alone ("You've hit your Fable limit"),
+// so the account's other models stay usable.
+type outKey struct {
+	acct  fallback.Account
+	model string
+}
+
 // fallbackState is the coordinator's memory of the order between turns.
 type fallbackState struct {
 	mu  sync.Mutex
-	out map[fallback.Account]fallbackOut
+	out map[outKey]fallbackOut
 	// ret is each chat's planned way back, by chat: every chat follows the
 	// order on its own model (owner, 2026-10-24).
 	ret map[string]*fallback.Return
@@ -103,19 +111,20 @@ func (c *coordinator) providerKind(provider string) catwalk.Type {
 	return p.Type
 }
 
-// fallbackReadings reads accounts from the usage store, with the accounts
-// that ran out, and those this decision skipped, counted as full.
+// fallbackReadings reads accounts from the usage store, for a model: the
+// limits the account shares and the model's own. The accounts and models
+// that ran out, and the accounts this decision skipped, count as full.
 func (c *coordinator) fallbackReadings(now time.Time, skip map[fallback.Account]bool) fallback.Readings {
 	c.fallback.mu.Lock()
-	out := make(map[fallback.Account]fallbackOut, len(c.fallback.out))
-	for a, o := range c.fallback.out {
+	out := make(map[outKey]fallbackOut, len(c.fallback.out))
+	for k, o := range c.fallback.out {
 		if now.Before(o.until) {
-			out[a] = o
+			out[k] = o
 		}
 	}
 	c.fallback.mu.Unlock()
-	return func(a fallback.Account) fallback.Reading {
-		limits := cliagent.AccountLimits(a.Kind, a.ID, "")
+	return func(a fallback.Account, model string) fallback.Reading {
+		limits := cliagent.AccountLimits(a.Kind, a.ID, model)
 		r := fallback.Reading{Known: len(limits) > 0, Refills: cliagent.Refills(a.Kind, a.ID)}
 		for _, l := range limits {
 			r.Used = max(r.Used, 100-l.Left())
@@ -123,7 +132,11 @@ func (c *coordinator) fallbackReadings(now time.Time, skip map[fallback.Account]
 				r.OpenAt = l.ResetsAt
 			}
 		}
-		if o, ok := out[a]; ok {
+		for k, o := range out {
+			// A model's own mark counts for that model only.
+			if k.acct != a || (k.model != "" && (model == "" || !cliagent.SameLimitModel(a.Kind, a.ID, k.model, model))) {
+				continue
+			}
 			r.Known, r.Used = true, 100
 			if o.known && o.until.After(r.OpenAt) {
 				r.OpenAt = o.until
@@ -157,7 +170,7 @@ func (c *coordinator) fallbackReady(ctx context.Context, b config.FallbackBlock,
 	now := c.fallback.clock()
 	switch {
 	case err == nil:
-		return !fallback.Full(c.fallbackReadings(now, nil)(acct), b.MoveAtPercent)
+		return !fallback.Full(c.fallbackReadings(now, nil)(acct, b.Model), b.MoveAtPercent)
 	case errors.Is(err, cliagent.ErrNoUsageSource):
 		return true // nothing to read: taken as it is
 	}
@@ -173,23 +186,42 @@ func (c *coordinator) fallbackReady(ctx context.Context, b config.FallbackBlock,
 	}
 	slog.Info("The fallback order skips an account that did not answer", "kind", acct.Kind, "account", acct.ID, "reading", err, "try", tryErr)
 	if isUsageLimit(tryErr) {
-		c.markOut(acct, tryErr, now)
+		c.markOut(acct, b.Model, tryErr, now)
 	}
 	return false
 }
 
 // markOut counts acct as out until the reset time err names, else for
-// fallbackGuessOut.
-func (c *coordinator) markOut(acct fallback.Account, err error, now time.Time) {
+// fallbackGuessOut. model is the model the turn ran on: when err is that
+// model's own limit, only the model counts as out there, and the account's
+// other models keep their room.
+func (c *coordinator) markOut(acct fallback.Account, model string, err error, now time.Time) {
 	o := fallbackOut{until: now.Add(fallbackGuessOut)}
 	if reset, ok := resetTime(err.Error(), now); ok && reset.After(now) {
 		o = fallbackOut{until: reset, known: true}
 	}
+	key := outKey{acct: acct}
+	if cliagent.LimitNamesModel(acct.Kind, acct.ID, model, err.Error()) {
+		key.model = model
+	}
 	c.fallback.mu.Lock()
 	if c.fallback.out == nil {
-		c.fallback.out = map[fallback.Account]fallbackOut{}
+		c.fallback.out = map[outKey]fallbackOut{}
 	}
-	c.fallback.out[acct] = o
+	c.fallback.out[key] = o
+	c.fallback.mu.Unlock()
+	c.saveFallbackMemory()
+}
+
+// refilled forgets everything acct ran out of: a free refill resets all of
+// its limits.
+func (c *coordinator) refilled(acct fallback.Account) {
+	c.fallback.mu.Lock()
+	for k := range c.fallback.out {
+		if k.acct == acct {
+			delete(c.fallback.out, k)
+		}
+	}
 	c.fallback.mu.Unlock()
 	c.saveFallbackMemory()
 }
@@ -282,7 +314,7 @@ func (c *coordinator) fallbackOnOut(ctx context.Context, sessionID string, err e
 		return false
 	}
 	now := c.fallback.clock()
-	c.markOut(fallback.BlockAccount(order.Blocks[at], c.providerKind), err, now)
+	c.markOut(fallback.BlockAccount(order.Blocks[at], c.providerKind), cur.Model, err, now)
 	act := fallback.OnOut(order, c.providerKind, at, c.fallbackReadings(now, nil), now, nil)
 	return c.applyFallback(ctx, sessionID, order, at, act, true, map[fallback.Account]bool{}, map[fallback.Account]bool{})
 }
@@ -366,10 +398,7 @@ func (c *coordinator) applyFallback(ctx context.Context, sessionID string, order
 			}
 			return c.applyFallback(ctx, sessionID, order, at, next, resume, noRefill, skip)
 		}
-		c.fallback.mu.Lock()
-		delete(c.fallback.out, act.Account)
-		c.fallback.mu.Unlock()
-		c.saveFallbackMemory()
+		c.refilled(act.Account)
 		line := fmt.Sprintf("Used a free refill on %s.", accounts.Label(cfg, act.Account.Kind, act.Account.ID))
 		if act.Block != at {
 			b := order.Blocks[act.Block]

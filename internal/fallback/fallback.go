@@ -34,8 +34,16 @@ type Reading struct {
 	Refills int
 }
 
-// Readings reads an account's usage.
-type Readings func(Account) Reading
+// Readings reads an account's usage as it counts for a model: the limits
+// the whole account shares and the model's own ("" reads only the shared
+// ones). An account whose Fable ran out still has room for its Opus.
+type Readings func(acct Account, model string) Reading
+
+// readBlock is the usage that counts for block b: its account's, for its
+// model.
+func readBlock(read Readings, b config.FallbackBlock, kindOf KindOf) Reading {
+	return read(BlockAccount(b, kindOf), b.Model)
+}
 
 // Kind is what an Action does.
 type Kind int
@@ -196,7 +204,7 @@ func OnOut(order config.FallbackOrder, kindOf KindOf, at int, read Readings, now
 	}
 	if b := order.Blocks[at]; b.Type == config.FallbackUse && b.RefillFirst {
 		acct := BlockAccount(b, kindOf)
-		if !noRefill[acct] && read(acct).Refills > 0 {
+		if !noRefill[acct] && read(acct, b.Model).Refills > 0 {
 			return Action{Kind: Refill, Account: acct, Block: at}
 		}
 	}
@@ -209,12 +217,12 @@ func OnOut(order config.FallbackOrder, kindOf KindOf, at int, read Readings, now
 		acct := BlockAccount(b, kindOf)
 		switch b.Type {
 		case config.FallbackUse:
-			if !passedBy(b) && !Full(read(acct), b.MoveAtPercent) {
+			if !passedBy(b) && !Full(read(acct, b.Model), b.MoveAtPercent) {
 				return Action{Kind: Switch, Block: j, Return: ret}
 			}
 		case config.FallbackRefill:
 			target := useBlockFor(order, kindOf, acct)
-			if target >= 0 && !noRefill[acct] && read(acct).Refills > 0 {
+			if target >= 0 && !noRefill[acct] && read(acct, order.Blocks[target].Model).Refills > 0 {
 				return Action{Kind: Refill, Account: acct, Block: target, Return: ret}
 			}
 		case config.FallbackWait:
@@ -222,7 +230,8 @@ func OnOut(order config.FallbackOrder, kindOf KindOf, at int, read Readings, now
 			if target < 0 || ret != nil {
 				continue // nothing to wait for, or already waiting for another
 			}
-			r := read(acct)
+			// The wait is for the model the chat would run there.
+			r := read(acct, order.Blocks[target].Model)
 			if !Full(r, 0) {
 				return Action{Kind: Switch, Block: target}
 			}
@@ -252,7 +261,7 @@ func OnOut(order config.FallbackOrder, kindOf KindOf, at int, read Readings, now
 // the plain reset retry continues it there.
 func soonestComeBack(order config.FallbackOrder, kindOf KindOf, at int, read Readings) Action {
 	act := Action{Kind: Stay}
-	if own := read(BlockAccount(order.Blocks[at], kindOf)); !own.OpenAt.IsZero() {
+	if own := readBlock(read, order.Blocks[at], kindOf); !own.OpenAt.IsZero() {
 		act.Until = own.OpenAt
 	}
 	for k := range at {
@@ -260,7 +269,7 @@ func soonestComeBack(order config.FallbackOrder, kindOf KindOf, at int, read Rea
 		if b.Type != config.FallbackUse || !b.ComeBack || passedBy(b) {
 			continue
 		}
-		r := read(BlockAccount(b, kindOf))
+		r := readBlock(read, b, kindOf)
 		if r.OpenAt.IsZero() || (!act.Until.IsZero() && !r.OpenAt.Before(act.Until)) {
 			continue
 		}
@@ -277,7 +286,7 @@ func soonestComeBack(order config.FallbackOrder, kindOf KindOf, at int, read Rea
 func comeBackWithRoom(order config.FallbackOrder, kindOf KindOf, at int, read Readings) int {
 	for k := range at {
 		b := order.Blocks[k]
-		if b.Type == config.FallbackUse && b.ComeBack && !passedBy(b) && !Full(read(BlockAccount(b, kindOf)), b.MoveAtPercent) {
+		if b.Type == config.FallbackUse && b.ComeBack && !passedBy(b) && !Full(readBlock(read, b, kindOf), b.MoveAtPercent) {
 			return k
 		}
 	}
@@ -294,12 +303,12 @@ func BeforeTurn(order config.FallbackOrder, kindOf KindOf, at int, ret *Return, 
 	if at < 0 || at >= len(order.Blocks) {
 		return Action{Kind: Stay}
 	}
-	if b := order.Blocks[at]; b.Type != config.FallbackUse || !Full(read(BlockAccount(b, kindOf)), b.MoveAtPercent) {
+	if b := order.Blocks[at]; b.Type != config.FallbackUse || !Full(readBlock(read, b, kindOf), b.MoveAtPercent) {
 		return Action{Kind: Stay}
 	}
 	if ret != nil && ret.Block != at && ret.Block >= 0 && ret.Block < len(order.Blocks) && !now.Before(ret.At) {
 		b := order.Blocks[ret.Block]
-		if !passedBy(b) && !Full(read(BlockAccount(b, kindOf)), b.MoveAtPercent) {
+		if !passedBy(b) && !Full(readBlock(read, b, kindOf), b.MoveAtPercent) {
 			return Action{Kind: Switch, Block: ret.Block}
 		}
 	}

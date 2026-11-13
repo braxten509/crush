@@ -29,7 +29,7 @@ func wait(acct Account) config.FallbackBlock {
 
 // readings: accounts not listed have room and no refills.
 func readings(m map[Account]Reading) Readings {
-	return func(a Account) Reading { return m[a] }
+	return func(a Account, _ string) Reading { return m[a] }
 }
 
 func out(at time.Time) Reading { return Reading{Known: true, Used: 100, OpenAt: at} }

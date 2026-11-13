@@ -63,13 +63,21 @@ type savedWait struct {
 	Owner int `json:"owner"`
 }
 
-// savedOut is an account the fallback order counted as out.
+// savedOut is an account the fallback order counted as out, or one model
+// on it.
 type savedOut struct {
-	Kind  string    `json:"kind"`
-	ID    string    `json:"id"`
+	Kind string `json:"kind"`
+	ID   string `json:"id"`
+	// Model is the model that ran out when the limit was its own; "" is
+	// the whole account.
+	Model string    `json:"model,omitempty"`
 	Until time.Time `json:"until"`
 	// Known is false when the provider named no reset time.
 	Known bool `json:"known,omitempty"`
+	// Scoped says the entry tells a model's own limit from the account's.
+	// An older Crush counted the whole account as out either way (a Fable
+	// limit took Opus along), so its entries are not read.
+	Scoped bool `json:"scoped,omitempty"`
 }
 
 // savedReturn is the fallback order's planned way back to a block.
@@ -273,8 +281,8 @@ func (c *coordinator) waitBlock(w savedWait) (config.FallbackOrder, int, config.
 func (c *coordinator) saveFallbackMemory() {
 	c.fallback.mu.Lock()
 	out := make([]savedOut, 0, len(c.fallback.out))
-	for a, o := range c.fallback.out {
-		out = append(out, savedOut{Kind: string(a.Kind), ID: a.ID, Until: o.until, Known: o.known})
+	for k, o := range c.fallback.out {
+		out = append(out, savedOut{Kind: string(k.acct.Kind), ID: k.acct.ID, Model: k.model, Until: o.until, Known: o.known, Scoped: true})
 	}
 	var ret map[string]savedReturn
 	for sessionID, r := range c.fallback.ret {
@@ -285,7 +293,7 @@ func (c *coordinator) saveFallbackMemory() {
 	}
 	c.fallback.mu.Unlock()
 	slices.SortFunc(out, func(a, b savedOut) int {
-		return strings.Compare(string(a.Kind)+"\x00"+a.ID, string(b.Kind)+"\x00"+b.ID)
+		return strings.Compare(a.Kind+"\x00"+a.ID+"\x00"+a.Model, b.Kind+"\x00"+b.ID+"\x00"+b.Model)
 	})
 	err := c.updatePending(func(p *pendingWork) bool {
 		p.Out, p.Returns = out, ret
@@ -309,13 +317,13 @@ func (c *coordinator) loadFallbackMemory() {
 	c.fallback.mu.Lock()
 	defer c.fallback.mu.Unlock()
 	for _, o := range saved.Out {
-		if !o.Until.After(now) {
-			continue // its limit has reset since
+		if !o.Until.After(now) || !o.Scoped {
+			continue // its limit has reset since, or an older Crush's entry
 		}
 		if c.fallback.out == nil {
-			c.fallback.out = map[fallback.Account]fallbackOut{}
+			c.fallback.out = map[outKey]fallbackOut{}
 		}
-		c.fallback.out[fallback.Account{Kind: catwalk.Type(o.Kind), ID: o.ID}] = fallbackOut{until: o.Until, known: o.Known}
+		c.fallback.out[outKey{acct: fallback.Account{Kind: catwalk.Type(o.Kind), ID: o.ID}, model: o.Model}] = fallbackOut{until: o.Until, known: o.Known}
 	}
 	for sessionID, r := range saved.Returns {
 		if c.fallback.ret == nil {

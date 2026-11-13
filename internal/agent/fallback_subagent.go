@@ -60,7 +60,7 @@ func (h *taskHub) subAgentFallback(ctx context.Context, t *Task, start, cur conf
 	}
 	from := fallback.BlockAccount(order.Blocks[at], c.providerKind)
 	now := c.fallback.clock()
-	c.markOut(from, err, now)
+	c.markOut(from, cur.Model, err, now)
 	skip, noRefill := map[fallback.Account]bool{}, map[fallback.Account]bool{}
 	for range len(order.Blocks) + 2 {
 		act := fallback.OnOut(order, c.providerKind, at, c.fallbackReadings(now, skip), now, noRefill)
@@ -79,10 +79,7 @@ func (h *taskHub) subAgentFallback(ctx context.Context, t *Task, start, cur conf
 				noRefill[act.Account] = true
 				continue
 			}
-			c.fallback.mu.Lock()
-			delete(c.fallback.out, act.Account)
-			c.fallback.mu.Unlock()
-			c.saveFallbackMemory()
+			c.refilled(act.Account)
 			return h.subAgentOn(ctx, t, order.Blocks[act.Block], fmt.Sprintf("Used a free refill on %s.", accounts.Label(cfg, act.Account.Kind, act.Account.ID)))
 		case fallback.Wait:
 			b := order.Blocks[act.Block]

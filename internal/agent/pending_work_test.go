@@ -174,7 +174,7 @@ func TestSavedFallbackMemoryComesBack(t *testing.T) {
 	clock := &fakeClock{now: time.Date(2026, time.October, 19, 3, 0, 0, 0, boise)}
 	first := pendingTestCoordinator(t, env, clock)
 	acct := fallback.Account{Kind: config.TypeClaudeCode, ID: "test-account"}
-	first.markOut(acct, errors.New("You've hit your session limit · resets 5:20am (America/Boise)"), clock.Now())
+	first.markOut(acct, "opus", errors.New("You've hit your session limit · resets 5:20am (America/Boise)"), clock.Now())
 	first.fallback.mu.Lock()
 	first.fallback.ret = map[string]*fallback.Return{"chat-1": {Block: 1, At: clock.Now().Add(3 * time.Hour)}}
 	first.fallback.mu.Unlock()
@@ -182,7 +182,7 @@ func TestSavedFallbackMemoryComesBack(t *testing.T) {
 
 	next := pendingTestCoordinator(t, env, clock)
 	next.loadFallbackMemory()
-	reading := next.fallbackReadings(clock.Now(), nil)(acct)
+	reading := next.fallbackReadings(clock.Now(), nil)(acct, "opus")
 	require.True(t, reading.Known)
 	require.EqualValues(t, 100, reading.Used)
 	require.True(t, reading.OpenAt.Equal(time.Date(2026, 10, 19, 5, 20, 0, 0, boise)), reading.OpenAt)

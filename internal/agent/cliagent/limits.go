@@ -318,6 +318,47 @@ func nameWords(name string) []string {
 	return words
 }
 
+// LimitNamesModel reports whether a usage-limit message is about model
+// alone, not the whole account: it names the model, or the family the
+// account counts that model's usage under ("You've hit your Fable limit").
+func LimitNamesModel(kind catwalk.Type, account, model, text string) bool {
+	if model == "" {
+		return false
+	}
+	limitStore.Lock()
+	family := usageModel(limitStore.byKind[limitKey{kind, account}], model)
+	limitStore.Unlock()
+	base := model
+	for _, word := range effortWords {
+		if cut, ok := strings.CutSuffix(model, "-"+word); ok {
+			base = cut
+			break
+		}
+	}
+	said := nameWords(text)
+	for _, name := range []string{family, base} {
+		words := nameWords(name)
+		if len(words) > 0 && !slices.ContainsFunc(words, func(w string) bool { return !slices.Contains(said, w) }) {
+			return true
+		}
+	}
+	return false
+}
+
+// SameLimitModel reports whether two models of an account run out
+// together: the same model, or two whose usage the account counts under
+// one family.
+func SameLimitModel(kind catwalk.Type, account, a, b string) bool {
+	if a == b {
+		return true
+	}
+	limitStore.Lock()
+	defer limitStore.Unlock()
+	stored := limitStore.byKind[limitKey{kind, account}]
+	family := usageModel(stored, a)
+	return family != "" && family == usageModel(stored, b)
+}
+
 // Refills is how many free refills an account has left, as last read.
 func Refills(kind catwalk.Type, account string) int {
 	limitStore.Lock()

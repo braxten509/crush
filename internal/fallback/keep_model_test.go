@@ -30,7 +30,7 @@ func TestKeepModelBlockKeepsTheChatsModel(t *testing.T) {
 	require.Equal(t, 0, at)
 	clock := time.Date(2026, 11, 12, 12, 0, 0, 0, time.UTC)
 	full := Reading{Known: true, Used: 100, OpenAt: clock.Add(time.Hour)}
-	read := func(a Account) Reading {
+	read := func(a Account, _ string) Reading {
 		if a == (Account{Kind: config.TypeClaudeCode}) {
 			return full
 		}

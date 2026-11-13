@@ -65,40 +65,26 @@ func forkFixture(t *testing.T, forkContent string) (checkout string) {
 	return checkout
 }
 
-func TestMergeKeepsTheForkAndAddsTheRelease(t *testing.T) {
-	// The fork changed another line, so upstream's change merges cleanly.
-	checkout := forkFixture(t, "one\ntwo\nthree\nfour\nfork five\n")
+func TestPrepareLeavesTheReleaseForTheAgent(t *testing.T) {
+	// The fork changed the same line as upstream; the release still must not
+	// be merged (or clash) before the agent has checked it.
+	checkout := forkFixture(t, "one\nfork two\nthree\nfour\nfive\n")
 	write(t, checkout, "fork.txt", "fork only\n")
 	gitIn(t, checkout, "add", ".")
 	gitIn(t, checkout, "commit", "-qm", "fork feature")
-	clashes, err := Merge(t.Context(), checkout, "v1.1.0")
+	head := gitIn(t, checkout, "rev-parse", "HEAD")
+	clashes, err := Prepare(t.Context(), checkout, "v1.1.0")
 	require.NoError(t, err)
 	require.Empty(t, clashes)
-	require.FileExists(t, filepath.Join(checkout, "fork.txt"))
-	require.FileExists(t, filepath.Join(checkout, "new.txt"))
-	data, err := os.ReadFile(filepath.Join(checkout, "app.txt"))
-	require.NoError(t, err)
-	require.Equal(t, "one\nupstream two\nthree\nfour\nfork five\n", string(data))
-	gitIn(t, checkout, "merge-base", "--is-ancestor", "v1.1.0", "HEAD")
-
-	clashes, err = Merge(t.Context(), checkout, "v1.1.0")
-	require.NoError(t, err)
-	require.Empty(t, clashes, "an already merged release is not merged again")
+	require.False(t, Merged(t.Context(), checkout, "v1.1.0"))
+	require.False(t, MergeInProgress(t.Context(), checkout))
+	require.Equal(t, head, gitIn(t, checkout, "rev-parse", "HEAD"))
+	require.NoFileExists(t, filepath.Join(checkout, "new.txt"))
+	gitIn(t, checkout, "rev-parse", "--verify", "v1.1.0")
+	require.Error(t, Build(t.Context(), checkout, "v1.1.0", os.Stderr), "an unmerged release is never built")
 }
 
-func TestMergeReportsClashesAndLeavesThemForTheAgent(t *testing.T) {
-	checkout := forkFixture(t, "one\nfork two\nthree\nfour\nfive\n")
-	clashes, err := Merge(t.Context(), checkout, "v1.1.0")
-	require.NoError(t, err)
-	require.Equal(t, []string{"app.txt"}, clashes)
-	require.True(t, MergeInProgress(t.Context(), checkout))
-	clashes, err = Merge(t.Context(), checkout, "v1.1.0")
-	require.NoError(t, err)
-	require.Equal(t, []string{"app.txt"}, clashes, "a later run picks up the unfinished merge")
-	require.Error(t, Build(t.Context(), checkout, "v1.1.0", os.Stderr))
-}
-
-func TestMergeCommitsLocalChangesBeforeUpdating(t *testing.T) {
+func TestPrepareCommitsLocalChangesBeforeUpdating(t *testing.T) {
 	checkout := forkFixture(t, "one\ntwo\nthree\nfour\nfork five\n")
 	write(t, checkout, ".gitignore", "ignored.txt\n")
 	write(t, checkout, "removed.txt", "old\n")
@@ -114,20 +100,18 @@ func TestMergeCommitsLocalChangesBeforeUpdating(t *testing.T) {
 	write(t, checkout, "ignored.txt", "keep ignored\n")
 	require.NoError(t, os.Remove(filepath.Join(checkout, "removed.txt")))
 
-	clashes, err := Merge(t.Context(), checkout, "v1.1.0")
+	clashes, err := Prepare(t.Context(), checkout, "v1.1.0")
 	require.NoError(t, err)
 	require.Empty(t, clashes)
-	require.Equal(t, before, gitIn(t, checkout, "rev-parse", "HEAD^1^"))
-	require.Equal(t, "one\ntwo\nthree\nfour\nlocal five", gitIn(t, checkout, "show", "HEAD^1:app.txt"))
-	require.Equal(t, "latest edit", gitIn(t, checkout, "show", "HEAD^1:staged.txt"))
-	require.Equal(t, "new local file", gitIn(t, checkout, "show", "HEAD^1:untracked.txt"))
-	require.Empty(t, gitIn(t, checkout, "ls-tree", "--name-only", "HEAD^1", "removed.txt", "ignored.txt"))
+	require.Equal(t, before, gitIn(t, checkout, "rev-parse", "HEAD^"))
+	require.Equal(t, "one\ntwo\nthree\nfour\nlocal five", gitIn(t, checkout, "show", "HEAD:app.txt"))
+	require.Equal(t, "latest edit", gitIn(t, checkout, "show", "HEAD:staged.txt"))
+	require.Equal(t, "new local file", gitIn(t, checkout, "show", "HEAD:untracked.txt"))
+	require.Empty(t, gitIn(t, checkout, "ls-tree", "--name-only", "HEAD", "removed.txt", "ignored.txt"))
 	require.FileExists(t, filepath.Join(checkout, "ignored.txt"))
-	require.Equal(t, "one\nupstream two\nthree\nfour\nlocal five", gitIn(t, checkout, "show", "HEAD:app.txt"))
-	require.FileExists(t, filepath.Join(checkout, "new.txt"))
 	require.Empty(t, gitIn(t, checkout, "status", "--porcelain"))
 	after := gitIn(t, checkout, "rev-parse", "HEAD")
-	clashes, err = Merge(t.Context(), checkout, "v1.1.0")
+	clashes, err = Prepare(t.Context(), checkout, "v1.1.0")
 	require.NoError(t, err)
 	require.Empty(t, clashes)
 	require.Equal(t, after, gitIn(t, checkout, "rev-parse", "HEAD"), "a clean retry must not create another commit")
@@ -138,7 +122,7 @@ func TestMergeStopsWhenLocalCommitIsRejected(t *testing.T) {
 	head := gitIn(t, checkout, "rev-parse", "HEAD")
 	write(t, checkout, "local.txt", "preserve this work\n")
 	require.NoError(t, os.WriteFile(filepath.Join(checkout, ".git", "hooks", "pre-commit"), []byte("#!/bin/sh\necho 'commit rejected' >&2\nexit 1\n"), 0o755))
-	_, err := Merge(t.Context(), checkout, "v1.1.0")
+	_, err := Prepare(t.Context(), checkout, "v1.1.0")
 	require.ErrorContains(t, err, "commit rejected")
 	require.Equal(t, head, gitIn(t, checkout, "rev-parse", "HEAD"))
 	require.Equal(t, "preserve this work", gitIn(t, checkout, "show", ":local.txt"))
@@ -148,15 +132,16 @@ func TestMergeStopsWhenLocalCommitIsRejected(t *testing.T) {
 
 func TestMergedTagUsesStableCheckoutRelease(t *testing.T) {
 	checkout := forkFixture(t, "one\ntwo\nthree\nfour\nfork five\n")
-	_, err := Merge(t.Context(), checkout, "v1.1.0")
+	_, err := Prepare(t.Context(), checkout, "v1.1.0")
 	require.NoError(t, err)
+	gitIn(t, checkout, "merge", "-q", "--no-edit", "v1.1.0")
 	gitIn(t, checkout, "tag", "v9.0.0-rc.1")
 	tag, err := MergedTag(t.Context(), checkout)
 	require.NoError(t, err)
 	require.Equal(t, "v1.1.0", tag)
 }
 
-func TestMergePreservesDivergedHistory(t *testing.T) {
+func TestPreparePreservesDivergedHistory(t *testing.T) {
 	checkout := forkFixture(t, "one\ntwo\nthree\nfour\nfork five\n")
 	root := filepath.Dir(checkout)
 	publisher := filepath.Join(root, "publisher")
@@ -171,7 +156,7 @@ func TestMergePreservesDivergedHistory(t *testing.T) {
 	gitIn(t, checkout, "commit", "-qm", "local work")
 	head := gitIn(t, checkout, "rev-parse", "HEAD")
 	published := gitIn(t, publisher, "rev-parse", "HEAD")
-	clashes, err := Merge(t.Context(), checkout, "v1.1.0")
+	clashes, err := Prepare(t.Context(), checkout, "v1.1.0")
 	require.NoError(t, err)
 	require.Empty(t, clashes)
 	gitIn(t, checkout, "merge-base", "--is-ancestor", head, "HEAD")
@@ -189,16 +174,16 @@ func TestCreateLogMakesItsFolder(t *testing.T) {
 	require.FileExists(t, LogPath())
 }
 
-func TestMergeWithOriginPointingToFork(t *testing.T) {
+func TestPrepareWithOriginPointingToFork(t *testing.T) {
 	checkout := forkFixture(t, "one\ntwo\nthree\nfour\nfork five\n")
 	gitIn(t, checkout, "remote", "set-url", "origin", filepath.Join(filepath.Dir(checkout), "fork.git"))
 	gitIn(t, checkout, "fetch", "-q", "origin", "main")
 	gitIn(t, checkout, "branch", "-q", "--set-upstream-to=origin/main")
-	clashes, err := Merge(t.Context(), checkout, "v1.1.0")
+	clashes, err := Prepare(t.Context(), checkout, "v1.1.0")
 	require.NoError(t, err)
 	require.Empty(t, clashes)
 	require.Equal(t, "origin/main", gitIn(t, checkout, "rev-parse", "--abbrev-ref", "@{upstream}"))
-	require.FileExists(t, filepath.Join(checkout, "new.txt"))
+	gitIn(t, checkout, "merge", "-q", "--no-edit", "v1.1.0")
 	// Publishing still goes to the fork, not to the release source.
 	gitIn(t, checkout, "push", "-q")
 	require.Equal(t, gitIn(t, checkout, "rev-parse", "HEAD"), gitIn(t, filepath.Join(filepath.Dir(checkout), "fork.git"), "rev-parse", "main"))
@@ -228,7 +213,7 @@ func TestStagedBuildRequiresCommittedChanges(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestMergeSavesChangesWhenPublishedForkIsAhead(t *testing.T) {
+func TestPrepareSavesChangesWhenPublishedForkIsAhead(t *testing.T) {
 	checkout := forkFixture(t, "one\ntwo\nthree\nfour\nfork five\n")
 	root := filepath.Dir(checkout)
 	publisher := filepath.Join(root, "publisher")
@@ -238,16 +223,16 @@ func TestMergeSavesChangesWhenPublishedForkIsAhead(t *testing.T) {
 	gitIn(t, publisher, "commit", "-qm", "published change")
 	gitIn(t, publisher, "push", "-q")
 	write(t, checkout, "local.txt", "uncommitted work\n")
-	clashes, err := Merge(t.Context(), checkout, "v1.1.0")
+	clashes, err := Prepare(t.Context(), checkout, "v1.1.0")
 	require.NoError(t, err)
 	require.Empty(t, clashes)
 	require.Equal(t, "uncommitted work", gitIn(t, checkout, "show", "HEAD:local.txt"))
 	require.Equal(t, "from another machine", gitIn(t, checkout, "show", "HEAD:published.txt"))
-	gitIn(t, checkout, "merge-base", "--is-ancestor", "v1.1.0", "HEAD")
+	require.False(t, Merged(t.Context(), checkout, "v1.1.0"))
 	require.Empty(t, gitIn(t, checkout, "status", "--porcelain"))
 }
 
-func TestMergeReportsPublishedForkClashesBeforeRelease(t *testing.T) {
+func TestPrepareReportsPublishedForkClashesBeforeRelease(t *testing.T) {
 	checkout := forkFixture(t, "one\ntwo\nthree\nfour\nfork five\n")
 	root := filepath.Dir(checkout)
 	publisher := filepath.Join(root, "publisher")
@@ -257,22 +242,25 @@ func TestMergeReportsPublishedForkClashesBeforeRelease(t *testing.T) {
 	gitIn(t, publisher, "commit", "-qm", "published change")
 	gitIn(t, publisher, "push", "-q")
 	write(t, checkout, "local.txt", "uncommitted work\n")
-	clashes, err := Merge(t.Context(), checkout, "v1.1.0")
+	clashes, err := Prepare(t.Context(), checkout, "v1.1.0")
 	require.NoError(t, err)
 	require.Equal(t, []string{"local.txt"}, clashes)
 	require.True(t, MergeInProgress(t.Context(), checkout))
 	require.Equal(t, "uncommitted work", gitIn(t, checkout, "show", "HEAD:local.txt"))
 	gitIn(t, checkout, "rev-parse", "--verify", "v1.1.0")
+	clashes, err = Prepare(t.Context(), checkout, "v1.1.0")
+	require.NoError(t, err)
+	require.Equal(t, []string{"local.txt"}, clashes, "a later run picks up the unfinished merge")
 }
 
-func TestMergeRefusesOfficialUpstreamTracking(t *testing.T) {
+func TestPrepareRefusesOfficialUpstreamTracking(t *testing.T) {
 	for _, remoteURL := range []string{upstreamURL, "git@github.com:charmbracelet/crush.git", "ssh://git@github.com/charmbracelet/crush.git"} {
 		t.Run(remoteURL, func(t *testing.T) {
 			checkout := forkFixture(t, "one\ntwo\nthree\nfour\nfork five\n")
 			gitIn(t, checkout, "remote", "set-url", "fork", remoteURL)
 			head := gitIn(t, checkout, "rev-parse", "HEAD")
 			write(t, checkout, "local.txt", "uncommitted work\n")
-			_, err := Merge(t.Context(), checkout, "v1.1.0")
+			_, err := Prepare(t.Context(), checkout, "v1.1.0")
 			require.Error(t, err)
 			require.Equal(t, head, gitIn(t, checkout, "rev-parse", "HEAD"))
 			require.Equal(t, "?? local.txt", gitIn(t, checkout, "status", "--porcelain"))

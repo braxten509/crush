@@ -97,7 +97,7 @@ func (m *UI) handleSelfUpdate(msg selfUpdateMsg) tea.Cmd {
 	}
 	return m.openSelfUpdateForm("crush-update",
 		fmt.Sprintf("Update Crush to %s?", release.Tag),
-		fmt.Sprintf("Upstream released %s (you have %s). Crush first saves any uncommitted changes in a commit, then brings the update into %s, builds it and runs every test in the background. If files clash or tests fail, an AI agent fixes them. You're asked again before anything is installed. Saying No skips this version.", release.Tag, release.Current, release.Dir),
+		fmt.Sprintf("Upstream released %s (you have %s). Crush first saves any uncommitted changes in a commit. An AI agent then checks upstream's changes and merges only the ones that help the fork into %s, builds it and runs every test in the background, fixing any clashes or failures. You're asked again before anything is installed. Saying No skips this version.", release.Tag, release.Current, release.Dir),
 		func() tea.Cmd { return m.startSelfUpdate(release) },
 		func() tea.Cmd {
 			cliupdate.Decline(declinedCrush(release.Tag))
@@ -161,7 +161,9 @@ func (m *UI) handleSelfUpdateBuilt(msg selfUpdateBuiltMsg) tea.Cmd {
 
 func (m *UI) offerSelfUpdateInstall(release *selfupdate.Release, fixed []string) tea.Cmd {
 	how := "It merged cleanly"
-	if len(fixed) > 0 {
+	if kept, skipped, ok := selfupdate.ReviewSummary(release.Tag); ok {
+		how = fmt.Sprintf("An AI agent checked upstream's changes first: it kept %d and skipped %d that don't help the fork (see %s),", kept, skipped, selfupdate.ReviewPath(release.Tag))
+	} else if len(fixed) > 0 {
 		how = "An AI agent fixed the clashes in " + joinNames(fixed)
 	}
 	return m.openSelfUpdateForm("crush-install",

@@ -23,10 +23,11 @@ func SetFixAgentForTest(agent func(ctx context.Context, dir string, log io.Write
 }
 
 // Run is the whole background update the terminal runs once the user says
-// yes: it saves local changes in a commit, merges tag, has an AI agent fix
-// clashes, builds and tests, and has the agent fix a failing build or test
-// run, writing everything to the log at [LogPath]. It returns the files
-// the agent fixed clashes in and the staged version, ready for [Install]
+// yes: it saves local changes in a commit, has an AI agent check tag's
+// upstream changes and merge only the ones that help the fork, builds and
+// tests, and has the agent fix a failing build or test run, writing
+// everything to the log at [LogPath]. It returns the files of an unfinished
+// merge the agent had to finish and the staged version, ready for [Install]
 // (desktop design 5-6, 2.19; G-19).
 func Run(ctx context.Context, dir, tag string) (fixed []string, staged string, err error) {
 	log, err := CreateLog()
@@ -34,11 +35,17 @@ func Run(ctx context.Context, dir, tag string) (fixed []string, staged string, e
 		return nil, "", err
 	}
 	defer log.Close()
-	clashes, err := Merge(ctx, dir, tag)
+	clashes, err := Prepare(ctx, dir, tag)
 	if err != nil {
 		return nil, "", err
 	}
-	if len(clashes) > 0 {
+	if !Merged(ctx, dir, tag) {
+		fmt.Fprintf(log, "An AI agent is checking upstream's changes in %s before merging the ones that help the fork.\n", tag)
+		if len(clashes) > 0 {
+			fmt.Fprintf(log, "It first finishes the merge with clashes in %s.\n", strings.Join(clashes, ", "))
+		}
+		err = Fix(ctx, dir, tag, clashes, "", log)
+	} else if len(clashes) > 0 {
 		fmt.Fprintf(log, "Clashes in %s; an AI agent is fixing them.\n", strings.Join(clashes, ", "))
 		err = Fix(ctx, dir, tag, clashes, "", log)
 	} else if err = Build(ctx, dir, tag, log); err != nil && !errors.Is(err, ErrDirty) {

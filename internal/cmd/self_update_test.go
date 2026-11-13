@@ -17,8 +17,9 @@ import (
 
 // TestSelfUpdateRunJSON: `crush self-update run --tag --json` runs the
 // terminal's whole background update on a fake fork checkout (whose
-// upstream is a local repository): the release clashes, the fixing agent
-// (a stand-in, no real AI tool) resolves it and builds, and the result
+// upstream is a local repository): the agent (a stand-in, no real AI tool)
+// gets the release unmerged, reviews and merges it, resolves the clash and
+// builds, and the result
 // comes back as JSON; `install --json` reports in the same shape (G-19).
 func TestSelfUpdateRunJSON(t *testing.T) {
 	home := t.TempDir()
@@ -41,22 +42,33 @@ func TestSelfUpdateRunJSON(t *testing.T) {
 	checkout := selfUpdateFixture(t, filepath.Join(home, "dev", "crush"))
 	require.Equal(t, checkout, selfupdate.Dir())
 
-	t.Cleanup(selfupdate.SetFixAgentForTest(func(ctx context.Context, dir string, log io.Writer, _ []string) error {
+	// The stand-in agent checks the release is still unmerged and that it was
+	// asked to review it, then merges it, resolves the clash and builds.
+	t.Cleanup(selfupdate.SetFixAgentForTest(func(ctx context.Context, dir string, log io.Writer, args []string) error {
+		require.False(t, selfupdate.Merged(ctx, dir, "v1.1.0"), "the release must not be merged before the agent checks it")
+		require.Contains(t, args[len(args)-1], selfupdate.ReviewPath("v1.1.0"))
+		require.NoError(t, os.WriteFile(selfupdate.ReviewPath("v1.1.0"), []byte("# v1.1.0\n- keep abc123 fix: helps\n- skip def456 feature: duplicates the fork\n"), 0o644))
+		merge := exec.Command("git", "merge", "--no-ff", "--no-commit", "v1.1.0")
+		merge.Dir = dir
+		_ = merge.Run() // clashes in app.txt
 		require.NoError(t, os.WriteFile(filepath.Join(dir, "app.txt"), []byte("one\nfork and upstream two\nthree\n"), 0o644))
 		selfUpdateGit(t, dir, "add", "app.txt")
-		selfUpdateGit(t, dir, "commit", "-q", "--no-edit")
+		selfUpdateGit(t, dir, "commit", "-q", "-m", "Merge upstream Crush v1.1.0")
 		return selfupdate.Build(ctx, dir, "v1.1.0", log)
 	}))
 
 	result := runSelfUpdateJSON(t, "run", "v1.1.0")
 	require.True(t, result.OK, result.FirstLine)
 	require.Empty(t, result.FirstLine)
-	require.Equal(t, []string{"app.txt"}, result.Fixed)
+	require.Empty(t, result.Fixed, "nothing clashed before the agent's review")
+	kept, skipped, ok := selfupdate.ReviewSummary("v1.1.0")
+	require.True(t, ok)
+	require.Equal(t, []int{1, 1}, []int{kept, skipped})
 	require.True(t, strings.HasPrefix(result.Version, "v1.1.0-local."), result.Version)
 	require.Equal(t, filepath.Join(state, "crush", "update", "update.log"), result.LogPath)
 	log, err := os.ReadFile(result.LogPath)
 	require.NoError(t, err)
-	require.Contains(t, string(log), "app.txt")
+	require.Contains(t, string(log), "checking upstream's changes")
 	require.Equal(t, result.Version, selfupdate.Staged(t.Context(), checkout, "v1.1.0"), "staged for install")
 
 	failed := runSelfUpdateJSON(t, "run", "v9.9.9")

@@ -15,16 +15,19 @@ var selfUpdateCmd = &cobra.Command{
 	Use:    "self-update [check|merge|build|install|run]",
 	Short:  "Update this fork of Crush to upstream's latest stable release",
 	Hidden: true,
-	Long: `Merges upstream's latest stable release into the fork's checkout, builds it,
+	Long: `Brings the upstream changes that help the fork from upstream's latest stable
+release into the fork's checkout (an AI agent checks them first), builds it,
 runs every test and installs it. The TUI offers this at startup; these steps
 let an agent or a person run it by hand:
 
   check    show whether a newer stable release exists
-  merge    commit local changes, then merge the update (lists clashing files)
+  merge    commit local changes, sync the fork and download the update without
+           merging it (an agent merges it after checking upstream's changes)
   build    build the merged checkout and run every test
   install  install the tested build and upload the merge to GitHub
-  run      the whole background update the TUI runs for --tag: commit, merge,
-           build and test, with an AI agent fixing clashes and failures
+  run      the whole background update the TUI runs for --tag: commit, an AI
+           agent checks upstream's changes and merges only those that help
+           the fork, build and test, with the agent fixing failures
 
 With --json, run and install print one JSON object:
 {"ok", "firstLine", "logPath", "version", "fixed"}.`,
@@ -92,14 +95,14 @@ With --json, run and install print one JSON object:
 		case "check":
 			fmt.Fprintf(cmd.OutOrStdout(), "Crush %s is out (this build is based on %s).\n", release.Tag, release.Current)
 		case "merge":
-			clashes, err := selfupdate.Merge(ctx, dir, release.Tag)
+			clashes, err := selfupdate.Prepare(ctx, dir, release.Tag)
 			if err != nil {
 				return err
 			}
 			if len(clashes) > 0 {
-				return fmt.Errorf("merging %s clashes in: %v", release.Tag, clashes)
+				return fmt.Errorf("an unfinished merge clashes in: %v", clashes)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Merged %s.\n", release.Tag)
+			fmt.Fprintf(cmd.OutOrStdout(), "Downloaded %s without merging it. `crush self-update run --tag %s` has an AI agent check and merge it.\n", release.Tag, release.Tag)
 		default:
 			return fmt.Errorf("unknown step %q", args[0])
 		}

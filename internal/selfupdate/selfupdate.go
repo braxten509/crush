@@ -1,7 +1,9 @@
 // Package selfupdate keeps this fork of Crush on upstream's stable releases.
-// A release is merged into the fork's checkout, built and tested there, and
-// installed only after the user agrees. Clashes and failing tests are left
-// to an AI agent (see [FixPrompt]); everything else is mechanical.
+// An AI agent checks each upstream change in a release before it is merged
+// and brings in only the ones that benefit the fork (see [ReviewPrompt]).
+// The merge is then built and tested in the fork's checkout and installed
+// only after the user agrees. Failing builds and tests also go to the agent
+// (see [FixPrompt]); everything else is mechanical.
 package selfupdate
 
 import (
@@ -104,11 +106,13 @@ func MergedTag(ctx context.Context, dir string) (string, error) {
 	return out, nil
 }
 
-// Merge brings the release into the checkout's current branch. It returns
-// the files that clash; the merge is then left in progress for an agent to
-// finish. Local changes are committed first. A release that is already merged
-// is not merged again.
-func Merge(ctx context.Context, dir, tag string) (clashes []string, err error) {
+// Prepare readies the checkout for the release without merging it: local
+// changes are committed, the fork's published changes are pulled in, and the
+// release is downloaded. It returns the files that clash when the fork sync
+// clashes or an earlier merge is unfinished; that merge is left in progress
+// for the agent. Only the agent merges the release, after checking upstream's
+// changes (see [ReviewPrompt]).
+func Prepare(ctx context.Context, dir, tag string) (clashes []string, err error) {
 	if MergeInProgress(ctx, dir) {
 		return unmerged(ctx, dir), nil
 	}
@@ -143,16 +147,13 @@ func Merge(ctx context.Context, dir, tag string) (clashes []string, err error) {
 		}
 		return nil, fmt.Errorf("cannot update the checkout from GitHub: %w", err)
 	}
-	if _, err := git(ctx, dir, "merge-base", "--is-ancestor", tag, "HEAD"); err == nil {
-		return nil, nil
-	}
-	if _, err := git(ctx, dir, "merge", "--no-ff", "-m", "Merge upstream Crush "+tag, tag); err != nil {
-		if clashes := unmerged(ctx, dir); len(clashes) > 0 {
-			return clashes, nil
-		}
-		return nil, err
-	}
 	return nil, nil
+}
+
+// Merged reports whether the release is already part of the checkout.
+func Merged(ctx context.Context, dir, tag string) bool {
+	_, err := git(ctx, dir, "merge-base", "--is-ancestor", tag, "HEAD")
+	return err == nil
 }
 
 // requireForkRemote prevents the fork sync from pulling unreleased upstream
@@ -332,21 +333,71 @@ func installedBinary() (string, error) {
 	return exe, nil
 }
 
-// FixPrompt asks an AI agent to finish an update that needs judgment:
-// resolving clashes, or making a failing build or test suite pass.
+// ReviewPrompt asks an AI agent to check every upstream change in the
+// release before merging it, merge only the ones that benefit the fork,
+// record its choices in the file at review, and build and test the result.
+// clashes lists the files of an unfinished merge found before it starts.
+func ReviewPrompt(tag string, clashes []string, review string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "This checkout is a fork of Crush with many features of its own. Upstream released %s. Check upstream's changes BEFORE merging them, and bring in only the ones that benefit the fork. Never drop a fork feature.\n\n", tag)
+	if len(clashes) > 0 {
+		fmt.Fprintf(&b, "First: a merge is already in progress, with clashes in: %s. If `git rev-parse MERGE_HEAD` is not %s, it is the sync with the fork's published changes: resolve it so both sides survive, `git add` the files and `git commit --no-edit`. If it is %s itself, an earlier review was interrupted: read %s if it exists and carry on from step 3.\n\n", strings.Join(clashes, ", "), tag, tag, review)
+	}
+	fmt.Fprintf(&b, "1. Review. List upstream's changes the fork does not have yet: `git log --no-merges --reverse --format='%%h %%s' HEAD..%s`. For each one, read its diff (`git show <sha>`) and the fork code it touches, then decide:\n", tag)
+	b.WriteString("   - Keep it when it benefits the fork: bug, crash, security, provider, sign-in, model-list, speed and dependency fixes, and improvements to parts the fork uses.\n")
+	b.WriteString("   - Keep changes that do not affect the app (CLA signatures, CI, docs, tests of kept code): skipping them only makes later merges clash.\n")
+	b.WriteString("   - Skip it when it duplicates or fights a fork feature (the fork has its own sub-agents through `crush spawn`, question form through `crush ask`, chat skill switches, background row, Ctrl+B backgrounding, desktop app and server routes), or adds a feature the fork does not use.\n")
+	b.WriteString("   - When unsure, keep it. When a kept change needs a skipped one, keep both.\n")
+	fmt.Fprintf(&b, "2. Write your choices to %s, one line per change, exactly `- keep <sha> <subject>: <reason>` or `- skip <sha> <subject>: <reason>`.\n", review)
+	fmt.Fprintf(&b, "3. Merge without committing: `git merge --no-ff --no-commit %s`. Resolve every clash so the fork's behavior and every kept change survive. Then take each skipped change back out of the merge (for example `git show <sha> | git apply -R --3way`, or by hand when later changes touched the same lines), leaving the fork's own code as it was.\n", tag)
+	fmt.Fprintf(&b, "4. Commit the merge: `git commit -m \"Merge upstream Crush %s\" -m \"<Kept N upstream changes and skipped M. Then one line per skipped change with its reason.>\"`. %s must end up an ancestor of HEAD, so later updates do not offer the skipped changes again.\n", tag, tag)
+	b.WriteString("5. Run `crush self-update build`. It builds Crush and runs every test. If anything fails, fix it, commit, and run it again until it passes.\n\n")
+	b.WriteString(promptRules)
+	return b.String()
+}
+
+// FixPrompt asks an AI agent to finish an update whose release is already
+// merged: resolving clashes, or making a failing build or test suite pass.
 func FixPrompt(tag string, clashes []string, failure string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "This checkout is a fork of Crush. It is being updated to upstream's stable release %s so the fork gets upstream's changes while keeping every fork feature.\n\n", tag)
 	if len(clashes) > 0 {
 		fmt.Fprintf(&b, "The update to %s stopped with a merge in progress and clashes in: %s.\n\n", tag, strings.Join(clashes, ", "))
-		b.WriteString("1. Resolve every clash so both the fork's behavior and upstream's change survive. Read both sides and the surrounding code; never drop a fork feature. Then `git add` the files and `git commit --no-edit` to finish the merge. The pending merge may be the fork sync rather than the release itself. If the requested release tag is not yet an ancestor of HEAD, merge that tag with an ordinary `git merge --no-ff --no-edit`, resolve any further clashes, and commit them before building.\n")
+		b.WriteString("1. Resolve every clash so both the fork's behavior and upstream's change survive. Read both sides and the surrounding code; never drop a fork feature. Then `git add` the files and `git commit --no-edit` to finish the merge.\n")
 	} else {
 		fmt.Fprintf(&b, "The merge is done, but `crush self-update build` failed:\n\n```\n%s\n```\n\n", lastLines(failure, 60))
 		b.WriteString("1. Find the cause and fix it, keeping both the fork's behavior and upstream's change. Commit the fixes.\n")
 	}
 	b.WriteString("2. Run `crush self-update build`. It builds Crush and runs every test. If anything fails, fix it, commit, and run it again until it passes.\n\n")
-	b.WriteString("Never discard work, reset, rebase, force-push or rewrite history, and leave the working tree clean. Do not install or push: Crush asks the user once you are done. End with a short, plain summary of what you changed.")
+	b.WriteString(promptRules)
 	return b.String()
+}
+
+const promptRules = "Never discard work, reset, rebase, force-push or rewrite history, and leave the working tree clean. Do not install or push: Crush asks the user once you are done. End with a short, plain summary of what you changed."
+
+// ReviewPath is where the agent records which upstream changes in tag it
+// kept and skipped.
+func ReviewPath(tag string) string {
+	return filepath.Join(filepath.Dir(statePath()), "review-"+tag+".md")
+}
+
+// ReviewSummary counts the kept and skipped changes in tag's review. ok is
+// false when there is no review.
+func ReviewSummary(tag string) (kept, skipped int, ok bool) {
+	data, err := os.ReadFile(ReviewPath(tag))
+	if err != nil {
+		return 0, 0, false
+	}
+	for line := range strings.SplitSeq(string(data), "\n") {
+		line = strings.ToLower(strings.TrimSpace(line))
+		switch {
+		case strings.HasPrefix(line, "- keep "):
+			kept++
+		case strings.HasPrefix(line, "- skip "):
+			skipped++
+		}
+	}
+	return kept, skipped, true
 }
 
 func lastLines(s string, n int) string {
@@ -432,13 +483,14 @@ func copyFile(from, to string) error {
 	return out.Close()
 }
 
-// FixModel is the agent that resolves clashes and failing tests. Set
+// FixModel is the agent that reviews releases and fixes failing tests. Set
 // CRUSH_SELF_UPDATE_MODEL ("provider/model") to use another one.
 const FixModel = "codex-cli/gpt-6.1-sol"
 
-// Fix runs an AI agent in the checkout, headless, until it has resolved the
-// clashes or failure and staged a tested build (or given up). Its output is
-// written to log.
+// Fix runs an AI agent in the checkout, headless, until it has staged a
+// tested build (or given up): it reviews and merges the release when that is
+// not merged yet, and otherwise resolves the clashes or failure. Its output
+// is written to log.
 func Fix(ctx context.Context, dir, tag string, clashes []string, failure string, log io.Writer) error {
 	crush, err := installedBinary()
 	if err != nil {
@@ -452,7 +504,14 @@ func Fix(ctx context.Context, dir, tag string, clashes []string, failure string,
 	if model == FixModel {
 		args = append(args, "--reasoning-effort", "high", "--fast")
 	}
-	args = append(args, FixPrompt(tag, clashes, failure))
+	prompt := FixPrompt(tag, clashes, failure)
+	if !Merged(ctx, dir, tag) {
+		if _, err := updateDir(); err != nil {
+			return err
+		}
+		prompt = ReviewPrompt(tag, clashes, ReviewPath(tag))
+	}
+	args = append(args, prompt)
 	if err := fixAgent(ctx, dir, log, args); err != nil {
 		return fmt.Errorf("the agent stopped: %w", err)
 	}

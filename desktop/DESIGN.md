@@ -167,15 +167,14 @@ component and fails where a space beside a dot would be lost.
   finished, idle turn and "message-new-instant" for new questions. The folders it hears
   (shown or listened to) go into its entry in `open-chats.json` (`dirs`); a terminal in
   one of them skips those two sounds (internal/openchats DesktopHears). A probe run writes
-  the ring to `alerts.jsonl` instead (tests/driver/ring_once.py).
+  the ring to `alerts.jsonl` instead.
 - "Your answers to the questions" is a button: it opens "Your answers", each question with
   only the picked answers (✓, ink 600) and notes in italics (owner's pick A, 2026-10-20).
   Labels come from the newest `crush ask` call before the line (lib/answers.js); without
-  one, the ids the result names (tests/driver/answers_popup.py).
+  one, the ids the result names.
 - Dragging the chat's scroll bar never shows a blank chat (owner, 2026-10-20): Electron runs
   with `run-all-compositor-stages-before-draw`, so a frame shows only once it is painted
-  (tests/driver/scroll_drag.py records the real pixels with ffmpeg; without it 5-8 of 333
-  frames were empty paper).
+  (without it 5-8 of 333 recorded frames were empty paper).
 - The chat's scroll range ends on a whole pixel (an invisible bit of room under the last
   item), so a wheel at the bottom never nudges it (owner, 2026-10-20).
 - Clock times read "9:05 AM" (bylines and the list's times today and yesterday).
@@ -310,5 +309,3 @@ Every dialog is a `kit/Sheet`:
 
 - `tests/driver/owner_fixes.py` checks that reply footers name the configured model and
   that Send turns into Stop and back, and Stop ends the run.
-- `tests/driver/dark_mode.py` checks in the real window that the chat's scroll bar is not
-  covered by the column grip and that the wheel scrolls the chat.

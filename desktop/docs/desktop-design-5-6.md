@@ -2498,7 +2498,7 @@ Folders: each piece's files sit under one folder name, so ownership is visible i
 | THM | 5 | `themes` | `tests/driver/p5_themes.py` |
 | VIEW | 5 | `pictures` | `tests/driver/p5_pictures.py` |
 | LIVE | 6 | `live` | none (its driver was never written) |
-| LST | 6 | `leftlist` | `tests/driver/p6_leftlist.py` |
+| LST | 6 | `leftlist` | none (removed 2026-11-12: one window check per user flow) |
 | TERM | 6 | `terminal` | `tests/driver/p6_terminal.py` |
 | SHARE | 6 | `remote` | `tests/driver/p6_remote.py` |
 | SYS | 6 | `system` | `tests/driver/p6_system.py` |
@@ -2565,7 +2565,7 @@ Every app piece also owns `tests/fixtures/<folder>-*.json` and `tests/fakes/scri
 - Done-checks: the row map's checks.
 
 **LST** (33 rows: see section 1)
-- Owns: `src/components/leftlist/{Strip,TerminalRows,ServerRows,StartFailure,CollapseButton,FolderPicker}.svelte` (`Strip` is S5's placeholder); `src/lib/leftlist/{store.svelte,unread,states,picker,servers,numbers,windowclose}.js` and their tests; `src/lib/plugins/leftlist.js` (list sections `terminals` (`rows`) and `servers` (`footer`); the row states of 2.20; the dialog `folder_picker`; the close step `draft`; `window-request`'s `newChat`; Alt+W, Ctrl+Shift+W and the other list keys of 2.20 and 2.23); `src-tauri/src/folderdialog.rs`; `tests/driver/p6_leftlist.py`.
+- Owns: `src/components/leftlist/{Strip,TerminalRows,ServerRows,StartFailure,CollapseButton,FolderPicker}.svelte` (`Strip` is S5's placeholder); `src/lib/leftlist/{store.svelte,unread,states,picker,servers,numbers,windowclose}.js` and their tests; `src/lib/plugins/leftlist.js` (list sections `terminals` (`rows`) and `servers` (`footer`); the row states of 2.20; the dialog `folder_picker`; the close step `draft`; `window-request`'s `newChat`; Alt+W, Ctrl+Shift+W and the other list keys of 2.20 and 2.23); `src-tauri/src/folderdialog.rs`.
 - Needs: TERM's `terminals`, `openTerminal`, `showTerminal` and `askCloseTerminal`; SES's `recent_folders`; VIEW's `dir_list`; P3.9's chat rows (through S5's list sections and row states) and `listmodel.buildRows`; P4.1's `parentOf`, `isClosed` and the `chat.close` action; P3.3's `openChat` and `setCurrentSession`; S5's `window_open`, `closeWindow()` and `app_info`; P3.2's settings (`list_collapsed`); engine A (session records) and B (jobs); gap G-18.
 - Done-checks: the row map's checks.
 

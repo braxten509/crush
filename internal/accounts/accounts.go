@@ -297,10 +297,11 @@ type Shown struct {
 func Every(cfg *config.Config) []Shown {
 	var all []Shown
 	for _, kind := range config.AccountKinds {
-		all = append(all, Shown{Kind: kind, Name: Name(cfg, kind, "")})
+		mine := []Shown{{Kind: kind, Name: Name(cfg, kind, "")}}
 		for _, a := range cfg.Accounts(kind) {
-			all = append(all, Shown{Kind: kind, ID: a.ID, Name: Name(cfg, kind, a.ID)})
+			mine = append(mine, Shown{Kind: kind, ID: a.ID, Name: Name(cfg, kind, a.ID)})
 		}
+		all = append(all, inOrder(cfg, kind, mine)...)
 	}
 	for i, me := range all {
 		clash, sameTool := false, false
@@ -320,6 +321,27 @@ func Every(cfg *config.Config) []Shown {
 		}
 	}
 	return all
+}
+
+// inOrder puts one tool's accounts in the order the user set in Settings
+// (options.account_order); accounts the order does not name keep their
+// usual place after the named ones.
+func inOrder(cfg *config.Config, kind catwalk.Type, list []Shown) []Shown {
+	if cfg.Options == nil {
+		return list
+	}
+	order := cfg.Options.AccountOrder[string(kind)]
+	if len(order) == 0 {
+		return list
+	}
+	rank := func(s Shown) int {
+		if i := slices.Index(order, s.ID); i >= 0 {
+			return i
+		}
+		return len(order)
+	}
+	slices.SortStableFunc(list, func(a, b Shown) int { return rank(a) - rank(b) })
+	return list
 }
 
 // Label is an account's label (Shown.Label).

@@ -3,7 +3,7 @@
 // again on config_changed, so a change made elsewhere shows here too. Every
 // change is saved at once; the engine's answer, when there is one, replaces
 // what is shown.
-import { api } from "../engine/api.js";
+import { api, SCOPE } from "../engine/api.js";
 import { onEvent } from "../engine/events.js";
 import { notify } from "../stores/ui.svelte.js";
 import { sign_in_run } from "../engine/commands.js";
@@ -133,6 +133,32 @@ export async function renameAccount(id, name) {
   } catch (error) {
     notify("error", `Couldn't rename the account: ${errorText(error)}`);
   }
+}
+
+// Puts one tool's accounts in a new order (ids, "" for the tool's own
+// login), dragged in Settings. Shown at once; saved in the global config
+// (options.account_order), which the engine lists accounts by everywhere.
+export function saveAccountOrder(kind, ids) {
+  const mine = fallback.accounts.filter((a) => a.kind === kind);
+  const moved = ids.map((id) => mine.find((a) => a.id === id)).filter(Boolean);
+  if (moved.length !== mine.length) return saving;
+  let at = 0;
+  fallback.accounts = fallback.accounts.map((a) => (a.kind === kind ? moved[at++] : a));
+  const order = {};
+  for (const a of fallback.accounts) (order[a.kind] ??= []).push(a.id);
+  const ticket = ++saves;
+  pending += 1;
+  saving = saving.then(async () => {
+    try {
+      await api.setConfig(SCOPE.global, "options.account_order", order);
+      pending -= 1;
+    } catch (error) {
+      pending -= 1;
+      notify("error", `Couldn't save the account order: ${errorText(error)}`);
+      if (ticket === saves) await loadFallback();
+    }
+  });
+  return saving;
 }
 
 export async function removeAccount(id) {

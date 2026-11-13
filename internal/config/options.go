@@ -170,19 +170,20 @@ type Options struct {
 	// CodexAPICompactBeforePriceStep compacts Codex API chats before a
 	// request would reach OpenAI's long-context price (272K input tokens).
 	// Unset means on.
-	CodexAPICompactBeforePriceStep *bool             `json:"codex_api_compact_before_price_step,omitempty" jsonschema:"description=Compact Codex API chats at 240000 tokens so no request reaches OpenAI's long-context price at 272000 input tokens,default=true"`
-	Accounts                       []Account         `json:"accounts,omitempty" jsonschema:"description=More Claude Code and Codex sign-ins, each in its own folder; the tools' own logins are account 1 and are not listed"`
-	OwnAccountNames                map[string]string `json:"own_account_names,omitempty" jsonschema:"description=Names given to each tool's own login (account 1) by tool (claude-code or codex-cli); an unnamed login shows the email it signed in with"`
-	Fallback                       *FallbackOrder    `json:"fallback,omitempty" jsonschema:"description=The fallback order: which account and model a chat moves to when one runs out"`
-	MemoryLimitGB                  *float64          `json:"memory_limit_gb,omitempty" jsonschema:"description=Most memory (RAM and swap together) all Crush windows and everything they start may use, in GB; 0 means no limit; defaults to half the computer's RAM (Linux only),minimum=0"`
-	ContextPaths                   []string          `json:"context_paths,omitempty" jsonschema:"description=Paths to files containing context information for the AI,example=.cursorrules,example=CRUSH.md"`
-	DisableInstructionFiles        bool              `json:"disable_instruction_files,omitempty" jsonschema:"description=Use shared Crush instructions and memory instead of personal and project instruction files"`
-	GlobalContextPaths             []string          `json:"global_context_paths,omitempty" jsonschema:"description=Paths to files containing global context information for the AI,default=~/.config/crush/CRUSH.md,default=~/.config/AGENTS.md"`
-	SkillsPaths                    []string          `json:"skills_paths,omitempty" jsonschema:"description=Paths to directories containing Agent Skills (folders with SKILL.md files),example=~/.config/crush/skills,example=./skills"`
-	TUI                            *TUIOptions       `json:"tui,omitempty" jsonschema:"description=Terminal user interface options"`
-	Debug                          bool              `json:"debug,omitempty" jsonschema:"description=Enable debug logging,default=false"`
-	DebugLSP                       bool              `json:"debug_lsp,omitempty" jsonschema:"description=Enable debug logging for LSP servers,default=false"`
-	DisableAutoSummarize           bool              `json:"disable_auto_summarize,omitempty" jsonschema:"description=Disable automatic conversation summarization,default=false"`
+	CodexAPICompactBeforePriceStep *bool               `json:"codex_api_compact_before_price_step,omitempty" jsonschema:"description=Compact Codex API chats at 240000 tokens so no request reaches OpenAI's long-context price at 272000 input tokens,default=true"`
+	Accounts                       []Account           `json:"accounts,omitempty" jsonschema:"description=More Claude Code and Codex sign-ins, each in its own folder; the tools' own logins are account 1 and are not listed"`
+	OwnAccountNames                map[string]string   `json:"own_account_names,omitempty" jsonschema:"description=Names given to each tool's own login (account 1) by tool (claude-code or codex-cli); an unnamed login shows the email it signed in with"`
+	AccountOrder                   map[string][]string `json:"account_order,omitempty" jsonschema:"description=The order each tool's accounts show in, by tool (claude-code, codex-cli or grok-cli): account IDs, with an empty ID for the tool's own login; accounts not listed come after, in their usual order"`
+	Fallback                       *FallbackOrder      `json:"fallback,omitempty" jsonschema:"description=The fallback order: which account and model a chat moves to when one runs out"`
+	MemoryLimitGB                  *float64            `json:"memory_limit_gb,omitempty" jsonschema:"description=Most memory (RAM and swap together) all Crush windows and everything they start may use, in GB; 0 means no limit; defaults to half the computer's RAM (Linux only),minimum=0"`
+	ContextPaths                   []string            `json:"context_paths,omitempty" jsonschema:"description=Paths to files containing context information for the AI,example=.cursorrules,example=CRUSH.md"`
+	DisableInstructionFiles        bool                `json:"disable_instruction_files,omitempty" jsonschema:"description=Use shared Crush instructions and memory instead of personal and project instruction files"`
+	GlobalContextPaths             []string            `json:"global_context_paths,omitempty" jsonschema:"description=Paths to files containing global context information for the AI,default=~/.config/crush/CRUSH.md,default=~/.config/AGENTS.md"`
+	SkillsPaths                    []string            `json:"skills_paths,omitempty" jsonschema:"description=Paths to directories containing Agent Skills (folders with SKILL.md files),example=~/.config/crush/skills,example=./skills"`
+	TUI                            *TUIOptions         `json:"tui,omitempty" jsonschema:"description=Terminal user interface options"`
+	Debug                          bool                `json:"debug,omitempty" jsonschema:"description=Enable debug logging,default=false"`
+	DebugLSP                       bool                `json:"debug_lsp,omitempty" jsonschema:"description=Enable debug logging for LSP servers,default=false"`
+	DisableAutoSummarize           bool                `json:"disable_auto_summarize,omitempty" jsonschema:"description=Disable automatic conversation summarization,default=false"`
 	// DataDirectory is where Crush keeps per-project state such as
 	// the SQLite database and workspace overrides. Relative paths are
 	// resolved against the working directory; absolute paths are used

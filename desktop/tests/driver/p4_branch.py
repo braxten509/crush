@@ -45,7 +45,7 @@ functions); its main() runs only as a script.
 import importlib.util, json, os, subprocess, sys, time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from harness import check, fake_ai_requests, finish, key, list_open_chat, open_chat_ids, probe_heavy, read_probe, step, type_text, xdo
+from harness import check, fake_ai_requests, finish, key, list_open_chat, open_chat_ids, probe_eval, probe_heavy, read_probe, step, type_text, xdo
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.environ.get("DESKTOP_ROOT") or os.path.dirname(os.path.dirname(HERE))
@@ -292,12 +292,23 @@ class App:
         texts = {w["text"] for w in inside}
         return (inside if inside and all(n in texts for n in need) else None), chat
 
+    def click_typing_box(self):
+        """A real click in the typing box, found by its role (a row of
+        buttons may sit between the timeline and the box). False when there
+        is none."""
+        box = probe_eval(self.probe, """
+          const el = document.querySelector('[data-probe="composer"] textarea');
+          const r = el && el.getBoundingClientRect();
+          window.__probeEval = r ? { x: r.x, y: r.y, w: r.width, h: r.height } : null;""")
+        if not isinstance(box, dict) or "x" not in box:
+            return False
+        self.click(box["x"] + min(200, box["w"] / 2), box["y"] + box["h"] / 2)
+        return True
+
     def focus_timeline(self, chat):
         """The typing box, then Tab: the timeline takes the keys (TYPE-022)."""
-        view, top = chat.get("view"), chat.get("composer_top")
-        if not view or top is None:
+        if not self.click_typing_box():
             return False
-        self.click(view["x"] + 200, top + 25)
         time.sleep(0.2)
         key("Tab")
         time.sleep(0.4)

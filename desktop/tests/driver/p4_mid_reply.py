@@ -64,11 +64,8 @@ def after_prompt(ms, prompt):
 
 def send(app, text):
     """Types text into the typing box with the real keyboard and presses Enter."""
-    chat = app.heavy().get("chat") or {}
-    view, top = chat.get("view"), chat.get("composer_top")
-    if not view or top is None:
+    if not app.click_typing_box():
         return False
-    app.click(view["x"] + 200, top + 25)
     type_text(text)
     ok, _, _ = pb.poll(app.composer, lambda c: (c.get("value") or "").endswith(text), 5)
     key("Return")

@@ -167,6 +167,9 @@ type taskHub struct {
 	// InterruptTask and InterruptJob ended: like closing, their end is saved
 	// for a later resume instead of handed to the agent.
 	interrupting map[string]bool
+	// userStops marks the managed jobs (by job ID) the user is stopping,
+	// so each job's watcher tells the agent the user chose it.
+	userStops map[string]bool
 	// interruptedDetached marks the detached processes InterruptJob
 	// killed, so their end is not reported to the agent.
 	interruptedDetached map[detachedKey]bool

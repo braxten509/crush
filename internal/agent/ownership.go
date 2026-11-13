@@ -174,8 +174,9 @@ func hubWithJob(id string) *taskHub {
 // markInterruptedDetached records the process tree at pid, in the hub whose
 // agents started it, as killed by Crush (InterruptJob, or the user's stop,
 // which is told on its own), so that a detached process among it is not
-// reported as ended. It returns that hub, or nil when no hub has the process.
-func markInterruptedDetached(pid int) *taskHub {
+// reported as ended. It returns that hub and the marks it made, or nil when
+// no hub has the process.
+func markInterruptedDetached(pid int) (*taskHub, []detachedKey) {
 	hubsMu.Lock()
 	listed := slices.Clone(hubs)
 	hubsMu.Unlock()
@@ -192,15 +193,17 @@ func markInterruptedDetached(pid int) *taskHub {
 				}
 			}
 		}
+		keys := make([]detachedKey, len(tree))
 		h.mu.Lock()
 		if h.interruptedDetached == nil {
 			h.interruptedDetached = make(map[detachedKey]bool)
 		}
-		for _, p := range tree {
-			h.interruptedDetached[detachedKey{p, procs[p].started}] = true
+		for i, p := range tree {
+			keys[i] = detachedKey{p, procs[p].started}
+			h.interruptedDetached[keys[i]] = true
 		}
 		h.mu.Unlock()
-		return h
+		return h, keys
 	}
-	return nil
+	return nil, nil
 }

@@ -46,12 +46,23 @@ func (c *Common) BackgroundJobs(ctx context.Context, sessionID string) []agent.P
 	return procs
 }
 
-// KillJob stops a background process.
+// KillJob stops a background process for the user; its agent is told the
+// user stopped it.
 func (c *Common) KillJob(ctx context.Context, p agent.Process) error {
 	if lw := c.liveWork(); lw != nil {
 		return lw.KillJob(ctx, p.Session, p)
 	}
 	return agent.StopBackgroundProcess(p)
+}
+
+// EndJob ends a background process as a clean-up, not as the user's stop
+// of that one process: when working alone its agent is not told the user
+// stopped it.
+func (c *Common) EndJob(ctx context.Context, p agent.Process) error {
+	if lw := c.liveWork(); lw != nil {
+		return lw.KillJob(ctx, p.Session, p)
+	}
+	return agent.EndBackgroundProcess(p)
 }
 
 // StopHelper stops a sub-agent.

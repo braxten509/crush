@@ -217,13 +217,16 @@ func (h *taskHub) watchJob(ctx context.Context, release func(), sessionID, marke
 			delete(h.backgroundServices, job.ID)
 			delete(h.jobHandoffs, marker)
 			delete(h.interrupting, job.ID)
+			delete(h.userStops, job.ID)
 			h.mu.Unlock()
 		}()
 		removeCheckIn := h.addCheckIn(sessionID, backgroundJobWork(ctx, job, service))
 		waited := job.WaitContext(ctx)
 		removeCheckIn()
 		stoppedByAgent := tools.StoppedByAgent(job.ID)
-		byUser := stoppedByUser(job.ID)
+		h.mu.Lock()
+		byUser := h.userStops[job.ID]
+		h.mu.Unlock()
 		if !waited {
 			return
 		}

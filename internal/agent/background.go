@@ -10,7 +10,6 @@ import (
 	"os"
 	"slices"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
@@ -346,25 +345,31 @@ func commandText(args []string) string {
 	return cliagent.CommandText(args)
 }
 
-// userJobStops holds the managed jobs the user is stopping, so that each
-// job's watcher tells the agent the user chose it instead of calling it a
-// failure.
-var userJobStops sync.Map
-
-// stopJobForUser ends a managed job as the user's stop.
+// stopJobForUser ends a managed job as the user's stop: the job's watcher
+// finds the mark and tells the agent the user chose it instead of calling it
+// a failure. The mark is set only while that watcher is still there to read
+// and clear it, and only the stop that set it takes it back.
 func stopJobForUser(id string) error {
-	userJobStops.Store(id, struct{}{})
+	h := hubWithJob(id)
+	mine := false
+	if h != nil {
+		h.mu.Lock()
+		if _, watched := h.backgroundServices[id]; watched && !h.userStops[id] {
+			if h.userStops == nil {
+				h.userStops = make(map[string]bool)
+			}
+			h.userStops[id] = true
+			mine = true
+		}
+		h.mu.Unlock()
+	}
 	err := shell.GetBackgroundShellManager().Kill(id)
-	if err != nil {
-		userJobStops.Delete(id)
+	if err != nil && mine {
+		h.mu.Lock()
+		delete(h.userStops, id)
+		h.mu.Unlock()
 	}
 	return err
-}
-
-// stoppedByUser reports, once, whether the user's stop ended the job.
-func stoppedByUser(id string) bool {
-	_, ok := userJobStops.LoadAndDelete(id)
-	return ok
 }
 
 // userStopNote is what an agent is told about work the user stopped: it was
@@ -421,7 +426,7 @@ func killProcess(pid int, byUser bool) error {
 	}
 	// The stop is told once, here: a detached process in the tree is not
 	// also reported as ended on its own.
-	h := markInterruptedDetached(pid)
+	h, marked := markInterruptedDetached(pid)
 	if byUser && h != nil && h.c != nil && root.session != "" {
 		notice := taskResult{Name: BackgroundProcessName, Status: string(TaskStopped), Body: userStopNote(fmt.Sprintf("the background process `%s` (PID %d)", commandText(root.args), pid))}.String()
 		go func() {
@@ -451,8 +456,29 @@ func killProcess(pid int, byUser bool) error {
 				signal(p, syscall.SIGKILL)
 			}
 		}
+		if h == nil {
+			return
+		}
+		// By now the detached watcher has seen the tree gone; the marks
+		// it did not use are dropped.
+		time.Sleep(3 * detachedScanInterval)
+		h.mu.Lock()
+		for _, k := range marked {
+			delete(h.interruptedDetached, k)
+		}
+		h.mu.Unlock()
 	}()
 	return nil
+}
+
+// EndBackgroundProcess ends a listed background process as a clean-up that
+// is not the user's stop of that one process (a new chat that starts clean):
+// nothing tells the agent the user stopped it.
+func EndBackgroundProcess(process Process) error {
+	if process.JobID != "" {
+		return shell.GetBackgroundShellManager().Kill(process.JobID)
+	}
+	return killProcess(process.PID, false)
 }
 
 func signal(pid int, sig syscall.Signal) {

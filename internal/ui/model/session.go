@@ -407,7 +407,7 @@ func (m *UI) newSession() tea.Cmd {
 			// engine when shared, so other windows' work keeps running).
 			ctx := context.Background()
 			for _, p := range com.BackgroundJobs(ctx, draftID) {
-				_ = com.KillJob(ctx, p)
+				_ = com.EndJob(ctx, p)
 			}
 			return nil
 		},

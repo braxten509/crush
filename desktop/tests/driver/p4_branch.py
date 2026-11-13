@@ -296,10 +296,13 @@ class App:
         """A real click in the typing box, found by its role (a row of
         buttons may sit between the timeline and the box). False when there
         is none."""
-        box = probe_eval(self.probe, """
+        # In a block of its own: the page runs each script at its top level,
+        # where a second "const el" would be refused.
+        box = probe_eval(self.probe, """{
           const el = document.querySelector('[data-probe="composer"] textarea');
           const r = el && el.getBoundingClientRect();
-          window.__probeEval = r ? { x: r.x, y: r.y, w: r.width, h: r.height } : null;""")
+          window.__probeEval = r ? { x: r.x, y: r.y, w: r.width, h: r.height } : null;
+        }""")
         if not isinstance(box, dict) or "x" not in box:
             return False
         self.click(box["x"] + min(200, box["w"] / 2), box["y"] + box["h"] / 2)

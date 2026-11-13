@@ -114,11 +114,20 @@ export function formatReasoningEffort(effort) {
     .replace(/(^|[^\p{L}\p{N}'])(\p{L})/gu, (_, before, letter) => before + letter.toUpperCase());
 }
 
-// The span a window covers ("5h", "Weekly"). A model family's own limit is
-// named with its family after the span ("Weekly Fable", family "Fable").
+// The span a window covers ("5h", "Weekly"): its name, or the name without
+// the model family it carries after the span ("Weekly Fable").
 function windowSpan(window) {
+  return String(window.span ?? window.name ?? "");
+}
+
+const SPANS = new Set(["5h", "Weekly", "Monthly"]);
+
+// A window's name with its family, for telling two windows of one span
+// apart ("Weekly Fable", "Weekly Argon"); else its own name.
+function windowName(window) {
   const name = String(window.name ?? "");
-  return window.family && name.endsWith(` ${window.family}`) ? name.slice(0, -String(window.family).length - 1) : name;
+  const family = String(window.family ?? "");
+  return family && SPANS.has(windowSpan(window)) && !name.toLowerCase().endsWith(family.toLowerCase()) ? `${name} ${family}` : name;
 }
 
 // A window's id among the footer's stats. A model family's own limit goes
@@ -132,11 +141,11 @@ function windowId(window) {
 }
 
 // A meter's label: "5-HOUR", "WEEK", else the window's name; a family's own
-// limit leads with the family ("FABLE WEEK").
+// limit beside a wider one leads with the family ("FABLE WEEK", "ARGON WEEK").
 function windowLabel(window) {
   const span = windowSpan(window);
   const label = span === "5h" ? "5-HOUR" : span === "Weekly" ? "WEEK" : span.toUpperCase();
-  return span === window.name ? label : `${String(window.family).toUpperCase()} ${label}`;
+  return window.family && SPANS.has(span) ? `${String(window.family).toUpperCase()} ${label}` : label;
 }
 
 // The tokens and context words of a chat (composer_footer.go:289-317).
@@ -161,7 +170,7 @@ function tokenWords(session, limit) {
 // A limit window's words: "5h 14% left", and " resets 2h41m" when asked for
 // and the reset is still ahead (composer_footer.go:318-334).
 function windowWords(window, showResets) {
-  const text = `${window.name} ${goFixed(window.left, 0)}% left`;
+  const text = `${windowName(window)} ${goFixed(window.left, 0)}% left`;
   const resets = showResets && window.resetsIn != null && window.resetsIn > 0 ? `resets ${shortDuration(window.resetsIn)}` : "";
   return { text, resets };
 }
@@ -270,7 +279,7 @@ export function meterModel({ items = DEFAULT_FOOTER_ITEMS, session = null, limit
     // A provider can report a weekly and a monthly window under the same
     // footer id (OpenCode Go): the second keeps its name in the id so the
     // panel's keyed list stays unique (owner, 2026-10-24).
-    const meterID = id === FOOTER.limitOther || seen.has(id) ? `${id}:${window.name}` : id;
+    const meterID = id === FOOTER.limitOther || seen.has(id) ? `${id}:${windowName(window)}` : id;
     seen.add(id);
     const limitWords = windowWords(window, show(FOOTER.resets));
     meters.push({
@@ -355,53 +364,72 @@ export function nameWords(name) {
     .filter(Boolean);
 }
 
-// The per-model name a model's usage is stored under (cliagent.usageModel):
-// its own, else its name without the effort word, else that name's
-// effort-tiered entry (gemini-3.8-flash-high read gemini-3.8-flash-tiered;
-// owner, 2026-10-22), else the model family it belongs to: a limit named
-// after a family ("Fable", "Gemini 4 Argon") applies to the models whose
-// name has all its words, and the family with the most words wins (Argon's
-// own limit over Gemini's; owner, 2026-11-12). "" when none is.
-function usageModel(windows, model) {
+// The per-model names a model's usage is stored under: its own, else its
+// name without the effort word, else that name's effort-tiered entry
+// (gemini-3.8-flash-high read gemini-3.8-flash-tiered; owner, 2026-10-22),
+// else every model family it belongs to: a limit named after a family
+// ("Fable", "Gemini 4 Argon") applies to the models whose name has all its
+// words. An Argon chat shows Agy's general Gemini limits beside Argon's own
+// (owner, 2026-11-12, later the same day: all of an account's limits for
+// the model, not only the closest family's). The engine's own usageModel
+// (the terminal, the phone) still takes the closest family only.
+function usageModels(windows, model) {
   const has = (name) => Boolean(name) && windows.some((w) => w.model === name);
-  if (has(model)) return model;
+  if (has(model)) return [model];
   for (const word of EFFORT_WORDS) {
     if (!String(model ?? "").endsWith(`-${word}`)) continue;
     const base = model.slice(0, -word.length - 1);
-    for (const name of [base, `${base}-tiered`]) if (has(name)) return name;
+    for (const name of [base, `${base}-tiered`]) if (has(name)) return [name];
   }
   const words = nameWords(model);
-  let best = "";
-  let most = 0;
+  const names = new Set();
   for (const w of windows) {
     const family = nameWords(w.model);
-    if (family.length > most && family.every((word) => words.includes(word))) {
-      best = w.model;
-      most = family.length;
-    }
+    if (family.length > 0 && family.every((word) => words.includes(word))) names.add(w.model);
   }
-  return best;
+  return [...names];
 }
 
 // The windows that apply to a model: those for every model and those for
-// this one, found by its per-model name (usageModel). AGY lists each
+// this one, found by its per-model names (usageModels). AGY lists each
 // model's quota under one entry, so the sheet and the meters read the same
 // windows.
 export function usageWindows(windows, model) {
   const list = windows ?? [];
-  const named = usageModel(list, model);
-  return list.filter((w) => !w.model || w.model === named);
+  const named = usageModels(list, model);
+  return list.filter((w) => !w.model || named.includes(w.model));
 }
 
+// The windows as the meters read them: {name, left, resetsIn}, the widest
+// first (the whole account's, then each narrower family's). A family's own
+// limit beside a wider one also has
+//   family  what tells it from the wider one: its name without the wider
+//           family's words and bare version numbers ("Fable", "Argon")
+//   span    its span, when its name carries the family after it
+//           ("Weekly Fable" is "Weekly")
 export function limitWindows(reading, model, now = Date.now()) {
   if (!reading) return [];
   if (goTime(reading.read_at) === null) return null;
-  return usageWindows(reading.windows ?? [], model)
-    .map((w) => {
+  const windows = usageWindows(reading.windows ?? [], model);
+  const words = new Map(windows.map((w) => [w.model ?? "", nameWords(w.model)]));
+  const covers = (wide, family) => words.get(wide).length < words.get(family).length && words.get(wide).every((word) => words.get(family).includes(word));
+  const shortName = (family) => {
+    const wide = [...words.keys()].filter((w) => covers(w, family));
+    if (wide.length === 0) return "";
+    const theirs = wide.flatMap((w) => words.get(w));
+    const kept = String(family).split(/[^\p{L}\p{N}.]+/u).filter((word) => word && !theirs.includes(word.toLowerCase()) && !/^[\d.]+$/u.test(word));
+    return kept.length > 0 ? kept.join(" ") : String(family);
+  };
+  return windows
+    .map((w, at) => ({ w, at, width: words.get(w.model ?? "").length }))
+    .sort((a, b) => a.width - b.width || a.at - b.at)
+    .map(({ w }) => {
       const resets = goTime(w.resets_at);
       const left = resets !== null && now > resets ? 100 : Math.max(0, 100 - (Number(w.used) || 0));
-      // family: the model family the limit is for, when it has one.
-      return { name: String(w.name ?? ""), left, resetsIn: resets === null ? null : resets - now, ...(w.model ? { family: String(w.model) } : {}) };
+      const name = String(w.name ?? "");
+      const family = w.model ? shortName(w.model) : "";
+      const span = w.model && name.endsWith(` ${w.model}`) ? name.slice(0, -String(w.model).length - 1) : name;
+      return { name, left, resetsIn: resets === null ? null : resets - now, ...(family ? { family } : {}), ...(span !== name ? { span } : {}) };
     });
 }
 

@@ -386,7 +386,10 @@ describe("limitWindows (cliagent.Limits and Limit.Left)", () => {
       { name: "Weekly", used: 10, model: "gemini" }, { name: "5h", used: 0, model: "gemini" },
       { name: "Weekly", used: 30, model: "Claude Opus" }, { name: "Weekly", used: 40, model: "Gemini 4 Argon" },
     ] });
-    expect(labels(agy, "gemini-4-argon-high")).toEqual([["context", 0], ["limit_weekly", 60]]);
+    // An Argon chat shows Agy's general limits and Argon's own beside them
+    // (owner, 2026-11-12).
+    expect(labels(agy, "gemini-4-argon-high")).toEqual([["context", 0], ["limit_weekly", 90], ["limit_5h", 100], ["limit_weekly:Weekly Argon", 60]]);
+    expect(meterModel({ items, limits: limitWindows(agy, "gemini-4-argon-high", now) }).meters.map((m) => m.label)).toEqual(["CONTEXT", "WEEK", "5-HOUR", "ARGON WEEK"]);
     expect(labels(agy, "gemini-4-hydrogen-xhigh")).toEqual([["context", 0], ["limit_weekly", 90], ["limit_5h", 100]]);
     expect(labels(agy, "claude-opus-5-5-low")).toEqual([["context", 0], ["limit_weekly", 70]]);
     expect(labels(agy, "gpt-oss-120b-medium")).toEqual([["context", 0]]);

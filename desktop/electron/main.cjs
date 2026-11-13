@@ -133,14 +133,20 @@ function startHelper() {
   if (!CORE) fail("The Crush Desktop helper program (crush-desktop-core) is missing.");
   helper = spawn(CORE, args, { stdio: ["pipe", "pipe", "inherit"], cwd: process.cwd(), env: process.env });
   helper.on("error", (e) => fail(`The Crush Desktop helper could not start: ${e.message}`));
+  // A start that cannot go on says why in a last "fatal" line (fromHelper),
+  // which may be read after "exit": the stop is reported at "close", once
+  // the helper's lines have all been read. 2 s is for a pipe that something
+  // else still holds open.
+  let stopped = null;
+  const report = () => {
+    if (stopped !== null && !quitting) fail(`The Crush Desktop helper stopped (${stopped}).`);
+  };
   helper.on("exit", (code, signal) => {
     helper = null;
-    // A moment for the helper's last line: a start that cannot go on says
-    // why in a "fatal" message (fromHelper), which may arrive after this.
-    setTimeout(() => {
-      if (!quitting) fail(`The Crush Desktop helper stopped (${signal ?? `code ${code}`}).`);
-    }, 200);
+    stopped = signal ?? `code ${code}`;
+    setTimeout(report, 2000);
   });
+  helper.on("close", report);
   readline.createInterface({ input: helper.stdout }).on("line", (line) => {
     let message;
     try {

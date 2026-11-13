@@ -273,14 +273,18 @@ export function meterModel({ items = DEFAULT_FOOTER_ITEMS, session = null, limit
     return { meters, lines, tokens };
   }
   const seen = new Set();
+  const ids = new Set();
   for (const window of limits) {
     const id = windowId(window);
     if (!show(id)) continue;
     // A provider can report a weekly and a monthly window under the same
     // footer id (OpenCode Go): the second keeps its name in the id so the
     // panel's keyed list stays unique (owner, 2026-10-24).
-    const meterID = id === FOOTER.limitOther || seen.has(id) ? `${id}:${windowName(window)}` : id;
+    let meterID = id === FOOTER.limitOther || seen.has(id) ? `${id}:${windowName(window)}` : id;
     seen.add(id);
+    // Never two meters under one id, whatever the provider names its windows.
+    for (let n = 2; ids.has(meterID); n++) meterID = `${id}:${windowName(window)}:${n}`;
+    ids.add(meterID);
     const limitWords = windowWords(window, show(FOOTER.resets));
     meters.push({
       id: meterID,
@@ -375,14 +379,22 @@ export function nameWords(name) {
 // (the terminal, the phone) still takes the closest family only.
 function usageModels(windows, model) {
   const has = (name) => Boolean(name) && windows.some((w) => w.model === name);
-  if (has(model)) return [model];
-  for (const word of EFFORT_WORDS) {
-    if (!String(model ?? "").endsWith(`-${word}`)) continue;
-    const base = model.slice(0, -word.length - 1);
-    for (const name of [base, `${base}-tiered`]) if (has(name)) return [name];
+  const names = new Set();
+  // The model's own entry, then every family that covers it as well: an
+  // entry named exactly after the model does not hide a wider limit.
+  if (has(model)) names.add(model);
+  else {
+    own: for (const word of EFFORT_WORDS) {
+      if (!String(model ?? "").endsWith(`-${word}`)) continue;
+      const base = model.slice(0, -word.length - 1);
+      for (const name of [base, `${base}-tiered`]) {
+        if (!has(name)) continue;
+        names.add(name);
+        break own;
+      }
+    }
   }
   const words = nameWords(model);
-  const names = new Set();
   for (const w of windows) {
     const family = nameWords(w.model);
     if (family.length > 0 && family.every((word) => words.includes(word))) names.add(w.model);
@@ -413,9 +425,12 @@ export function limitWindows(reading, model, now = Date.now()) {
   const windows = usageWindows(reading.windows ?? [], model);
   const words = new Map(windows.map((w) => [w.model ?? "", nameWords(w.model)]));
   const covers = (wide, family) => words.get(wide).length < words.get(family).length && words.get(wide).every((word) => words.get(family).includes(word));
+  // Two families that both apply and neither covers the other (rare) keep
+  // their whole names, so their windows of one span can be told apart.
+  const beside = (family) => windows.some((w) => (w.model ?? "") !== family && w.model && !covers(w.model, family) && !covers(family, w.model));
   const shortName = (family) => {
     const wide = [...words.keys()].filter((w) => covers(w, family));
-    if (wide.length === 0) return "";
+    if (wide.length === 0) return beside(family) ? String(family) : "";
     const theirs = wide.flatMap((w) => words.get(w));
     const kept = String(family).split(/[^\p{L}\p{N}.]+/u).filter((word) => word && !theirs.includes(word.toLowerCase()) && !/^[\d.]+$/u.test(word));
     return kept.length > 0 ? kept.join(" ") : String(family);

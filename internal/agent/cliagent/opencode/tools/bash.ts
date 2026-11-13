@@ -93,10 +93,12 @@ All commands run in the current working directory by default. Use the \`workdir\
       const tick = setInterval(() => {
         if (backgroundSignal() > initialSignal) return done("background")
         const elapsed = Date.now() - started
-        // A timeout shorter than the background time stops the command;
-        // past the background time it carries on in the background.
-        if (elapsed > autoBackgroundAfter) return done("auto-background")
-        if (elapsed > limit) done("timeout")
+        // Whichever comes first decides: a timeout shorter than the
+        // background time stops the command; otherwise it carries on in
+        // the background once that time has passed.
+        if (limit < autoBackgroundAfter) {
+          if (elapsed > limit) done("timeout")
+        } else if (elapsed > autoBackgroundAfter) done("auto-background")
       }, checkEvery)
       ctx.abort.addEventListener("abort", onAbort)
       child.on("exit", () => done("exit"))

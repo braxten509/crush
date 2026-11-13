@@ -19,7 +19,7 @@ P3.1's rows that show at join (START-006, START-008, START-009).
                       1.5 s late): gate.starting turns true during the join
                       and is false once joined.
   connect-5-not-found CRUSH_DESKTOP_CRUSH naming a wrapper that exits 127, then
-                      no variable and an empty PATH: the error crush_not_found
+                      no variable and a PATH without crush: the error crush_not_found
                       and the gate with its Try again button.
   connect-6-too-old   CRUSH_DESKTOP_CRUSH naming a link to tests/fakes/crush-old:
                       the error crush_too_old and the gate with Try again; with
@@ -308,8 +308,17 @@ class AppRun:
         boxes = windows_of(self.pid) if self.pid else []
         for box in boxes:
             ask_close(box[0])
+        # The last window asks first (the close sheet, owner 2026-11-09): its
+        # W key is "Close window only", so an engine other apps share keeps
+        # running. The page answers no probe evals while it closes, so the
+        # real keyboard answers, as a user does.
         end = time.time() + timeout
+        answered = False
         while time.time() < end and self.alive():
+            if not answered and boxes and "close" in ((self.report().get("overlay") or {}).get("dialogs") or []):
+                xdo("windowfocus", boxes[0][0])
+                xdo("key", "w")
+                answered = True
             time.sleep(0.2)
         clean = bool(boxes) and not self.alive()
         for sig in (signal.SIGTERM, signal.SIGKILL):
@@ -489,7 +498,7 @@ def main():
         with step("connect-5-not-found", out_dir):
             fake = wrapper(os.path.join(HOME, "gone", "crush"), "# A wrapper whose crush is gone (desktop-design 2.9).\nexit 127\n")
             for name, env in (("not-found-127", {"CRUSH_DESKTOP_CRUSH": fake}),
-                              ("not-found-path", {"CRUSH_DESKTOP_CRUSH": None, "PATH": ""})):
+                              ("not-found-path", {"CRUSH_DESKTOP_CRUSH": None, "PATH": "/usr/bin:/bin"})):
                 run = AppRun(name, out_dir, PROJ, env=env)
                 extra.append(run)
                 out = join_outcome(run, 30)

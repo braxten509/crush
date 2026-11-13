@@ -12,6 +12,10 @@
 # for the leak check (desktop-design 2.9); the app's output in tests/out/<driver>/app.log.
 set -u
 ROOT="$DESKTOP_ROOT"
+# A failing start ends with exit 1 and its reason on stderr, never a modal
+# error box that waits for a click (electron/main.cjs fail()); the drivers'
+# own apps inherit this too.
+export CRUSH_DESKTOP_NO_DIALOGS=1
 NO_APP=""
 if [ "${1:-}" = "--no-app" ]; then NO_APP=1; shift; fi
 DRIVER="$1"; shift

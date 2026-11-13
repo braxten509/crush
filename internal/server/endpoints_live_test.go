@@ -175,23 +175,29 @@ func TestAgentCapabilitiesRoute(t *testing.T) {
 	got := liveJSON[proto.AgentCapabilities](t, h, http.MethodGet, path, nil, http.StatusOK)
 	require.Equal(t, proto.AgentCapabilities{}, got, "no chat and no last pick: no kind, nothing moves")
 
-	providers := []string{
-		string(config.TypeClaudeCode),
-		string(config.TypeCodexCLI),
-		string(config.TypeOpenCodeCLI),
-		string(config.TypeGrokCLI),
-		string(config.TypeAGYCLI),
-		config.AbacusProviderID,
-		"openai",
+	// Which providers can move a running command to the background: the
+	// Ctrl+B hint is offered for exactly these.
+	cases := []struct {
+		provider string
+		want     bool
+	}{
+		{string(config.TypeClaudeCode), true},
+		{string(config.TypeCodexCLI), true},
+		{string(config.TypeOpenCodeCLI), true},
+		{string(config.TypeGrokCLI), false},
+		{string(config.TypeAGYCLI), false},
+		{config.AbacusProviderID, true},
+		{"openai", false},
 	}
 	chats := map[string]config.SelectedModel{}
-	for _, provider := range providers {
-		chats[provider] = config.SelectedModel{Provider: provider, Model: "m"}
+	for _, tc := range cases {
+		chats[tc.provider] = config.SelectedModel{Provider: tc.provider, Model: "m"}
 	}
 	h.app.Sessions = chatSessions(t, chats)
-	for _, provider := range providers {
-		got := liveJSON[proto.AgentCapabilities](t, h, http.MethodGet, path+"?session_id="+provider, nil, http.StatusOK)
-		require.Equal(t, provider, got.Kind, "the kind is the chat model's provider, as the hint reads it")
+	for _, tc := range cases {
+		got := liveJSON[proto.AgentCapabilities](t, h, http.MethodGet, path+"?session_id="+tc.provider, nil, http.StatusOK)
+		require.Equal(t, tc.provider, got.Kind, "the kind is the chat model's provider, as the hint reads it")
+		require.Equal(t, tc.want, got.CanBackground, tc.provider)
 	}
 
 	code, body := liveCall(t, h, http.MethodGet, path, nil)

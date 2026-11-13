@@ -106,7 +106,7 @@ describe("code and paths (DLG-300)", () => {
 });
 
 describe("footer and keys (DLG-301 to DLG-309)", () => {
-  it("shortens the key hints as the sheet narrows (TestChangesFooterFitsCompactWindows)", () => {
+  it("shortens the key hints as the sheet narrows", () => {
     // A hint fits when it is at most the width minus 4 (changes.go:314-319).
     const [long, middle] = FOOTER_KEYS.map(cells);
     expect(footerKeys(long + 4)).toBe(FOOTER_KEYS[0]);
@@ -150,7 +150,7 @@ describe("loading (DLG-294, DLG-311; reviews.go)", () => {
       { call: { id: "c1", name: "edit", input: "{}" }, result: { tool_call_id: "c1", content: "ok" } },
     ]);
   });
-  it("loads each saved summary once, from the review's own chat (TestReviewLoadsOffThread...)", async () => {
+  it("loads each saved summary once, from the review's own chat", async () => {
     const reads = [];
     const loadReview = async (sessionId, messageId) => {
       reads.push([sessionId, messageId]);

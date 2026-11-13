@@ -116,7 +116,7 @@ func (g *ToolGroupItem) changeSummary(status string, changes []diffreview.File, 
 		}
 		return summary
 	case g.storedDeletions && len(changes) == 0:
-		return g.sty.Tool.ParamKey.Render(" · Some files were deleted")
+		return g.sty.Tool.ParamKey.Render(" · " + StatusFilesDeleted)
 	case len(changes) > 0 || len(edited) > 0:
 		return g.liveChangeSummary(status, changes, edited)
 	}

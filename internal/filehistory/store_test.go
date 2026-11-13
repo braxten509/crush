@@ -230,6 +230,7 @@ func TestSymlinkAndStalePreviewRefused(t *testing.T) {
 	require.NoError(t, f.q.SwitchTree(t.Context(), "chat", "a"))
 	_, err = f.store.Apply(t.Context(), plan)
 	require.Error(t, err)
+	require.Equal(t, "after", contents(t, p), "a refused apply leaves the file alone")
 	f.write(t, other, "after")
 	require.NoError(t, os.Remove(p))
 	require.NoError(t, os.Symlink(other, p))

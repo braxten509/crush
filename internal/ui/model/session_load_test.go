@@ -260,7 +260,9 @@ func TestSessionSwitchShowsAnimatedIndicatorWhileLoading(t *testing.T) {
 	startCmds(cmd, msgs)
 
 	require.True(t, u.sessionSwitchPending())
-	require.NotContains(t, u.View().Content, "a message in the old chat", "the old chat must not stay on screen as if it were the new one")
+	first := u.View().Content
+	require.Contains(t, first, "Big chat", "the loading line names the chat being opened")
+	require.NotContains(t, first, "a message in the old chat", "the old chat must not stay on screen as if it were the new one")
 
 	// The indicator animates: each tick advances it and re-arms the next.
 	// (The Update tail's own commands probe the workspace stub, so only the
@@ -270,6 +272,8 @@ func TestSessionSwitchShowsAnimatedIndicatorWhileLoading(t *testing.T) {
 		require.NotNil(t, update(u, ws, tick))
 		startCmds(sessionLoadTick(u.sessionLoad.seq), msgs)
 	}
+	require.Equal(t, 3, u.sessionLoad.frame, "each tick moves the indicator on")
+	require.NotEqual(t, first, u.View().Content, "the indicator must move between ticks")
 	require.Len(t, u.handleSessionLoadMsg(sessionLoadTickMsg{seq: u.sessionLoad.seq}), 1, "a live load re-arms its tick")
 
 	// Keys keep flowing while the transcript loads.

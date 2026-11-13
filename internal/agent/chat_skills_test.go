@@ -58,12 +58,14 @@ func TestAgentTurnsChatSkillsOnAndOff(t *testing.T) {
 	require.Empty(t, reply.Error)
 	require.Contains(t, reply.Message, teach, "the agent learns where to read the skill now")
 	require.Equal(t, []session.KeptSkill{{ID: teach, Name: "teach", ByAgent: true}}, kept())
-	require.Contains(t, lastNotice().Content().Text, "teach")
+	onNotice := lastNotice().Content().Text
+	require.Contains(t, onNotice, "teach")
 
 	reply = send("teach", false)
 	require.Empty(t, reply.Error)
 	require.Empty(t, kept())
 	require.Contains(t, lastNotice().Content().Text, "teach")
+	require.NotEqual(t, onNotice, lastNotice().Content().Text, "turning off must not say what turning on said")
 
 	_, err = c.sessions.SetKeptSkill(t.Context(), sess.ID, session.KeptSkill{ID: drawio, Name: "drawio"}, true)
 	require.NoError(t, err)

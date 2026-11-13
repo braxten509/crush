@@ -201,10 +201,11 @@ describe("joining (1.2.6, 2.9)", () => {
       let finish;
       h.open = () => new Promise((resolve) => (finish = resolve));
       const started = C.start();
-      await vi.advanceTimersByTimeAsync(100);
+      // Pretend time, so the exact edge costs nothing and cannot wobble.
+      await vi.advanceTimersByTimeAsync(399);
       expect(C.conn.state).toBe("connecting");
       expect(C.conn.slow).toBe(false);
-      await vi.advanceTimersByTimeAsync(1900);
+      await vi.advanceTimersByTimeAsync(2);
       expect(C.conn.slow).toBe(true);
       finish(opened());
       await vi.advanceTimersByTimeAsync(0);

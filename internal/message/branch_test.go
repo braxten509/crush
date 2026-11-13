@@ -85,7 +85,7 @@ func TestBranchRefusesToolOutputAndBadHighlight(t *testing.T) {
 		name string
 		edit func(*message.BranchRequest)
 	}{
-		{"another chat's message", func(r *message.BranchRequest) { r.MessageID = elsewhere.ID }},
+		{"another chat's message", func(r *message.BranchRequest) { r.MessageID = elsewhere.ID; r.HighlightStart, r.HighlightEnd = 0, 5 }},
 		{"a missing message", func(r *message.BranchRequest) { r.MessageID = uuid.NewString() }},
 		{"tool output", func(r *message.BranchRequest) { r.MessageID = tool.ID; r.HighlightStart, r.HighlightEnd = 0, 5 }},
 		{"other words", func(r *message.BranchRequest) { r.HighlightText = "friend" }},

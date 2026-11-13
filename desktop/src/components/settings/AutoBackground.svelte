@@ -42,7 +42,7 @@
   }
 </script>
 
-<Sheet id={ID} title="Move commands to the background after" width="small" {help} {onKey}>
+<Sheet id={ID} title="Background commands after" width="small" {help} {onKey}>
   <p class="hint">A command an agent runs that is still going after this many seconds is moved to the background, so the agent can carry on while it finishes.</p>
   <Field bind:value={text} prompt="Seconds: " label="Seconds before a command is moved to the background" {error} />
   <div class="actions">

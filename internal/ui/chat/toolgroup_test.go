@@ -374,6 +374,7 @@ func TestDeletionFlagShowsOnePlainStatusWithoutDiffLink(t *testing.T) {
 		g.SetChildren(children)
 		header := ansi.Strip(g.header(120))
 		require.Empty(t, g.Changes())
+		require.Equal(t, 1, strings.Count(header, StatusFilesDeleted), "two deleting tools, one note")
 		require.NotContains(t, header, "edited")
 		require.Equal(t, [2]int{}, g.changesCols)
 	}

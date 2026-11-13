@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -154,9 +155,20 @@ func TestClaimInterruptedJobsTakesOnlyJobsOfGoneCrushes(t *testing.T) {
 	require.Len(t, left, 1)
 	require.Equal(t, "003", left[0].ID)
 
-	notice := interruptedJobsNotification(claimed)
-	require.Contains(t, notice, "001")
-	require.Contains(t, notice, "002")
+	// Each job's own line says how it ended: 001 at a clean close, 002 in
+	// a crash.
+	lines := map[string]string{}
+	for _, line := range strings.Split(interruptedJobsNotification(claimed), "\n") {
+		for _, id := range []string{"001", "002"} {
+			if strings.Contains(line, "Job "+id) {
+				lines[id] = line
+			}
+		}
+	}
+	require.Contains(t, lines["001"], jobEndedAtClose)
+	require.NotContains(t, lines["001"], jobEndedInCrash)
+	require.Contains(t, lines["002"], jobEndedInCrash)
+	require.NotContains(t, lines["002"], jobEndedAtClose)
 }
 
 func TestNonInteractiveRunsSaveNoJobs(t *testing.T) {

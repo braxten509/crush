@@ -184,7 +184,7 @@ func (a *AssistantMessageItem) activityStatus(now time.Time) string {
 		return status
 	}
 	if a.message.Activity == "writing" {
-		return "Writing command"
+		return StatusWritingCommand
 	}
 	if a.message.Activity == "thinking" || a.message.IsThinking() {
 		return StatusThinking

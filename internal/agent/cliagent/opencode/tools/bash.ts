@@ -11,11 +11,21 @@ import * as path from "node:path"
 const signalFile = process.env.CRUSH_BG_SIGNAL ?? ""
 const logDir = path.join(os.homedir(), ".cache", "crush", "background")
 const maxOutput = 30_000
-const defaultTimeout = 2 * 60 * 1000
-// Tests shorten the cap through CRUSH_BASH_AUTO_BACKGROUND_MS; the check
-// runs often enough to notice a short cap.
-const autoBackgroundAfter = Number(process.env.CRUSH_BASH_AUTO_BACKGROUND_MS) || 11_000
+// How long a command may hold the turn before it continues in the
+// background: the user's setting (options.auto_background_seconds), which
+// Crush passes in CRUSH_BASH_AUTO_BACKGROUND_MS; 2 minutes without it. Tests
+// shorten it the same way; the check runs often enough to notice a short one.
+const autoBackgroundAfter = Number(process.env.CRUSH_BASH_AUTO_BACKGROUND_MS) || 2 * 60 * 1000
+// A command with no timeout of its own is not stopped before that time.
+const defaultTimeout = Math.max(2 * 60 * 1000, autoBackgroundAfter)
 const checkEvery = Math.min(200, autoBackgroundAfter / 4)
+
+// "2 minutes", "90 seconds": a time as the model reads it.
+function span(ms: number) {
+  const seconds = Math.round(ms / 1000)
+  if (seconds % 60 === 0) return seconds === 60 ? "1 minute" : `${seconds / 60} minutes`
+  return seconds === 1 ? "1 second" : `${seconds} seconds`
+}
 
 function backgroundSignal() {
   try {
@@ -33,9 +43,9 @@ All commands run in the current working directory by default. Use the \`workdir\
 - Always quote file paths that contain spaces.
 - Don't use this for reading, searching or editing files when a dedicated tool can do it.
 - Output longer than ${maxOutput} characters is cut to its end.
-- The default timeout is 2 minutes; pass \`timeout\` (milliseconds) for longer commands, or run long-lived processes in the background (e.g. \`cmd > log 2>&1 &\`).
+- The default timeout is ${span(defaultTimeout)}; pass \`timeout\` (milliseconds) to change it, or run long-lived processes in the background (e.g. \`cmd > log 2>&1 &\`).
 - The user can move a running command to the background. Its result then says so and names a log file; read that file later to check on it.
-- Keep waits of 10 seconds or less in the foreground. Commands still running after 11 seconds automatically continue in the background, with output saved to a log.
+- Keep waits of 10 seconds or less in the foreground. Commands still running after ${span(autoBackgroundAfter)} automatically continue in the background, with output saved to a log.
 - For git commits and PRs, write multi-line messages with a HEREDOC.`,
   args: {
     command: tool.schema.string().describe("The command to execute"),
@@ -83,8 +93,10 @@ All commands run in the current working directory by default. Use the \`workdir\
       const tick = setInterval(() => {
         if (backgroundSignal() > initialSignal) return done("background")
         const elapsed = Date.now() - started
-        if (elapsed > limit) return done("timeout")
-        if (elapsed > autoBackgroundAfter) done("auto-background")
+        // A timeout shorter than the background time stops the command;
+        // past the background time it carries on in the background.
+        if (elapsed > autoBackgroundAfter) return done("auto-background")
+        if (elapsed > limit) done("timeout")
       }, checkEvery)
       ctx.abort.addEventListener("abort", onAbort)
       child.on("exit", () => done("exit"))
@@ -109,7 +121,7 @@ All commands run in the current working directory by default. Use the \`workdir\
         child.unref()
         const reason = outcome === "background"
           ? "The user moved this command to the background (Ctrl+B)."
-          : "This command ran for more than 10 seconds and continues in the background."
+          : `This command ran for more than ${span(autoBackgroundAfter)} and continues in the background.`
         return `${cut(output)}\n\n[${reason} It is still running as process group ${child.pid}. Its output continues in ${log}, which ends with an "[exit code: N]" line when it finishes. Don't wait for it now; read that file later to check on it.]`
       case "timeout":
         stop()

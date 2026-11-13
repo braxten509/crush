@@ -2,10 +2,12 @@ package cliagent
 
 import (
 	"bytes"
+	"cmp"
 	_ "embed"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 )
 
@@ -19,8 +21,11 @@ var opencodeBash []byte
 // opencodeEnv readies Crush's OpenCode config dir and returns the env for an
 // OpenCode turn, plus the file the tool watches for Ctrl+B. noAutoCompact
 // stops OpenCode compacting the chat by itself, for the free DeepSeek's
-// whole-context switch.
-func opencodeEnv(noAutoCompact bool) (env []string, signal string) {
+// whole-context switch. after is the user's time before a command moves to
+// the background (options.auto_background_seconds; zero means the default),
+// which the tool reads from CRUSH_BASH_AUTO_BACKGROUND_MS (owner,
+// 2026-11-12: OpenCode chats kept their own 11 seconds whatever the setting).
+func opencodeEnv(noAutoCompact bool, after time.Duration) (env []string, signal string) {
 	cache, err := os.UserCacheDir()
 	if err != nil {
 		return nil, ""
@@ -47,7 +52,8 @@ func opencodeEnv(noAutoCompact bool) (env []string, signal string) {
 	// Created in the past, so the tool doesn't read it as a press.
 	old := time.Now().Add(-time.Hour)
 	_ = os.Chtimes(signal, old, old)
-	return []string{"OPENCODE_CONFIG_DIR=" + dir, "CRUSH_BG_SIGNAL=" + signal}, signal
+	after = cmp.Or(after, autoBackgroundAfter)
+	return []string{"OPENCODE_CONFIG_DIR=" + dir, "CRUSH_BG_SIGNAL=" + signal, "CRUSH_BASH_AUTO_BACKGROUND_MS=" + strconv.FormatInt(after.Milliseconds(), 10)}, signal
 }
 
 // opencodeNoCompaction is the config that turns OpenCode's own compaction

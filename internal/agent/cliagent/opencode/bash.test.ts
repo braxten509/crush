@@ -3,7 +3,8 @@ import * as fs from "node:fs"
 import * as os from "node:os"
 import * as path from "node:path"
 
-// The real cap is 11 seconds; the tests use a short one so none waits long.
+// The real cap is the user's setting (2 minutes unless changed); the tests
+// use a short one so none waits long.
 const autoBackgroundAfter = 400
 
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "crush-bash-test-"))

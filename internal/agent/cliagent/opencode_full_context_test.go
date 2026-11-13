@@ -27,9 +27,9 @@ func TestOpenCodeEnvTurnsItsCompactionOff(t *testing.T) {
 		return ""
 	}
 
-	whole, signal := opencodeEnv(true)
+	whole, signal := opencodeEnv(true, 0)
 	require.NotEmpty(t, signal)
-	other, _ := opencodeEnv(false)
+	other, _ := opencodeEnv(false, 0)
 
 	data, err := os.ReadFile(filepath.Join(configDir(whole), "opencode.json"))
 	require.NoError(t, err, "a later chat leaves the whole-context chat's config")

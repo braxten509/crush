@@ -150,7 +150,7 @@ type acpRun struct {
 // session/set_config_option (or legacy session/set_model) for agents that take no model flag.
 func runACP(ctx context.Context, m *Model, t Turn, name string, args []string, setModel bool) error {
 	if name == "opencode" && !t.NoTools {
-		if env, signal := opencodeEnv(m.KeepsWholeContext()); signal != "" {
+		if env, signal := opencodeEnv(m.KeepsWholeContext(), t.AutoBackground); signal != "" {
 			t.Env = append(slices.Clone(t.Env), env...)
 			defer os.Remove(signal)
 			if t.SessionID != "" {

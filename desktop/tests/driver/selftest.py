@@ -45,7 +45,9 @@ except OSError:
     check(True, "the system message bus is not reachable")
 finally:
     bus.close()
-check(os.environ.get("HOME") == "/tmp/home" and not any(k.startswith("CRUSH_") for k in os.environ), "throwaway home and no Crush settings from outside")
+# CRUSH_DESKTOP_NO_DIALOGS is the sandbox's own (run-in-sandbox.sh), not from outside.
+outside = [k for k in os.environ if k.startswith("CRUSH_") and k != "CRUSH_DESKTOP_NO_DIALOGS"]
+check(os.environ.get("HOME") == "/tmp/home" and not outside, f"throwaway home and no Crush settings from outside {outside or ''}")
 # The owner's real home shows only the folders leading down to this worktree.
 outer = os.environ.get("OUTER_HOME", "")
 path_down = os.path.relpath(os.path.dirname(root), outer).split(os.sep) if outer else []

@@ -44,7 +44,7 @@ from urllib import request as urlrequest
 from urllib.error import HTTPError, URLError
 
 sys.path.insert(0, os.path.dirname(__file__))
-from harness import check, fake_ai_requests, finish, key, read_probe, step, type_text, wait_for
+from harness import answer_close_question, check, fake_ai_requests, finish, key, read_probe, step, type_text, wait_for
 
 probe_path, out_dir, port = sys.argv[1], sys.argv[2], sys.argv[3]
 PROJ = "/tmp/home/proj"
@@ -266,6 +266,8 @@ class Window:
             if pid.isdigit():
                 pids.add(int(pid))
             ask_close(int(wid))
+        if found:
+            answer_close_question(probe_path, int(found[0]), lambda: any(self.running(p) for p in pids))
         gone, _, _ = poll(lambda: [p for p in pids if self.running(p)], lambda alive: not alive, 10)
         return bool(pids) and gone
 

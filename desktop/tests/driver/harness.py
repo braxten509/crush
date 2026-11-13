@@ -71,6 +71,23 @@ def xdo(*args):
     return subprocess.run(["xdotool", *map(str, args)], check=True, capture_output=True, text=True).stdout
 
 
+def answer_close_question(probe, wid, alive=lambda: True, timeout=5):
+    """After a window's close request: the last window asks first (the close
+    sheet, owner 2026-11-09); its W key is "Close window only", so the engine
+    keeps running for other apps and work. The page answers no probe evals
+    while it closes, so the real keyboard answers, as a user does. True when
+    the sheet showed and was answered; False when it never showed (another
+    window was still open, or no engine answered). alive() false ends the wait."""
+    end = time.time() + timeout
+    while time.time() < end and alive():
+        if "close" in (((read_probe(probe, tries=1) or {}).get("overlay") or {}).get("dialogs") or []):
+            subprocess.run(["xdotool", "windowfocus", str(wid)], capture_output=True)
+            subprocess.run(["xdotool", "key", "w"], capture_output=True)
+            return True
+        time.sleep(0.1)
+    return False
+
+
 def window_geometry(timeout=20):
     """Find the app's visible window by its class (crush-desktop; the title
     follows the chat) and return its (x, y, w, h). Only visible windows count

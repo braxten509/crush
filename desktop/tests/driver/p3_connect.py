@@ -49,7 +49,7 @@ from urllib import request as urlrequest
 from urllib.error import HTTPError, URLError
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from harness import check, finish, probe_heavy, read_probe, step, xdo
+from harness import answer_close_question, check, finish, probe_heavy, read_probe, step, xdo
 
 ROOT = os.environ.get("DESKTOP_ROOT") or os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 HOME = "/tmp/home"
@@ -308,17 +308,10 @@ class AppRun:
         boxes = windows_of(self.pid) if self.pid else []
         for box in boxes:
             ask_close(box[0])
-        # The last window asks first (the close sheet, owner 2026-11-09): its
-        # W key is "Close window only", so an engine other apps share keeps
-        # running. The page answers no probe evals while it closes, so the
-        # real keyboard answers, as a user does.
+        if boxes:
+            answer_close_question(self.probe, boxes[0][0], self.alive)
         end = time.time() + timeout
-        answered = False
         while time.time() < end and self.alive():
-            if not answered and boxes and "close" in ((self.report().get("overlay") or {}).get("dialogs") or []):
-                xdo("windowfocus", boxes[0][0])
-                xdo("key", "w")
-                answered = True
             time.sleep(0.2)
         clean = bool(boxes) and not self.alive()
         for sig in (signal.SIGTERM, signal.SIGKILL):

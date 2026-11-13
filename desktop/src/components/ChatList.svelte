@@ -65,8 +65,8 @@
   });
 
   // A folder's "+" opens a small menu right under it, its right edge on the
-  // "+" (owner, 2026-11-05): New Chat, Open Chat (the chat search showing only
-  // that folder's chats, owner 2026-11-09), New Terminal, New Todo, all in that folder.
+  // "+" (owner, 2026-11-05): Open Chat (the chat search showing only
+  // that folder's chats, owner 2026-11-09; first since 2026-11-12), New Chat, New Terminal, New Todo, all in that folder.
   // ↑/↓ move, Enter picks, Esc, Tab, a press outside, a scroll or the
   // window losing focus closes it.
   let plus = $state(null); // {dir, button} while open
@@ -416,8 +416,8 @@
       style:visibility={plusPlace ? null : "hidden"}
       transition:unfold={{ from: "top" }}
     >
-      <button class="plus-entry" type="button" role="menuitem" onclick={() => pickPlus("session")}>New Chat</button>
       <button class="plus-entry" type="button" role="menuitem" onclick={() => pickPlus("open")}>Open Chat</button>
+      <button class="plus-entry" type="button" role="menuitem" onclick={() => pickPlus("session")}>New Chat</button>
       <button class="plus-entry" type="button" role="menuitem" onclick={() => pickPlus("terminal")}>New Terminal</button>
       <button class="plus-entry" type="button" role="menuitem" onclick={() => pickPlus("todo")}>New Todo</button>
     </div>

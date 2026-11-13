@@ -1,6 +1,7 @@
 <script>
   // One chat in the left list ({row} from leftlist/openlist.listedRows): the
-  // title (its folder is the heading it sits under, owner 2026-10-21), and
+  // title (its folder is the heading it sits under, owner 2026-10-21; a
+  // sub-agent's row reads SUBAGENT instead, owner 2026-11-12), and
   // on the right the time or what the chat is doing
   // (LIST-012: "Working…", "Waiting for permission", "Waiting for your
   // answer", "Background"). Every row is one line (owner, 2026-10-22, pick
@@ -76,12 +77,21 @@
     class="row"
     class:has-state={row.state !== "" || extra !== null}
     class:has-branches={row.branches > 0}
+    class:helper={row.helper}
     type="button"
+    title={row.helper ? row.title : undefined}
     aria-current={row.selected ? "page" : undefined}
     aria-expanded={row.branches > 0 ? row.expanded : undefined}
     onclick={open}
   >
-    <span class="title">{row.title}</span>
+    <!-- A sub-agent's row reads SUBAGENT in the title's place, so what it is
+         doing has room to show (owner, 2026-11-12); its title is the row's
+         tooltip. -->
+    {#if row.helper}
+      <span class="helper-mark" data-helper-mark>Subagent</span>
+    {:else}
+      <span class="title">{row.title}</span>
+    {/if}
     <span class="line2">
       <!-- Locked chats (owner, 2026-11-03): a small lock after the title;
            open while unlocked; amber while a crash left it outside the
@@ -94,7 +104,6 @@
           data-lock={row.lock}
         ><Icon name={row.lock === "unlocked" ? "lock-open" : "lock"} size={14} /></span>
       {/if}
-      {#if row.helper}<span class="helper-mark" data-helper-mark>Subagent</span>{/if}
       {#if row.state}
         <span class="state {row.stateKind}">
           <Icon name={STATE_ICONS[row.stateKind] ?? "working"} />
@@ -186,9 +195,21 @@
   .lock-mark.warn {
     color: var(--amber-ink);
   }
-  /* A sub-agent's chat (owner, 2026-10-21), in the panel headings' type. */
+  /* A sub-agent's chat (owner, 2026-10-21), in the panel headings' type. It
+     stands where the title would, only as wide as its word, and the state
+     takes the rest of the row, at its right end like every other row's. */
+  .row.helper {
+    grid-template-columns: auto minmax(0, 1fr) auto var(--end);
+  }
+  .row.helper .line2 {
+    justify-content: flex-end;
+  }
   .helper-mark {
-    flex: none;
+    grid-column: 1;
+    grid-row: 1;
+    padding-right: calc(16 * var(--px));
+    text-box: trim-both cap alphabetic;
+    white-space: nowrap;
     font: var(--t-label);
     letter-spacing: var(--track-label);
     text-transform: uppercase;
@@ -313,7 +334,8 @@
     background: var(--figure);
   }
 
-  .row:hover .title {
+  .row:hover .title,
+  .row:hover .helper-mark {
     text-decoration: underline;
     text-decoration-thickness: 1px;
     text-underline-offset: calc(4 * var(--px));

@@ -133,8 +133,15 @@ if sheet:
         port = int(sheet[0].split("port")[-1].strip())
     except (ValueError, IndexError):
         pass
-key("Escape")
-time.sleep(0.5)
+# A sheet that opens by itself takes no keys for a moment (lib/grace.js), so
+# an Esc pressed as it appears is dropped: press until the sheet has gone.
+closed = False
+for _ in range(6):
+    key("Escape")
+    closed = until("return ![...document.querySelectorAll('[role=dialog]')].some((d) => d.textContent.includes('Your phone can see this chat'));", 0.5)
+    if closed:
+        break
+check(closed, "Esc closes the Remote control sheet")
 check(port is not None and share_names(port) == chat_a, f"the phone's share (port {port}) names the chat ({share_names(port) if port else None})")
 shot("on")
 

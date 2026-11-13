@@ -194,10 +194,13 @@ function lettersRect(node, firstOnly = false) {
   return r.width ? { x: r.x, y: r.y, w: r.width, h: r.height } : null;
 }
 
-// The drawn links: one entry per decoration, with all its spans' rects.
+// The drawn links of the shown chat: one entry per decoration, with all its
+// spans' rects. Other listed chats stay drawn out of sight (TimelineStack);
+// their links are not shown ones.
 function shownLinks() {
   const out = new Map();
   for (const span of document.querySelectorAll(".md-deco-branch-link")) {
+    if (span.closest("[data-timeline-slot][aria-hidden]")) continue;
     const root = span.closest(".md, .text");
     const decoration = decorationOf(span);
     if (!root || !decoration) continue;

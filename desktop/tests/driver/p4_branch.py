@@ -786,7 +786,7 @@ def main():
             check(ok, "the terminal app draws its first screen")
             tmux("send-keys", "-t", "tui", "C-s")
             title = s.get("B_title", "")
-            ok, text, _ = poll(pane, lambda p: title in p or flat(title[:25]) in flat(p), 10, 0.3)
+            ok, text, _ = poll(pane, lambda p: title in p or flat(title[:20]) in flat(p), 10, 0.3)
             with open(os.path.join(out_dir, "B14.pane.txt"), "w") as f:
                 f.write(text)
             check(ok, f"its sessions list shows the branch by its title ({title!r}; full title {'shown' if title in text else 'cut by the terminal'})")

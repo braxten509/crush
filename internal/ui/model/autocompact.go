@@ -24,10 +24,10 @@ func (m *UI) openAutocompactDialog() tea.Cmd {
 	return nil
 }
 
+// setAutocompact saves the compaction limit. It saves while a chat works:
+// turns read the limit from config each step, and UpdateAgentModel leaves a
+// running turn alone.
 func (m *UI) setAutocompact(tokens int64) tea.Cmd {
-	if m.isAgentBusy() {
-		return util.ReportWarn("Agent is busy, please wait before saving the compaction limit")
-	}
 	cfg := m.com.Config()
 	if cfg == nil {
 		return util.ReportError(errors.New("configuration not found"))

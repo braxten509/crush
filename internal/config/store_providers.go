@@ -9,6 +9,7 @@ import (
 	"charm.land/catwalk/v3/pkg/catwalk"
 	hyperp "github.com/charmbracelet/crush/internal/agent/hyper"
 	"github.com/charmbracelet/crush/internal/config/providers"
+	"github.com/charmbracelet/crush/internal/discover"
 	"github.com/charmbracelet/crush/internal/oauth"
 	"github.com/charmbracelet/crush/internal/oauth/copilot"
 	"github.com/charmbracelet/crush/internal/oauth/grok"
@@ -262,6 +263,53 @@ func (s *ConfigStore) refreshCatalogsAfterAuth(scope Scope, providerID string, i
 	if providerID == string(catwalk.InferenceProviderXAI) && isToken {
 		s.refetchGrokModels(context.Background(), scope)
 	}
+	if !isToken && dynamicModelProvider(providerID) {
+		s.refreshDynamicProviderModels(context.Background(), providerID)
+	}
+}
+
+// refreshDynamicProviderModels fetches the live model list for a dynamic
+// provider (such as Anthropic or Kimi) right after an API key is saved so
+// the apps show its available models without a restart. Best effort: a
+// failure leaves the catalog fallback in place.
+func (s *ConfigStore) refreshDynamicProviderModels(ctx context.Context, providerID string) {
+	if !probeDynamicProviders {
+		return
+	}
+	cfg := s.Config()
+	resolver := s.Resolver()
+	pc, ok := cfg.Providers.Get(providerID)
+	if !ok || pc.Disable || !pc.HasAPIKey(resolver) {
+		return
+	}
+	known := s.KnownProviders()
+	job := newDiscoveryJob(providerID, pc, known, true)
+	fingerprint := discoveryFingerprint(job, resolver)
+	probeCtx, cancel := context.WithTimeout(ctx, discoveryProbeTimeout)
+	defer cancel()
+	models, err := discover.DiscoverModels(probeCtx, job.cfg, resolver)
+	if err != nil || len(models) == 0 {
+		if err != nil {
+			slog.Warn("Failed to fetch live models after auth", "provider", providerID, "error", err)
+		}
+		return
+	}
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	nc := s.config.cloneForWrite()
+	cur, exists := nc.Providers.Get(providerID)
+	if !exists || cur.Disable || !cur.HasAPIKey(s.resolver) {
+		return
+	}
+	currentJob := newDiscoveryJob(providerID, cur, s.knownProviders, true)
+	if fingerprint == "" || discoveryFingerprint(currentJob, s.resolver) != fingerprint {
+		return
+	}
+	cur.Models = models
+	cur.DynamicModels = true
+	nc.Providers.Set(providerID, cur)
+	nc.SetupAgents()
+	s.setConfig(nc)
 }
 
 // fetchOpenAIModels fetches the ChatGPT model catalog from the Codex

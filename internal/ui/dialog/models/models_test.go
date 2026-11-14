@@ -196,3 +196,18 @@ func TestCustomProviderGroupsAreSorted(t *testing.T) {
 		require.Equal(t, want, got)
 	}
 }
+
+func TestWithConfiguredModelsReplacesCatalogWhenDynamic(t *testing.T) {
+	t.Parallel()
+
+	catalog := catwalk.Provider{
+		ID:     "anthropic",
+		Name:   "Anthropic",
+		Models: []catwalk.Model{{ID: "fixed-a", Name: "Fixed A"}, {ID: "fixed-b", Name: "Fixed B"}},
+	}
+	got := withConfiguredModels(catalog, config.ProviderConfig{
+		DynamicModels: true,
+		Models:        []catwalk.Model{{ID: "live-1", Name: "Live One"}},
+	})
+	require.Equal(t, []catwalk.Model{{ID: "live-1", Name: "Live One"}}, got.Models)
+}

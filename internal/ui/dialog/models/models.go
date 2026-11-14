@@ -520,6 +520,18 @@ func (m *Models) addKnownProviderGroups(b *modelGroupsBuilder, cfg *config.Confi
 // missing from the catalog are appended.
 func withConfiguredModels(displayProvider catwalk.Provider, providerConfig config.ProviderConfig) catwalk.Provider {
 	displayProvider.Name = cmp.Or(providerConfig.Name, displayProvider.Name)
+	if providerConfig.DynamicModels && len(providerConfig.Models) > 0 {
+		models := make([]catwalk.Model, 0, len(providerConfig.Models))
+		for _, model := range providerConfig.Models {
+			if model.ID == "" {
+				continue
+			}
+			model.Name = cmp.Or(model.Name, model.ID)
+			models = append(models, model)
+		}
+		displayProvider.Models = models
+		return displayProvider
+	}
 	// The models slice is shared with the dialog's provider catalog;
 	// renaming or appending in place would leak configured names into it.
 	displayProvider.Models = slices.Clone(displayProvider.Models)

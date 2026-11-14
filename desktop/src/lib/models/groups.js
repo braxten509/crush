@@ -18,6 +18,10 @@ export function modelKey(providerId, modelId) {
 
 // withConfiguredModels (models.go:509-533).
 function withConfiguredModels(provider, configured) {
+  if (configured?.dynamic_models && Array.isArray(configured.models) && configured.models.length > 0) {
+    const models = configured.models.filter((m) => m?.id).map((m) => ({ ...m, name: m.name || m.id }));
+    return { ...provider, name: configured.name || provider.name, models };
+  }
   const models = provider.models.map((m) => ({ ...m }));
   const index = new Map(models.map((m, i) => [m.id, i]));
   for (const model of configured.models) {

@@ -349,7 +349,7 @@ fn url_host(url: &str) -> String {
 }
 
 fn redact_config(config: &mut Value) {
-    const PROVIDER_KEEP: &[&str] = &["id", "name", "type", "disable", "models", "chatgpt_models", "grok_models", "discover_models", "flat_rate", "cheapest_host", "quality_floor"];
+    const PROVIDER_KEEP: &[&str] = &["id", "name", "type", "disable", "models", "dynamic_models", "chatgpt_models", "grok_models", "discover_models", "flat_rate", "cheapest_host", "quality_floor"];
     const ENTRY_KEEP: &[&str] = &["type", "disabled", "timeout"];
     let Some(root) = config.as_object_mut() else { return };
     if let Some(providers) = root.get_mut("providers").and_then(Value::as_object_mut) {

@@ -424,13 +424,13 @@ func (s *providerSetup) discoverCustomModels(ctx context.Context) map[string]dis
 		if s.known[id] && !dynamic {
 			continue
 		}
-		if pc.Disable || pc.BaseURL == "" {
+		if pc.Disable || (pc.BaseURL == "" && !dynamic) {
 			continue
 		}
 		if dynamic {
 			// The provider's own list is the model list, so it is read
 			// whenever a key can pay for the request.
-			if !pc.HasAPIKey(s.resolver) {
+			if !probeDynamicProviders || !pc.HasAPIKey(s.resolver) {
 				continue
 			}
 		} else if !needsModelDiscovery(pc) {
@@ -462,13 +462,22 @@ func needsModelDiscovery(pc ProviderConfig) bool {
 	return wantsDiscovery || autoTrigger
 }
 
+// probeDynamicProviders is off in tests unless a test enables it to
+// point at a local test server.
+var probeDynamicProviders = !testing.Testing()
+
 // dynamicModelProvider lists the catalog providers whose model list always
 // comes from their own API, even though the catalog carries a list for
-// them: Kimi changes its plans' models without a Crush release (owner,
-// 2026-10-24). Their catalog models supply the details of the ids that
-// come back, and nothing is listed that the API does not return.
+// them (Kimi Coding and Anthropic). Their catalog models supply the details
+// of the ids that come back, and nothing is listed that the API does not
+// return.
 func dynamicModelProvider(id string) bool {
-	return catwalk.InferenceProvider(id) == kimiCodingProvider
+	switch catwalk.InferenceProvider(id) {
+	case kimiCodingProvider, catwalk.InferenceProviderAnthropic:
+		return true
+	default:
+		return false
+	}
 }
 
 // applyDynamicModels writes a dynamic provider's freshly read model list
@@ -483,6 +492,7 @@ func (s *providerSetup) applyDynamicModels(discovered map[string]discoveryResult
 			continue
 		}
 		providerConfig.Models = result.models
+		providerConfig.DynamicModels = true
 		s.cfg.Providers.Set(id, providerConfig)
 	}
 }

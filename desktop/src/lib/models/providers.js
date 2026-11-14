@@ -89,6 +89,7 @@ export function safeProvider(id, cfg) {
     has_oauth: cfg?.has_oauth === true,
     oauth_expired: cfg?.has_oauth === true && oauthExpired(cfg.oauth_times),
     models: pickModels(cfg?.models) ?? [],
+    dynamic_models: cfg?.dynamic_models === true,
     chatgpt_models: pickModels(cfg?.chatgpt_models),
     grok_models: pickModels(cfg?.grok_models),
   };

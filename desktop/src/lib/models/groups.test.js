@@ -40,6 +40,17 @@ describe("buildGroups", () => {
     expect(items.filter((i) => i.provider.id === "openai").map((i) => i.model.id)).toEqual(["chat-only"]);
   });
 
+  it("shows only live models for dynamic providers instead of mixing fixed catalog models", () => {
+    const dynamicCfg = cfg();
+    dynamicCfg.providers.set("anthropic", safeProvider("anthropic", {
+      name: "Anthropic",
+      dynamic_models: true,
+      models: [{ id: "live-1", name: "Live One" }],
+    }));
+    const { items } = buildGroups({ catalog, cfg: dynamicCfg, type: "large" });
+    expect(items.filter((i) => i.provider.id === "anthropic").map((i) => i.model.id)).toEqual(["live-1"]);
+  });
+
   it("marks the chosen model, preferring its Recently used row, and drops stale recents", () => {
     const recent = [{ provider: "anthropic", model: "sonnet" }, { provider: "gone", model: "x" }];
     const { items, selectedKey, prunedRecent } = buildGroups({ catalog, cfg: cfg({ recent_models: { large: recent } }), type: "large", current: { provider: "anthropic", model: "sonnet" } });

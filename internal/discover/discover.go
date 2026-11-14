@@ -110,6 +110,9 @@ func DiscoverModels(ctx context.Context, cfg Config, resolver Resolver) ([]catwa
 	if catwalk.InferenceProvider(cfg.ID) == catwalk.InferenceKimiCoding {
 		return discoverKimiModels(ctx, cfg, resolver)
 	}
+	if isAnthropicProvider(cfg) {
+		return discoverAnthropicModels(ctx, cfg, resolver)
+	}
 	if isGeminiProvider(cfg) {
 		return discoverGeminiModels(ctx, cfg, resolver)
 	}

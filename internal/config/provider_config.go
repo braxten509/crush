@@ -79,6 +79,11 @@ type ProviderConfig struct {
 	// The provider models
 	Models []catwalk.Model `json:"models,omitempty" jsonschema:"description=List of models available from this provider"`
 
+	// DynamicModels marks that Models came from the provider's own live
+	// model list, so pickers show only Models instead of merging the
+	// fixed catalog beneath them.
+	DynamicModels bool `json:"dynamic_models,omitempty" jsonschema:"-"`
+
 	// ChatGPTModels lists the models the ChatGPT (Codex) backend grants
 	// when the provider is authenticated with a ChatGPT account. It is
 	// the provider's whole catalog in that case: the API-key models in

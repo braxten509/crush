@@ -18,7 +18,10 @@ func (w *ClientWorkspace) Helpers(ctx context.Context, sessionID string) ([]agen
 	}
 	tasks := make([]agent.Task, 0, len(helpers))
 	for _, h := range helpers {
-		tasks = append(tasks, taskFromHelper(h))
+		// The terminal lists an API chat's subagents from the chat itself.
+		if !h.API {
+			tasks = append(tasks, taskFromHelper(h))
+		}
 	}
 	return tasks, nil
 }

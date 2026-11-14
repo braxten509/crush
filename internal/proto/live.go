@@ -22,6 +22,7 @@ type Helper struct {
 	Ended          time.Time `json:"ended,omitzero"`
 	Delivered      bool      `json:"delivered,omitempty"`
 	StartedBy      string    `json:"started_by,omitempty"` // owning app's client ID (5.5); "" = no app
+	API            bool      `json:"api,omitempty"`        // an API chat's subagent; CLI is then its provider
 }
 
 // Job is a command running in the background for a chat.

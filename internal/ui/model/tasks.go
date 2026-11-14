@@ -167,6 +167,10 @@ func (m *UI) relayoutTasks() {
 }
 
 func (m *UI) handleTaskEvent(t agent.Task) tea.Cmd {
+	// An API chat's subagents are listed from the chat itself (subagents.go).
+	if t.API {
+		return nil
+	}
 	m.taskRow.record(t)
 	m.relayoutTasks()
 	m.refreshBackgroundDialog()

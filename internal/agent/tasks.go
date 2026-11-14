@@ -83,6 +83,9 @@ type Task struct {
 	// StartedBy is the client ID of the app that owns the helper (see
 	// SetWorkStartHook); "" when no app does.
 	StartedBy string `json:"started_by,omitempty"`
+	// API marks an API chat's subagent (dispatch_helpers.go), listed with
+	// the chat's helpers; it is not one of a hub's tasks.
+	API bool `json:"api,omitempty"`
 	// delivering covers the handoff to the parent, including work before
 	// Run accepts it. Unlike Delivered, it clears even if delivery fails.
 	delivering bool

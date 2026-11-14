@@ -20,5 +20,6 @@ func HelperFromTask(t Task) proto.Helper {
 		Ended:          t.Ended,
 		Delivered:      t.Delivered,
 		StartedBy:      t.StartedBy,
+		API:            t.API,
 	}
 }

@@ -488,6 +488,7 @@ func (c *coordinator) runDispatched(ctx context.Context, entry *dispatchedAgent,
 	// Tracked from here, not from when the session starts, so the busy
 	// check never sees a claimed run as idle.
 	untrack := c.trackSubSession(entry.SessionID)
+	c.publishDispatch(entry)
 	go func() {
 		resp, err := run(ctx)
 		untrack()
@@ -496,6 +497,7 @@ func (c *coordinator) runDispatched(ctx context.Context, entry *dispatchedAgent,
 		// that turn may well send this subagent a follow-up, which needs
 		// it idle.
 		stopReason, report := entry.settle(gen, runOutcome{resp, err})
+		c.publishDispatch(entry)
 		c.pruneDispatched()
 		if !report {
 			return

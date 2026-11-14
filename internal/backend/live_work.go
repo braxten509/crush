@@ -20,7 +20,7 @@ func (b *Backend) ListHelpers(workspaceID, sessionID string) ([]proto.Helper, er
 	if _, err := b.GetWorkspace(workspaceID); err != nil {
 		return nil, err
 	}
-	tasks := agent.SessionTasks(sessionID)
+	tasks := agent.ChatHelpers(sessionID)
 	out := make([]proto.Helper, 0, len(tasks))
 	for _, t := range tasks {
 		out = append(out, agent.HelperFromTask(t))
@@ -35,7 +35,7 @@ func (b *Backend) StopHelper(workspaceID, sessionID, helperID string) error {
 	if _, err := b.GetWorkspace(workspaceID); err != nil {
 		return err
 	}
-	if err := agent.StopSessionTask(sessionID, helperID); err != nil {
+	if err := agent.StopChatHelper(sessionID, helperID); err != nil {
 		if errors.Is(err, agent.ErrTaskNotInSession) {
 			return ErrHelperNotFound
 		}

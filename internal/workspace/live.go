@@ -42,6 +42,7 @@ func taskFromHelper(h proto.Helper) agent.Task {
 		Ended:     h.Ended,
 		Delivered: h.Delivered,
 		StartedBy: h.StartedBy,
+		API:       h.API,
 	}
 }
 

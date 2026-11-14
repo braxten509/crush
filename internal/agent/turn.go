@@ -327,6 +327,20 @@ func (t *turn) interruptOnToolCall() bool {
 		NotRecallable:          true,
 		ProgressUpdateRequired: true,
 		ProgressStops:          stops + 1,
+		// The nudge continues this turn, so it keeps the turn's model and
+		// request settings. Without them an API chat's next request went
+		// out with no thinking settings: no effort, no output limit, and no
+		// drop_block, so a changed system prompt or tool list failed with
+		// "Invalid signature in thinking block".
+		model:            t.call.model,
+		ProviderOptions:  t.call.ProviderOptions,
+		MaxOutputTokens:  t.call.MaxOutputTokens,
+		Temperature:      t.call.Temperature,
+		TopP:             t.call.TopP,
+		TopK:             t.call.TopK,
+		FrequencyPenalty: t.call.FrequencyPenalty,
+		PresencePenalty:  t.call.PresencePenalty,
+		OnAuthRefresh:    t.call.OnAuthRefresh,
 	}})
 	return true
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/history"
 	"github.com/charmbracelet/crush/internal/message"
+	"github.com/charmbracelet/crush/internal/openchats"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/session"
 )
@@ -221,9 +222,19 @@ func (b *Backend) ListRecentSavedSessions(ctx context.Context, workspaceID, sele
 }
 
 // shownInDataDir lists the chats apps show on every workspace whose data
-// directory is dir.
+// directory is dir, plus every chat in the open-chats list the terminal and
+// desktop share: a listed chat stays until it is closed, even while another
+// chat or folder is shown (an empty "New Session" in a second folder was
+// discarded under the desktop, and its next save failed on the missing chat).
 func (b *Backend) shownInDataDir(dir string) []string {
 	var shown []string
+	if list, err := openchats.Open(); err == nil {
+		for _, c := range list.Chats() {
+			if c.ID != "" && !slices.Contains(shown, c.ID) {
+				shown = append(shown, c.ID)
+			}
+		}
+	}
 	for _, other := range b.workspaces.Seq2() {
 		if other.Cfg == nil || other.Cfg.Config().Options == nil ||
 			filepath.Clean(other.Cfg.Config().Options.DataDirectory) != filepath.Clean(dir) {

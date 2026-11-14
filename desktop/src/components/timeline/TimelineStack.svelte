@@ -54,4 +54,10 @@
     visibility: hidden;
     pointer-events: none;
   }
+  /* A child's own "visibility: visible" (an open tool's arrow, a question
+     form's page) beats the parent's hidden, so it showed through in the
+     chat on top; every child is hidden too. */
+  .slot.parked :global(*) {
+    visibility: hidden !important;
+  }
 </style>

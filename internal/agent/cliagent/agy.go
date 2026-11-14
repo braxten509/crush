@@ -10,7 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
-	"sync/atomic"
+	"sync"
 	"time"
 
 	"charm.land/fantasy"
@@ -110,15 +110,21 @@ func runAGY(ctx context.Context, m *Model, t Turn) error {
 	_ = p.send(map[string]any{"event": "user", "message": map[string]any{"role": "user", "content": withImagePaths(t.Prompt, t.Attachments)}})
 
 	// A message queued mid-turn goes in as another user line; AGY runs it
-	// as its next turn in this conversation (owner, 2026-10-24).
-	var steered atomic.Int32
+	// as its next turn in this conversation (owner, 2026-10-24). It stays
+	// listed as queued until the turn before it ends: shown at once, the
+	// chat read "Waiting for the model" while AGY's command still ran.
+	var (
+		steerMu sync.Mutex
+		steered []string
+	)
 	startSteer := func() func() {
-		return pollSteerInputRetry(t, func() bool { return true }, func(text string, _ []message.Attachment) bool {
-			if p.send(map[string]any{"event": "user", "message": map[string]any{"role": "user", "content": text}}) != nil {
+		return pollSteerInputRetry(t, func() bool { return true }, func(text string, attachments []message.Attachment) bool {
+			if p.send(map[string]any{"event": "user", "message": map[string]any{"role": "user", "content": withImagePaths(text, attachments)}}) != nil {
 				return false
 			}
-			steered.Add(1)
-			_ = t.Emit(Event{Type: EventUserMessage, Text: text})
+			steerMu.Lock()
+			steered = append(steered, text)
+			steerMu.Unlock()
 			return true
 		})
 	}
@@ -186,8 +192,18 @@ func runAGY(ctx context.Context, m *Model, t Turn) error {
 			// result. Stop steering first so the count is final.
 			results++
 			stopSteer()
-			if int(steered.Load()) < results {
+			steerMu.Lock()
+			next := ""
+			if results <= len(steered) {
+				next = steered[results-1]
+			}
+			steerMu.Unlock()
+			if next == "" {
 				return nil
+			}
+			// AGY starts on the next steered line now.
+			if err := t.Emit(Event{Type: EventUserMessage, Text: next}); err != nil {
+				return err
 			}
 			stopSteer = startSteer()
 			followUp = time.After(agyFollowUpWait)

@@ -299,6 +299,7 @@ func anthropicOptions(c *optionsCall) fantasy.ProviderOptions {
 			parsed.Thinking = nil
 			parsed.ExtraBody["thinking"] = map[string]any{
 				"type": "adaptive", "display": config.AnthropicThinkingDisplayUpdates,
+				"block_binding": map[string]any{"prefix_mismatch_behavior": "drop_block"},
 			}
 		}
 		options[anthropic.Name] = parsed

@@ -453,6 +453,7 @@ func (b Builder) buildProvider(providerCfg config.ProviderConfig, model config.S
 		} else {
 			headers["anthropic-beta"] = config.AnthropicProgressUpdatesBeta
 		}
+		headers["anthropic-beta"] += "," + config.AnthropicThinkingBindingBeta
 	}
 
 	apiKey, _ := b.Config.Resolve(providerCfg.APIKey)

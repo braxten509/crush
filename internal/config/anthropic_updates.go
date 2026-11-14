@@ -10,6 +10,13 @@ import (
 // before it accepts the "updates" thinking display.
 const AnthropicProgressUpdatesBeta = "thinking-display-updates-2026-08-18"
 
+// AnthropicThinkingBindingBeta is the beta flag the Anthropic API needs
+// before it accepts thinking.block_binding. Claude 5 binds each thinking
+// block to the system prompt and tools it was written under; when a chat
+// comes back after either changed (new skills, a new day), the API refused
+// the whole chat. With "drop_block" it drops the stale blocks instead.
+const AnthropicThinkingBindingBeta = "thinking-binding-controls-2026-08-01"
+
 // AnthropicThinkingDisplayUpdates returns the text of the model's progress
 // updates (the short notes it writes before a tool call) and leaves its
 // reasoning empty. The "summarized" display returns the notes empty, so

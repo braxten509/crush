@@ -94,13 +94,32 @@ export function checkingKinds(accounts = [], byKind = {}) {
   );
 }
 
-// Antigravity counts its model groups apart: only its Gemini ones are
-// shown (owner, 2026-10-25).
+// Antigravity counts its model groups apart: the Agy row is its Gemini
+// ones (owner, 2026-10-25), and each other group gets a line of its own
+// under it (owner, 2026-11-14, pick A: Claude's 0% was hidden).
 function windowsOf(kind, reading) {
   const windows = reading?.windows ?? [];
   if (kind !== "agy-cli") return windows;
   const gemini = windows.filter((w) => /gemini/i.test(w.model ?? ""));
   return gemini.length > 0 ? gemini : windows;
+}
+
+// Antigravity's groups besides Gemini, one line each: [{name, windows}].
+// A group's families (Claude Opus 5.5, Claude Sonnet 5.5, GPT-OSS 120B)
+// share its windows and reset times, so families with the same windows
+// are one group, named by its first family's first word ("Claude").
+function otherGroups(kind, reading) {
+  if (kind !== "agy-cli") return [];
+  const others = (reading?.windows ?? []).filter((w) => !/gemini/i.test(w.model ?? ""));
+  if (others.length === (reading?.windows ?? []).length) return [];
+  const byFamily = new Map();
+  for (const w of others) byFamily.set(w.model ?? "", [...(byFamily.get(w.model ?? "") ?? []), w]);
+  const groups = new Map();
+  for (const [family, windows] of byFamily) {
+    const key = windows.map((w) => `${w.name}|${w.used}|${w.resets_at ?? ""}`).sort().join(";");
+    if (!groups.has(key)) groups.set(key, { name: family.split(/[\s-]+/u)[0] || family, windows });
+  }
+  return [...groups.values()];
 }
 
 // A reading's windows as the list shows them (owner, 2026-11-12): the row's
@@ -124,7 +143,10 @@ function splitWindows(kind, reading) {
   };
   return {
     own: windows.filter((w) => !apart.includes(w.model ?? "")),
-    families: apart.map((family) => ({ name: name(family), windows: windows.filter((w) => (w.model ?? "") === family) })),
+    families: [
+      ...apart.map((family) => ({ name: name(family), windows: windows.filter((w) => (w.model ?? "") === family) })),
+      ...otherGroups(kind, reading),
+    ],
   };
 }
 

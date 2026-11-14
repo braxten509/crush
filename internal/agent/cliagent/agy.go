@@ -46,6 +46,9 @@ type agyLine struct {
 	Result struct {
 		Status   string `json:"status"`
 		Response string `json:"response"`
+		// Error is why a failed turn stopped ("Individual quota reached
+		// ... Resets in 4h52m"); Response then holds only the last text.
+		Error string `json:"error"`
 	} `json:"result"`
 }
 
@@ -186,7 +189,7 @@ func runAGY(ctx context.Context, m *Model, t Turn) error {
 			}
 		case "result":
 			if line.Result.Status != "SUCCESS" {
-				return errors.New("AGY: " + cmp.Or(line.Result.Response, "turn failed"))
+				return errors.New("AGY: " + cmp.Or(line.Result.Error, line.Result.Response, "turn failed"))
 			}
 			// Each steered line may run as one more turn with its own
 			// result. Stop steering first so the count is final.

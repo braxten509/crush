@@ -42,8 +42,9 @@ var (
 		`(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2}))`)
 	// resetUnixPattern reads Claude Code's older "limit reached|1760000000".
 	resetUnixPattern = regexp.MustCompile(`(?i)limit reached\|(\d{10})\b`)
-	// resetAfterPattern reads a wait like "try again in 2 hours 5 minutes".
-	resetAfterPattern = regexp.MustCompile(`(?i)` + resetWords + `in\s+((?:\d+\s*(?:days?|d|hours?|hrs?|h|minutes?|mins?|m|seconds?|secs?|s)\b[\s,]*(?:and\s+)?)+)`)
+	// resetAfterPattern reads a wait like "try again in 2 hours 5 minutes"
+	// or AGY's compact "Resets in 4h52m24s".
+	resetAfterPattern = regexp.MustCompile(`(?i)` + resetWords + `in\s+((?:(?:(?:\d+[dhms])+|\d+\s*(?:days?|d|hours?|hrs?|h|minutes?|mins?|m|seconds?|secs?|s))\b[\s,]*(?:and\s+)?)+)`)
 	resetAfterPart    = regexp.MustCompile(`(?i)(\d+)\s*([a-z]+)`)
 )
 

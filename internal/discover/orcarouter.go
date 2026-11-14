@@ -108,7 +108,7 @@ func OrcaRouterCatalog(ctx context.Context, baseURL, apiKey string, headers map[
 		if price.QuotaType == 0 {
 			model.Pricing.Input = price.ModelRatio * 2
 			model.Pricing.Output = model.Pricing.Input * price.CompletionRatio
-			model.Pricing.CacheCreate = model.Pricing.Input * price.CacheRatio
+			model.Pricing.CacheHit = model.Pricing.Input * price.CacheRatio
 		}
 		models = append(models, model)
 	}

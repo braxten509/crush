@@ -114,7 +114,7 @@ func discoverGeminiModels(ctx context.Context, cfg Config, resolver Resolver) ([
 			result = append(result, model)
 		}
 	}
-	return result, nil
+	return fillMissingPrices(ctx, result), nil
 }
 
 // geminiCheckTTL is how long a model's answer to the check is trusted.

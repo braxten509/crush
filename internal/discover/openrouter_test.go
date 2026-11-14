@@ -63,7 +63,7 @@ func TestOpenRouterCatalogFollowsAccountPreferences(t *testing.T) {
 	require.True(t, kimi.Capabilities.Vision)
 	require.InDelta(t, 0.6, kimi.Pricing.Input, 1e-9)
 	require.InDelta(t, 2.5, kimi.Pricing.Output, 1e-9)
-	require.InDelta(t, 0.15, kimi.Pricing.CacheCreate, 1e-9)
+	require.InDelta(t, 0.15, kimi.Pricing.CacheHit, 1e-9)
 
 	free := models[1]
 	require.False(t, free.CanReason())

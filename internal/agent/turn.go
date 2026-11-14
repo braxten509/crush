@@ -269,6 +269,12 @@ func (t *turn) dispatch(ctx context.Context) dispatchOutcome {
 
 const progressUpdatePrompt = "Before making another tool call, update the user briefly with what you have completed and what remains. Then continue the original task. Do not mention this reminder."
 
+// maxProgressStops is how many times in a row the agent is stopped for a
+// progress update (owner, 2026-11-14). Fable 5.2's updates came back from
+// the API empty, so every stop looked unanswered and the agent was
+// stopped 131 times; after this many it carries on.
+const maxProgressStops = 3
+
 // interruptOnToolCall counts main-agent tool calls since the last visible
 // assistant text. It cancels the active turn at the limit and queues an
 // invisible progress nudge before the task resumes.
@@ -282,6 +288,14 @@ func (t *turn) interruptOnToolCall() bool {
 		return true
 	}
 	if t.genCtx != nil && t.genCtx.Err() != nil {
+		t.toolCallMu.Unlock()
+		return false
+	}
+	stops := t.call.ProgressStops
+	if t.visibleAssistantText {
+		stops = 0
+	}
+	if stops >= maxProgressStops {
 		t.toolCallMu.Unlock()
 		return false
 	}
@@ -312,6 +326,7 @@ func (t *turn) interruptOnToolCall() bool {
 		HiddenUserMessage:      true,
 		NotRecallable:          true,
 		ProgressUpdateRequired: true,
+		ProgressStops:          stops + 1,
 	}})
 	return true
 }

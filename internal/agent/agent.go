@@ -82,6 +82,11 @@ type SessionAgentCall struct {
 	// ProgressUpdateRequired marks Crush's hidden nudge. The agent must
 	// produce visible text before another tool call can run.
 	ProgressUpdateRequired bool
+	// ProgressStops counts the times Crush has stopped the agent for a
+	// progress update since it last wrote something the user can see. At
+	// maxProgressStops it is not stopped again, so a model whose updates
+	// come back empty can't be stopped over and over.
+	ProgressStops int
 	// CLIContinue shows a reply the agent CLI started on its own between
 	// turns instead of sending Prompt (cliagent.Turn.Continue).
 	CLIContinue bool

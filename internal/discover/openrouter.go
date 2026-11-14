@@ -101,12 +101,7 @@ func openRouterCatwalkModel(entry openRouterModel) catwalk.Model {
 		ContextWindow:    entry.ContextLength,
 		DefaultMaxTokens: maxTokens,
 		Capabilities:     catwalk.Capabilities{Vision: slices.Contains(entry.Architecture.InputModalities, "image")},
-		Pricing: catwalk.Pricing{
-			Input:       perMillion(entry.Pricing.Prompt),
-			Output:      perMillion(entry.Pricing.Completion),
-			CacheCreate: perMillion(entry.Pricing.InputCacheRead),
-			CacheHit:    perMillion(entry.Pricing.InputCacheWrite),
-		},
+		Pricing:          openRouterPricing(entry),
 	}
 	if model.Name == "" {
 		model.Name = entry.ID
@@ -119,6 +114,17 @@ func openRouterCatwalkModel(entry openRouterModel) catwalk.Model {
 		}
 	}
 	return model
+}
+
+// openRouterPricing is a catalog entry's prices per million tokens. A
+// cache read is a cache hit and a cache write creates the cache.
+func openRouterPricing(entry openRouterModel) catwalk.Pricing {
+	return catwalk.Pricing{
+		Input:       perMillion(entry.Pricing.Prompt),
+		Output:      perMillion(entry.Pricing.Completion),
+		CacheHit:    perMillion(entry.Pricing.InputCacheRead),
+		CacheCreate: perMillion(entry.Pricing.InputCacheWrite),
+	}
 }
 
 // openRouterLevels are the effort levels a model's catalog entry lists

@@ -256,7 +256,7 @@ export function noticeParts(item) {
         : line("check", "ink", "Your answers to the questions: ", state);
     case "task":
       if (state === "running") return line("dot", "ink", "Still running: ", name);
-      if (state === "failed") return line("cross", "error", "Task ", name, " failed");
+      if (state === "failed") return line("cross", "error", "Task ", name, item.detail ? ` failed: ${item.detail}` : " failed");
       if (state === "stopped") return line("dot", "muted", "Task ", name, " stopped");
       return line("check", "ink", "Task ", name, " finished");
     default:
@@ -501,7 +501,21 @@ export function buildTimeline(input, state = createTimelineState()) {
         });
         continue;
       }
+      // A helper's report (SubAgentReportItem in the terminal app) is a
+      // notice line, with a failed helper's reason after it.
+      const reports = partsOf(stored, "sub_agent_report");
+      if (reports.length) {
+        reports.forEach((p, n) => {
+          const d = p.data ?? {};
+          const reason = d.failed ? trimSpace(String(d.output ?? "").split("\n")[0]) : "";
+          flat.push({ t: "notice", m: stored, key: `notice:${stored.id}:${n}`, ...taskNotice(d.label || "helper", d.failed ? "failed" : "finished"), detail: reason });
+        });
+        continue;
+      }
       const text = trimSpace(content.text ?? "");
+      // A message with nothing to show (no words, no files) is never drawn
+      // as an empty bubble.
+      if (!text && !chipsFor(stored).length) continue;
       const task = parseTaskNotification(text);
       if (task) {
         flat.push({ t: "notice", m: stored, key: `notice:${stored.id}`, ...taskNotice(task.name, task.status) });
@@ -620,7 +634,7 @@ export function buildTimeline(input, state = createTimelineState()) {
         break;
       }
       case "notice":
-        items.push(keep(state, seen, e.key, [e.m, e.notice, e.state, e.name, e.text], () => ({ ...base("notice", e.m.id), letter: "", notice: e.notice, state: e.state, name: e.name, text: e.text })));
+        items.push(keep(state, seen, e.key, [e.m, e.notice, e.state, e.name, e.text, e.detail], () => ({ ...base("notice", e.m.id), letter: "", notice: e.notice, state: e.state, name: e.name, text: e.text, detail: e.detail ?? "" })));
         break;
       case "shell":
         items.push(

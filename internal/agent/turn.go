@@ -33,6 +33,12 @@ type turn struct {
 	a    *sessionAgent
 	call SessionAgentCall
 
+	// promptNote tells the model how its system prompt changed since the
+	// chat's steady one was sent; promptCommit records it as told once it
+	// is stored with the turn's prompt (steady_prompt.go).
+	promptNote   string
+	promptCommit func()
+
 	// ctx is the caller's context carrying the session ID. genCtx is the
 	// run context the model streams under, canceled by cancel; ac is the
 	// active-request entry that lets Cancel reach it.
@@ -468,12 +474,16 @@ func (t *turn) run() (*fantasy.AgentResult, error) {
 			systemPrompt += "\n\n" + note
 		}
 	}
-	agent := fantasy.NewAgent(
-		t.chatModel.Model,
-		fantasy.WithSystemPrompt(systemPrompt),
-		fantasy.WithTools(agentTools...),
-		fantasy.WithUserAgent(userAgent),
-	)
+	builtPrompt := systemPrompt
+	if !t.isCLI {
+		systemPrompt, t.promptNote, t.promptCommit = a.steady.settle(t.call.SessionID, t.currentSession.SummaryMessageID, t.currentSession.MessageCount > 0, systemPrompt)
+		if !storesModelContext(t.call) {
+			// A subagent report is stored without the context sent ahead
+			// of it, so its note would not replay: it waits for the
+			// next prompt.
+			t.promptNote, t.promptCommit = "", nil
+		}
+	}
 
 	msgs, err := t.loadHistory()
 	if err != nil {
@@ -483,8 +493,21 @@ func (t *turn) run() (*fantasy.AgentResult, error) {
 	history, files := a.preparePrompt(msgs, t.chatModel.CatwalkCfg.Capabilities.Vision, t.chatModel.CatwalkCfg.Capabilities.Audio, t.call.Attachments...)
 	if !t.isCLI {
 		overhead := approxTokenCount(systemPrompt) + approxTokenCount(t.promptPrefix) + approxTokenCount(t.call.Prompt) + int64(len(agentTools)*300)
-		history = a.trimPreparedPrompt(t.call.SessionID, msgs, history, t.chatModel, overhead)
+		trimmed := a.trimPreparedPrompt(t.call.SessionID, msgs, history, t.chatModel, overhead)
+		if len(trimmed) < len(history) && systemPrompt != builtPrompt {
+			// Trimming dropped older messages, maybe with updates the
+			// model was told; send the prompt as it is now instead.
+			systemPrompt = builtPrompt
+			a.steady.rebase(t.call.SessionID, t.currentSession.SummaryMessageID, builtPrompt)
+		}
+		history = trimmed
 	}
+	agent := fantasy.NewAgent(
+		t.chatModel.Model,
+		fantasy.WithSystemPrompt(systemPrompt),
+		fantasy.WithTools(agentTools...),
+		fantasy.WithUserAgent(userAgent),
+	)
 
 	startTime := time.Now()
 	a.eventPromptSent(t.call.SessionID, t.chatModel)
@@ -762,13 +785,18 @@ func (t *turn) loadHistory() ([]message.Message, error) {
 	// the notes it left) is stored with the user message, so later
 	// requests replay the same text. A continuation already sent it.
 	if !t.call.userMessagesCreated {
-		t.call.modelContext = hostContextPrompt(t.call.HostContext) + notesPrompt(a.takeNotes(t.call.SessionID))
+		t.call.modelContext = hostContextPrompt(t.call.HostContext) + notesPrompt(a.takeNotes(t.call.SessionID)) + t.promptNote
 	}
 
 	// Persist each original submission exactly once, including continuations.
 	if !t.call.userMessagesCreated {
 		if _, err := a.createUserMessage(t.ctx, t.call, t.call.modelContext); err != nil {
 			return nil, err
+		}
+		// A continuation stored its context before; its change waits for
+		// the next prompt.
+		if t.promptCommit != nil {
+			t.promptCommit()
 		}
 	}
 	t.userMsgCreated = true

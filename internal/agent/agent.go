@@ -230,6 +230,9 @@ type activeCancel struct {
 }
 
 type sessionAgent struct {
+	// steady keeps each API chat's system prompt steady (steady_prompt.go).
+	steady steadyPrompts
+
 	// model is the one model of an agent made for one model (a subagent's
 	// helper run); the chat agents have none, as every chat owns its model
 	// (owner, 2026-10-24: no shared model anywhere).

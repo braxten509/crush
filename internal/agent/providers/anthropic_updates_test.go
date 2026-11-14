@@ -46,7 +46,10 @@ func TestProgressUpdateWireIncludesDisplayWithoutEffort(t *testing.T) {
 			_, err := model.Generate(t.Context(), fantasy.Call{Prompt: fantasy.Prompt{fantasy.NewUserMessage("check")}, ProviderOptions: opts})
 			require.NoError(t, err)
 			body := <-requests
-			require.Equal(t, map[string]any{"type": "adaptive", "display": "updates"}, body["thinking"])
+			thinking, _ := body["thinking"].(map[string]any)
+			require.Equal(t, "adaptive", thinking["type"])
+			require.Equal(t, "updates", thinking["display"])
+			require.Equal(t, map[string]any{"prefix_mismatch_behavior": "drop_block"}, thinking["block_binding"])
 		})
 	}
 }

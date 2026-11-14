@@ -1,6 +1,7 @@
 package config
 
 import (
+	"slices"
 	"strings"
 
 	"charm.land/catwalk/v3/pkg/catwalk"
@@ -32,14 +33,30 @@ var progressUpdateFamilies = []string{
 	"claude-mythos-5",
 }
 
+// thinkingBindingFamilies are the Claude families whose thinking blocks
+// are bound to the conversation: the progress-update families and Claude
+// Haiku 5, which writes no progress updates but runs the same check.
+var thinkingBindingFamilies = append(slices.Clone(progressUpdateFamilies), "claude-haiku-5")
+
 // AnthropicProgressUpdates reports whether Crush asks the Anthropic API
 // for the model's progress updates.
 func AnthropicProgressUpdates(providerID, modelID string) bool {
+	return anthropicFamily(providerID, modelID, progressUpdateFamilies)
+}
+
+// AnthropicThinkingBinding reports whether Crush asks the Anthropic API to
+// drop thinking blocks bound to an earlier system prompt or tool list
+// (thinking.block_binding "drop_block") instead of refusing the request.
+func AnthropicThinkingBinding(providerID, modelID string) bool {
+	return anthropicFamily(providerID, modelID, thinkingBindingFamilies)
+}
+
+func anthropicFamily(providerID, modelID string, families []string) bool {
 	if providerID != string(catwalk.InferenceProviderAnthropic) {
 		return false
 	}
 	model := strings.ToLower(modelID)
-	for _, family := range progressUpdateFamilies {
+	for _, family := range families {
 		if strings.Contains(model, family) {
 			return true
 		}

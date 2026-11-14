@@ -299,12 +299,32 @@ func anthropicOptions(c *optionsCall) fantasy.ProviderOptions {
 			parsed.Thinking = nil
 			parsed.ExtraBody["thinking"] = map[string]any{
 				"type": "adaptive", "display": config.AnthropicThinkingDisplayUpdates,
-				"block_binding": map[string]any{"prefix_mismatch_behavior": "drop_block"},
+				"block_binding": dropStaleThinking,
 			}
+		} else if config.AnthropicThinkingBinding(c.provider.ID, c.model.ModelCfg.Model) && !thinkingDisabled(c.merged) {
+			// Claude Haiku 5 thinks unless told not to, and binds its
+			// blocks to the conversation like the families above.
+			parsed.ExtraBody = maps.Clone(parsed.ExtraBody)
+			if parsed.ExtraBody == nil {
+				parsed.ExtraBody = make(map[string]any)
+			}
+			parsed.Thinking = nil
+			parsed.ExtraBody["thinking"] = map[string]any{"type": "adaptive", "block_binding": dropStaleThinking}
 		}
 		options[anthropic.Name] = parsed
 	}
 	return options
+}
+
+// dropStaleThinking asks the API to drop thinking blocks bound to an earlier
+// system prompt or tool list (an add-on server that connected mid-chat, a
+// skill turned on) instead of refusing the whole request.
+var dropStaleThinking = map[string]any{"prefix_mismatch_behavior": "drop_block"}
+
+// thinkingDisabled reports whether the model's options turn thinking off.
+func thinkingDisabled(merged map[string]any) bool {
+	thinking, _ := merged["thinking"].(map[string]any)
+	return thinking["type"] == "disabled"
 }
 
 // alibabaAnthropicReasoning passes the effort, or else the thinking switch,

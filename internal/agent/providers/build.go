@@ -453,7 +453,13 @@ func (b Builder) buildProvider(providerCfg config.ProviderConfig, model config.S
 		} else {
 			headers["anthropic-beta"] = config.AnthropicProgressUpdatesBeta
 		}
-		headers["anthropic-beta"] += "," + config.AnthropicThinkingBindingBeta
+	}
+	if wireType == catwalk.TypeMessages && config.AnthropicThinkingBinding(providerCfg.ID, model.Model) {
+		if v := headers["anthropic-beta"]; v != "" {
+			headers["anthropic-beta"] = v + "," + config.AnthropicThinkingBindingBeta
+		} else {
+			headers["anthropic-beta"] = config.AnthropicThinkingBindingBeta
+		}
 	}
 
 	apiKey, _ := b.Config.Resolve(providerCfg.APIKey)

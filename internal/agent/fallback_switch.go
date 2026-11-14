@@ -31,8 +31,10 @@ import (
 const fallbackGuessOut = 30 * time.Minute
 
 // usageLimitPattern recognizes a usage-limit error that names no reset
-// time.
-var usageLimitPattern = regexp.MustCompile(`(?i)usage limit|limit reached|hit your limit|out of (extra )?usage|rate.?limit|quota (exceeded|reached)`)
+// time. An account its provider refuses outright (Claude Code: "can't use
+// your Claude subscription ... payment is past due") counts too, so the
+// order moves on to the next account instead of failing the turn.
+var usageLimitPattern = regexp.MustCompile(`(?i)usage limit|limit reached|hit your limit|out of (extra )?usage|rate.?limit|quota (exceeded|reached)|can.t use your \w+ subscription|past due`)
 
 // fallbackOut is an account that ran out: until when, and whether that
 // time came from the provider or is a guess.

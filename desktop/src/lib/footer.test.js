@@ -313,6 +313,9 @@ describe("limitWindows (cliagent.Limits and Limit.Left)", () => {
       { name: "5h", left: 14, resetsIn: (2 * 60 + 41) * 60_000 },
       { name: "Weekly", left: 69, resetsIn: 3 * 24 * 3_600_000 + 500 },
       { name: "Opus", left: 60, resetsIn: null, family: "opus" },
+      // Every model's own limit shows on every chat of the account (owner,
+      // 2026-11-15: Fable's on an Opus chat).
+      { name: "Sonnet", left: 90, resetsIn: null, family: "sonnet" },
     ]);
   });
 
@@ -381,7 +384,8 @@ describe("limitWindows (cliagent.Limits and Limit.Left)", () => {
     // limits" (owner, 2026-11-12: it stands with 5-HOUR and WEEK as a box).
     const weekly = meterModel({ items: ["context", "limit_5h", "limit_weekly"], limits: limitWindows(claude, "fable", now) }).meters;
     expect(weekly.map((m) => m.label)).toEqual(["CONTEXT", "5-HOUR", "WEEK", "FABLE WEEK"]);
-    expect(labels(claude, "opus")).toEqual([["context", 0], ["limit_5h", 74], ["limit_weekly", 42]]);
+    // Every Claude chat shows Fable's limit too, used or not (owner, 2026-11-15).
+    expect(labels(claude, "opus")).toEqual([["context", 0], ["limit_5h", 74], ["limit_weekly", 42], ["limit_weekly:Weekly Fable", 57]]);
     const agy = reading({ kind: "agy-cli", windows: [
       { name: "Weekly", used: 10, model: "gemini" }, { name: "5h", used: 0, model: "gemini" },
       { name: "Weekly", used: 30, model: "Claude Opus" }, { name: "Weekly", used: 40, model: "Gemini 4 Argon" },
@@ -390,7 +394,8 @@ describe("limitWindows (cliagent.Limits and Limit.Left)", () => {
     // (owner, 2026-11-12).
     expect(labels(agy, "gemini-4-argon-high")).toEqual([["context", 0], ["limit_weekly", 90], ["limit_5h", 100], ["limit_weekly:Weekly Argon", 60]]);
     expect(meterModel({ items, limits: limitWindows(agy, "gemini-4-argon-high", now) }).meters.map((m) => m.label)).toEqual(["CONTEXT", "WEEK", "5-HOUR", "ARGON WEEK"]);
-    expect(labels(agy, "gemini-4-hydrogen-xhigh")).toEqual([["context", 0], ["limit_weekly", 90], ["limit_5h", 100]]);
+    // So does every Gemini chat (owner, 2026-11-15).
+    expect(labels(agy, "gemini-4-hydrogen-xhigh")).toEqual([["context", 0], ["limit_weekly", 90], ["limit_5h", 100], ["limit_weekly:Weekly Argon", 60]]);
     expect(labels(agy, "claude-opus-5-5-low")).toEqual([["context", 0], ["limit_weekly", 70]]);
     expect(labels(agy, "gpt-oss-120b-medium")).toEqual([["context", 0]]);
   });

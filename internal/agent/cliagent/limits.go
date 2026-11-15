@@ -464,20 +464,50 @@ func RefreshAccountLimits(ctx context.Context, kind catwalk.Type, account string
 }
 
 // RefreshLimitsDuringTurn starts a usage reading for a turn that is still
-// working, so its meter moves every tool step instead of only when the
-// turn ends. Every call fetches fresh: a reading belongs to the moment it
-// was asked for, so the idle refresh interval does not apply. Overlapping
-// reads are still shared by the pending guard.
+// working or has just ended, so its meter moves every tool step and shows
+// the whole turn once it ends. Every call fetches fresh: a reading belongs
+// to the moment it was asked for, so the idle refresh interval does not
+// apply. A call while a read is on its way is not dropped (owner,
+// 2026-11-15: an Agy meter lagged behind its tool calls): one more read
+// follows that one, covering every call made meanwhile.
 func RefreshLimitsDuringTurn(ctx context.Context, kind catwalk.Type, account string) {
 	if realLimitsOffInTests() {
 		return
 	}
+	k := limitKey{kind, account}
+	turnReads.Lock()
+	if turnReads.running[k] {
+		turnReads.again[k] = true
+		turnReads.Unlock()
+		return
+	}
+	turnReads.running[k] = true
+	turnReads.Unlock()
 	// The turn's own usage: no other engine's reading has it.
 	ctx = freshLimits(context.WithoutCancel(ctx))
 	go func() {
-		_, _ = RefreshAccountLimits(ctx, kind, account, true)
+		for {
+			read, cancel := context.WithTimeout(ctx, time.Minute)
+			_ = ReadAccountLimitsNow(read, kind, account)
+			cancel()
+			turnReads.Lock()
+			if !turnReads.again[k] {
+				delete(turnReads.running, k)
+				turnReads.Unlock()
+				return
+			}
+			delete(turnReads.again, k)
+			turnReads.Unlock()
+		}
 	}()
 }
+
+// turnReads lists the accounts with a turn's read on its way, and those
+// asked again meanwhile.
+var turnReads = struct {
+	sync.Mutex
+	running, again map[limitKey]bool
+}{running: map[limitKey]bool{}, again: map[limitKey]bool{}}
 
 // realLimitsOffInTests reports a test that left the real fetchers in
 // place: its turns never ask a real tool's account (the engine's start

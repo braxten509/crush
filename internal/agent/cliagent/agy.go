@@ -279,6 +279,8 @@ func runAGY(ctx context.Context, m *Model, t Turn) error {
 				return err
 			}
 		case "result":
+			// The turn's last reply has counted by now.
+			RefreshLimitsDuringTurn(ctx, m.Kind, m.Account)
 			if line.Result.Status != "SUCCESS" {
 				// Once AGY has recovered from a failed step, it reports
 				// that step's error as the result of every later turn of

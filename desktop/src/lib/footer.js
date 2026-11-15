@@ -399,6 +399,18 @@ function usageModels(windows, model) {
     const family = nameWords(w.model);
     if (family.length > 0 && family.every((word) => words.includes(word))) names.add(w.model);
   }
+  // A brand's limit that applies (the account-wide one, or one named by a
+  // single word: "Gemini") brings every narrower limit under that brand,
+  // used or not (owner, 2026-11-15): every Claude chat shows Fable's beside
+  // the account's own, every Agy Gemini chat Argon's beside Gemini's. A
+  // model's own entry ("gemini-3.5-flash") is no brand: its siblings
+  // ("gemini-3.5-flash-lite") stay off its chats.
+  const wide = [...names].map(nameWords).filter((outer) => outer.length === 1);
+  if (windows.some((w) => !w.model)) wide.push([]);
+  for (const w of windows) {
+    const family = nameWords(w.model);
+    if (family.length > 0 && wide.some((outer) => outer.length < family.length && outer.every((word) => family.includes(word)))) names.add(w.model);
+  }
   return [...names];
 }
 

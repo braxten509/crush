@@ -6,9 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"sync"
 	"time"
@@ -49,7 +52,58 @@ type agyLine struct {
 		// Error is why a failed turn stopped ("Individual quota reached
 		// ... Resets in 4h52m"); Response then holds only the last text.
 		Error string `json:"error"`
+		// FinishedReason says why a turn ended early ("error",
+		// "interrupted", "print_timeout"); empty when it finished.
+		FinishedReason string `json:"finished_reason"`
 	} `json:"result"`
+}
+
+// agyBackgroundNote is the result shown for a command AGY is still running
+// once it has held the turn for the user's time. AGY moves a slow command
+// to its own background after a few seconds and its model carries on, but
+// print mode reports steps in order: nothing past the command reaches Crush
+// until it ends.
+const agyBackgroundNote = "Still running. AGY moved this command to its own background and carries on when it finishes."
+
+// agyTurn is what one AGY turn has reported so far.
+type agyTurn struct {
+	emit      func(Event) error
+	announced map[int]bool
+	// moved are the commands shown as running in the background; their own
+	// results are not shown again.
+	moved map[int]bool
+	// replied is set while the last step reported is a finished reply.
+	replied bool
+
+	mu sync.Mutex
+	// running are the commands AGY has not finished, by step index: the
+	// tool's name and input.
+	running map[int][2]string
+}
+
+// waiting reports whether AGY is still running a command of this turn.
+func (r *agyTurn) waiting() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.running) > 0
+}
+
+// moveToBackground shows the commands AGY is still running as moved to the
+// background, the way Ctrl+B does for the other CLIs.
+func (r *agyTurn) moveToBackground() error {
+	r.mu.Lock()
+	calls := r.running
+	r.running = map[int][2]string{}
+	r.mu.Unlock()
+	for _, index := range slices.Sorted(maps.Keys(calls)) {
+		call := calls[index]
+		r.moved[index] = true
+		meta := markBackground(call[0], resultMetadata(call[0], call[1], agyBackgroundNote))
+		if err := r.emit(Event{Type: EventToolResult, ID: "agy-" + strconv.Itoa(index), Name: call[0], Output: agyBackgroundNote, Metadata: meta}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // agyBin finds the real agy binary; shells often wrap it in a function
@@ -134,7 +188,33 @@ func runAGY(ctx context.Context, m *Model, t Turn) error {
 	stopSteer := startSteer()
 	defer func() { stopSteer() }()
 
-	announced := map[int]bool{}
+	run := &agyTurn{emit: t.Emit, announced: map[int]bool{}, moved: map[int]bool{}, running: map[int][2]string{}}
+	// Ctrl+B and the user's background time: asked from another goroutine,
+	// done here between lines.
+	toBackground := make(chan struct{}, 1)
+	if t.SessionID != "" {
+		defer onBackground(t.SessionID, func() bool {
+			if !run.waiting() {
+				return false
+			}
+			select {
+			case toBackground <- struct{}{}:
+			default:
+			}
+			return true
+		})()
+	}
+	// The model's context window, for the context meter.
+	var windows <-chan int64
+	if !t.NoTools {
+		size, asked := agyContextWindow(ctx, m.ID)
+		if size > 0 {
+			if err := t.Emit(agyContextBudget(size)); err != nil {
+				return err
+			}
+		}
+		windows = asked
+	}
 	conversation := t.Resume
 	lines := p.readLines()
 	// followUp is armed after a result while steered lines may still run
@@ -155,6 +235,17 @@ func runAGY(ctx context.Context, m *Model, t Turn) error {
 			followUp = nil
 		case <-followUp:
 			return nil
+		case <-toBackground:
+			if err := run.moveToBackground(); err != nil {
+				return err
+			}
+			continue
+		case size := <-windows:
+			windows = nil
+			if err := t.Emit(agyContextBudget(size)); err != nil {
+				return err
+			}
+			continue
 		}
 		if ctx.Err() != nil {
 			// Interrupted: let agy stop its commands and exit by itself;
@@ -181,7 +272,7 @@ func runAGY(ctx context.Context, m *Model, t Turn) error {
 			if line.StepUpdate.StepType == "tool" {
 				RefreshLimitsDuringTurn(ctx, m.Kind, m.Account)
 			}
-			if err := agyStep(line, announced, t.Emit); err != nil {
+			if err := run.step(line); err != nil {
 				return err
 			}
 			if err := agyMarker(line, conversation, t); err != nil {
@@ -189,8 +280,17 @@ func runAGY(ctx context.Context, m *Model, t Turn) error {
 			}
 		case "result":
 			if line.Result.Status != "SUCCESS" {
-				return errors.New("AGY: " + cmp.Or(line.Result.Error, line.Result.Response, "turn failed"))
+				// Once AGY has recovered from a failed step, it reports
+				// that step's error as the result of every later turn of
+				// the conversation, finished or not (agy 1.5.9). A turn
+				// that ended on a finished reply did not fail.
+				stale := run.replied && (line.Result.FinishedReason == "" || line.Result.FinishedReason == "error")
+				if !stale {
+					return errors.New("AGY: " + cmp.Or(line.Result.Error, line.Result.Response, "turn failed"))
+				}
+				slog.Debug("AGY reported an earlier step's error for a finished turn", "error", line.Result.Error)
 			}
+			run.replied = false
 			// Each steered line may run as one more turn with its own
 			// result. Stop steering first so the count is final.
 			results++
@@ -214,8 +314,10 @@ func runAGY(ctx context.Context, m *Model, t Turn) error {
 	}
 }
 
-func agyStep(line agyLine, announced map[int]bool, emit func(Event) error) error {
+func (r *agyTurn) step(line agyLine) error {
 	s := line.StepUpdate
+	emit, announced := r.emit, r.announced
+	r.replied = s.StepType == "agent_response" && s.State == "DONE"
 	switch s.StepType {
 	case "agent_response":
 		if s.TextDelta != "" {
@@ -239,6 +341,21 @@ func agyStep(line agyLine, announced map[int]bool, emit func(Event) error) error
 			}
 			if err := emit(Event{Type: EventToolCall, ID: id, Name: name, Input: input}); err != nil {
 				return err
+			}
+			if name == tools.BashToolName && s.State != "DONE" && s.State != "ERROR" {
+				r.mu.Lock()
+				r.running[s.StepIndex] = [2]string{name, input}
+				r.mu.Unlock()
+			}
+		}
+		if s.State == "DONE" || s.State == "ERROR" {
+			r.mu.Lock()
+			delete(r.running, s.StepIndex)
+			r.mu.Unlock()
+			if r.moved[s.StepIndex] {
+				// Already shown as running in the background; AGY's model
+				// reads the output and says what came of it.
+				return nil
 			}
 		}
 		switch s.State {

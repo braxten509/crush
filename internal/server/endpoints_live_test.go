@@ -185,7 +185,7 @@ func TestAgentCapabilitiesRoute(t *testing.T) {
 		{string(config.TypeCodexCLI), true},
 		{string(config.TypeOpenCodeCLI), true},
 		{string(config.TypeGrokCLI), false},
-		{string(config.TypeAGYCLI), false},
+		{string(config.TypeAGYCLI), true},
 		{config.AbacusProviderID, true},
 		{"openai", false},
 	}

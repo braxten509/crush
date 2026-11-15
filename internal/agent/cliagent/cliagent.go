@@ -419,7 +419,7 @@ func onBackground(sessionID string, fn func() bool) func() {
 
 // Background moves the commands the session's running turn is waiting on to
 // the background, as Ctrl+B does in Claude Code. It reports whether the
-// session's CLI could be asked: Claude, Codex and OpenCode can.
+// session's CLI could be asked: Claude, Codex, OpenCode and AGY can.
 func Background(sessionID string) bool {
 	v, ok := backgrounders.Load(sessionID)
 	if !ok || !v.(*backgrounder).fn() {
@@ -445,7 +445,7 @@ func LastBackground() time.Time {
 // CanBackground reports whether a CLI's running commands can be moved to
 // the background with [Background].
 func CanBackground(kind catwalk.Type) bool {
-	return kind == config.TypeClaudeCode || kind == config.TypeCodexCLI || kind == config.TypeOpenCodeCLI || kind == config.TypeOpenCodeZenCLI
+	return kind == config.TypeClaudeCode || kind == config.TypeCodexCLI || kind == config.TypeOpenCodeCLI || kind == config.TypeOpenCodeZenCLI || kind == config.TypeAGYCLI
 }
 
 // SteersAnyTime reports whether a CLI folds a queued message into its

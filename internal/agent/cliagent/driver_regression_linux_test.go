@@ -135,14 +135,16 @@ func TestKillCommandsDecodesQuotedEval(t *testing.T) {
 		t.Run(escape, func(t *testing.T) {
 			command := "while :; do printf 'fixture' >/dev/null; sleep 30; done"
 			wrapper := "eval '" + strings.ReplaceAll(command, "'", escape) + "'"
+			// The call is reported first, as a CLI does: a command counts
+			// as the call's only when it started with it or after.
+			calls := &openCalls{calls: map[string]openCall{}}
+			require.NoError(t, calls.track(func(Event) error { return nil })(Event{Type: EventToolCall, ID: "fixture", Name: "bash", Input: marshal(map[string]string{"command": command})}))
 			p, err := startProcEnv(t.TempDir(), []string{"CRUSH_TEST_WRAPPER=" + wrapper}, "sh", "-c", `setsid sh -c "$CRUSH_TEST_WRAPPER" & echo $!; wait`)
 			require.NoError(t, err)
 			require.True(t, p.lines.Scan())
 			pid, err := strconv.Atoi(p.lines.Text())
 			require.NoError(t, err)
 			t.Cleanup(func() { _ = syscall.Kill(-pid, syscall.SIGKILL); p.kill(); p.finish() })
-			calls := &openCalls{calls: map[string]openCall{}}
-			require.NoError(t, calls.track(func(Event) error { return nil })(Event{Type: EventToolCall, ID: "fixture", Name: "bash", Input: marshal(map[string]string{"command": command})}))
 			require.Eventually(t, func() bool {
 				args, _ := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/cmdline")
 				return strings.Contains(string(args), "eval '")

@@ -141,7 +141,8 @@ func (a *sessionAgent) summaryStreamCall(genCtx context.Context, sessionID strin
 			return a.currentBuildOf(model)
 		},
 		PrepareStep: func(callContext context.Context, options fantasy.PrepareStepFunctionOptions) (_ context.Context, prepared fantasy.PrepareStepResult, err error) {
-			prepared.Messages = options.Messages
+			prepared.Messages = sanitizeStepMessages(options.Messages)
+			prepared.Messages = a.workaroundProviderMediaLimitations(prepared.Messages, model)
 			if systemPromptPrefix != "" {
 				prepared.Messages = append([]fantasy.Message{fantasy.NewSystemMessage(systemPromptPrefix)}, prepared.Messages...)
 			}

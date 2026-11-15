@@ -83,7 +83,7 @@ func (t *turn) prepareStep(callContext context.Context, options fantasy.PrepareS
 		prepared.Messages = slices.Insert(prepared.Messages, min(f.at+i, len(prepared.Messages)), f.msg)
 	}
 
-	prepared.Messages = dropEmptyToolMedia(prepared.Messages)
+	prepared.Messages = sanitizeStepMessages(prepared.Messages)
 	prepared.Messages = a.workaroundProviderMediaLimitations(prepared.Messages, chatModel)
 
 	lastSystemRoleInx := 0

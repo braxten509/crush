@@ -155,11 +155,10 @@ var codexSessions = newLivePool[codexKey, *codexLive]()
 // codexCtrlB is what Codex is told after Ctrl+B interrupted its turn; the
 // interrupt kept it from learning the commands' terminal sessions.
 func codexCtrlB(sessions []string) string {
-	where := "in its terminal session"
-	if len(sessions) > 0 {
-		where = "in terminal session " + strings.Join(sessions, ", ") + " (poll it with write_stdin and empty input)"
+	if len(sessions) == 0 {
+		return "Crush requested that the command move to the background, but Codex did not confirm a running terminal. It may have finished or stopped. Check its result and any files it changed before deciding whether to retry it, then continue the original task."
 	}
-	return "The user pressed Ctrl+B to move the command you were waiting on to the background. It is still running " + where + ", so don't start it again and don't wait for it now: carry on with anything else, or say in a sentence that it's running in the background and end your turn. Check on it later, e.g. when the user asks."
+	return "Crush moved the command you were waiting on to the background. It is still running in terminal session " + strings.Join(sessions, ", ") + " (poll it with write_stdin and empty input), so don't start it again and don't wait for it now: carry on with anything else, or say in a sentence that it's running in the background and end your turn. Check on it later, e.g. when the user asks."
 }
 
 // codexRun is one turn of a Codex app-server process: what it was started
@@ -193,6 +192,10 @@ type codexRun struct {
 	// Codex reports a tool call only once the model has written all of
 	// it, which can take a minute for a long patch.
 	cue writingCue
+	// writing stays true while Codex prepares tool input without streaming
+	// it. Silence here is expected, just as it is for an open tool call.
+	writing         bool
+	writingDeferred bool // the quiet-writing grace has already been granted
 
 	// stallRetries counts the turns interrupted because the model's reply
 	// stopped arriving; retrying is set while such a turn winds down.
@@ -377,6 +380,10 @@ const (
 // chunks at most about 11 seconds apart (measured on GPT-6.1 Sol).
 var codexWritingQuiet = 15 * time.Second
 
+// Codex buffers tool input until it is complete. Give that work its native
+// five-minute no-data allowance once before treating silence as a stall.
+const codexWritingGrace = 5 * time.Minute
+
 // readLoop handles the process's messages until the turn ends. done reports
 // that runCodex should return err; otherwise the process's output ended.
 func (r *codexRun) readLoop(lines <-chan []byte) (done bool, err error) {
@@ -502,6 +509,13 @@ func (r *codexRun) retryStalled() {
 	if r.ctx.Err() != nil || r.retrying || r.itemsOpen() || r.running.Load() > 0 || r.approvals.Load() > 0 || r.ctrlB.Load() || r.movedToBg.Load() {
 		return
 	}
+	if r.writing && !r.writingDeferred {
+		r.writingDeferred = true
+		if r.stall != nil {
+			r.stall.Reset(max(codexWritingGrace, r.stallWait()))
+		}
+		return
+	}
 	ids := r.active.Load()
 	if ids == nil {
 		return
@@ -522,12 +536,14 @@ func (r *codexRun) followCue(quiet *time.Timer) error {
 	case cueNow:
 		return r.emitWriting()
 	case cueQuiet:
+		r.writing = true
 		quiet.Reset(codexWritingQuiet)
 	}
 	return nil
 }
 
 func (r *codexRun) emitWriting() error {
+	r.writing = true
 	return r.t.Emit(Event{Type: EventActivity, Activity: ActivityWriting})
 }
 
@@ -551,6 +567,8 @@ func (r *codexRun) steer(text string, attachments []message.Attachment) bool {
 }
 
 func (r *codexRun) startTurn(input []any) {
+	r.writing = false
+	r.writingDeferred = false
 	params := map[string]any{"threadId": r.threadID, "input": input}
 	if r.t.Effort != "" {
 		params["effort"] = r.t.Effort

@@ -1,7 +1,9 @@
 package cliagent
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -60,3 +62,52 @@ cat >/dev/null
 	log, _ := os.ReadFile(sent)
 	require.Contains(t, string(log), `"method":"turn/start"`, "a new turn continues the work")
 }
+
+// A quiet command or patch being written must survive recovery; changing
+// its wording or tool name must not make recovery cancel it. Stop still works.
+func TestCodexQuietWorkSurvivesStallRecovery(t *testing.T) {
+	for _, kind := range []string{"commentary", "reasoning", "command"} {
+		t.Run(kind, func(t *testing.T) {
+			requests := &codexRequestBuffer{}
+			r := newCodexRun(t.Context(), &Model{}, Turn{Emit: func(Event) error { return nil }})
+			r.p = &proc{stdin: requests}
+			r.threadID = "thread"
+			r.active.Store(&[2]string{"thread", "turn"})
+			quiet := time.NewTimer(time.Hour)
+			defer quiet.Stop()
+			switch kind {
+			case "commentary":
+				require.NoError(t, r.handleItemCompleted(codexItem{ID: "message", Type: "agentMessage", Phase: "commentary"}))
+				require.NoError(t, r.followCue(quiet))
+			case "reasoning":
+				require.NoError(t, r.handleItemCompleted(codexItem{ID: "thought", Type: "reasoning"}))
+				require.NoError(t, r.followCue(quiet))
+			case "command":
+				require.NoError(t, r.handleItemStarted(codexItem{ID: "command", Type: "commandExecution", Command: "cat input"}))
+			}
+			// Deliver the stall timer event while that work is in progress.
+			r.retryStalled()
+			require.Empty(t, requests.String(), "recovery must leave ongoing work alone")
+			if kind != "command" {
+				// Deliver the next stall event after the writing grace expires.
+				r.retryStalled()
+				var recovery struct {
+					Method string `json:"method"`
+				}
+				require.NoError(t, json.Unmarshal(requests.Bytes(), &recovery))
+				require.Equal(t, "turn/interrupt", recovery.Method, "a true stall must still recover after the grace")
+				requests.Reset()
+			}
+			r.cancel()
+			var request struct {
+				Method string `json:"method"`
+			}
+			require.NoError(t, json.Unmarshal(requests.Bytes(), &request))
+			require.Equal(t, "turn/interrupt", request.Method, "explicit Stop must still interrupt")
+		})
+	}
+}
+
+type codexRequestBuffer struct{ bytes.Buffer }
+
+func (*codexRequestBuffer) Close() error { return nil }

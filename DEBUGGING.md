@@ -115,3 +115,67 @@ process or any other live process.
   previous-chat retention, and survival through sidebar refreshes. Final
   independent review found no blocker in this focused fix. The owner's
   live creation failure and question-form issue remain unverified.
+
+
+## Codex quiet work canceled with no background job (2026-11-14)
+
+Expected: long-running commands continue in the background, appear as jobs,
+and the AI continues. Report: AI canceled after about 60 seconds; no job appeared.
+
+Evidence:
+- Engine log for the reported chat: `codexRun.retryStalled` interrupted the
+  turn at 21:11:11 after 20 seconds and at 21:12:49 after 40 seconds.
+- The corresponding Codex rollout records `turn_aborted` at both times;
+  no command began during either quiet interval. After the second retry,
+  the same work finally produced its long tool call after 61 seconds.
+- `readLoop` arms the stall timer after a completed message or reasoning
+  item; `emitWriting` already tells the UI Codex may be writing a long
+  command or patch, but `retryStalled` does not honor that state.
+- The background path emits successful background tool results before
+  `thread/backgroundTerminals/list` confirms any surviving terminal.
+
+Suspects: false stall recovery confirmed for the screenshot; a genuine
+command canceled at the background deadline is not established. Tool-count
+progress reminders also cancel turns, but are separate and out of scope.
+
+Plan: protect quiet writing from stall interruption; keep explicit Stop;
+confirm background terminals before marking a handoff as running. Only the
+Codex driver, its focused checks, and this log are in scope.
+
+Checks (owner approved): quiet work survives a delivered stall event and
+Stop still interrupts; background metadata requires a confirmed terminal;
+one isolated engine flow verifies a live job, continued work, and stopping.
+Existing logs and rollouts supplied the reproduction; no profiler is needed
+for this explicit cancellation path. No user files or real model calls are
+used by the checks. The isolated run differs from the user's live model
+connection, so it cannot establish provider/network behavior.
+
+Independent review: Terra 6.1 high confirmed the two stall interrupts and
+challenged the unproved claim that an actual command had run for 60 seconds.
+It identified the unconfirmed background result and empty-list fallback.
+
+Research: https://github.com/openai/codex/issues/52382 describes unified-exec
+processes surviving turn interruption; this agrees with preserving the
+existing handoff but does not substitute for confirming its terminal list.
+
+
+Fix and validation:
+- Quiet writing defers the first stall retry for one five-minute native
+  allowance. If the next timer event still finds no activity, ordinary
+  recovery continues. Active commands and explicit Stop keep their behavior.
+- Background metadata and continuation prompts use only matching terminal
+  confirmations. Unconfirmed commands are named even in partial handoffs;
+  their later completion cannot append a duplicate transcript result.
+- Both new driver regressions failed against the original implementation
+  (premature interrupt and premature background success), then passed.
+- Focused checks passed, including existing stalled-reply recovery, queued
+  steering across background handoff, and short parallel command results.
+- The third regression ran a real FIFO-blocked shell through the Codex
+  driver and the engine's process scanner. It survived the automatic handoff,
+  was listed once, the AI continued, and Stop ended it. The CLI wire peer is
+  a fixture; installed Codex process survival was not tested directly.
+- Reviewer findings addressed: bounded writing recovery, no duplicate late
+  results, and naming each unconfirmed command in a mixed handoff.
+- An initial patch application failed without changing code because its
+  hunks were out of order; the ordered patch applied cleanly.
+- Production Go binary build passed. Final Terra 6.1 high review found no blocking issue.

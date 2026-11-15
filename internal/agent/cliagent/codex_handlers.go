@@ -32,8 +32,7 @@ func (r *codexRun) handleResponse(id string, msg rpcMessage) error {
 		}
 		return r.reportContext()
 	case id == "ctrl-b-list":
-		r.continueAfterCtrlB(msg)
-		return nil
+		return r.continueAfterCtrlB(msg)
 	case id == codexHooksID || id == codexTrustID:
 		// A Codex without hooks still runs; Crush's own checks remain.
 		if msg.Error != nil {
@@ -99,26 +98,48 @@ func (r *codexRun) handleResponse(id string, msg rpcMessage) error {
 
 // continueAfterCtrlB starts the turn that tells the model which terminal
 // sessions its backgrounded commands run in.
-func (r *codexRun) continueAfterCtrlB(msg rpcMessage) {
+func (r *codexRun) continueAfterCtrlB(msg rpcMessage) error {
 	var res struct {
 		Data []struct {
 			ItemID    string `json:"itemId"`
 			ProcessID string `json:"processId"`
 		} `json:"data"`
 	}
-	_ = json.Unmarshal(msg.Result, &res)
+	if msg.Error == nil {
+		_ = json.Unmarshal(msg.Result, &res)
+	}
 	var sessions []string
-	var all []string
 	for _, d := range res.Data {
-		all = append(all, d.ProcessID)
-		if r.backgrounded[d.ItemID] {
-			sessions = append(sessions, d.ProcessID)
+		if _, pending := r.openCmds[d.ItemID]; !pending || d.ProcessID == "" {
+			continue
 		}
+		r.backgrounded[d.ItemID] = true
+		sessions = append(sessions, d.ProcessID)
 	}
-	if len(sessions) == 0 {
-		sessions = all
+	var unconfirmed []string
+	for id := range r.openCmds {
+		out := "No running background terminal was confirmed. The command may have finished or stopped; check its result before retrying."
+		if r.backgrounded[id] {
+			out = "Moved to the background. Still running."
+		} else {
+			unconfirmed = append(unconfirmed, id+": "+r.calls[id][1])
+		}
+		if err := r.emitResult(id, out, !r.backgrounded[id]); err != nil {
+			return err
+		}
+		// A late completion still reaches Codex itself. Crush has already
+		// answered this call, so it must not append a second result for it.
+		delete(r.calls, id)
+		delete(r.openItems, id)
 	}
-	r.startTurn([]any{map[string]any{"type": "text", "text": codexCtrlB(sessions), "text_elements": []any{}}})
+	clear(r.openCmds)
+	r.running.Store(0)
+	note := codexCtrlB(sessions)
+	if len(unconfirmed) > 0 {
+		note += "\nThese commands have no confirmed running terminal; check their results and changed files before retrying any of them:\n" + strings.Join(unconfirmed, "\n")
+	}
+	r.startTurn([]any{map[string]any{"type": "text", "text": note, "text_elements": []any{}}})
+	return nil
 }
 
 // handleNotification handles a notification from Codex. done reports that
@@ -134,12 +155,16 @@ func (r *codexRun) handleNotification(msg rpcMessage) (done bool, err error) {
 	_ = json.Unmarshal(msg.Params, &params)
 	switch msg.Method {
 	case "item/agentMessage/delta":
+		r.writing = false
+		r.writingDeferred = false
 		if r.compacting {
 			break
 		}
 		r.textOpen = true
 		err = r.t.Emit(Event{Type: EventText, Text: params.Delta})
 	case "item/reasoning/summaryTextDelta", "item/reasoning/textDelta":
+		r.writing = false
+		r.writingDeferred = false
 		if r.compacting {
 			break
 		}
@@ -171,6 +196,8 @@ func (r *codexRun) handleNotification(msg rpcMessage) (done bool, err error) {
 		r.compacting = false
 		err = r.t.Emit(Event{Type: EventCompacting})
 	case "item/started":
+		r.writing = false
+		r.writingDeferred = false
 		r.openItems[params.Item.ID] = true
 		err = r.handleItemStarted(params.Item)
 	case "item/completed":
@@ -215,15 +242,8 @@ func (r *codexRun) handleTurnCompleted(params codexParams) (done bool, err error
 		r.movedToBg.Store(false)
 		r.retrying = false // Ctrl+B goes first; its turn goes on
 		r.active.Store(nil)
-		for id := range r.openCmds {
-			r.backgrounded[id] = true
-			if err := r.emitResult(id, "Moved to the background (Ctrl+B). Still running.", false); err != nil {
-				return true, err
-			}
-		}
-		clear(r.openCmds)
-		r.running.Store(0)
-		// The follow-up turn starts once the sessions are known.
+		// The interrupt alone does not prove the commands survived. Their
+		// results and the follow-up wait until Codex confirms its terminals.
 		_ = r.p.send(map[string]any{"id": "ctrl-b-list", "method": "thread/backgroundTerminals/list", "params": map[string]any{"threadId": r.threadID}})
 		return false, nil
 	}

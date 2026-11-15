@@ -75,9 +75,10 @@ func (a *sessionAgent) generateTitle(ctx context.Context, sessionID string, user
 	if hyperCost := a.hyperStepsCost(model, resp.Steps); hyperCost != nil {
 		overrideCost = hyperCost
 	}
-	cost := titleCost(model, resp.TotalUsage, overrideCost)
-	promptTokens := contextTokens(resp.TotalUsage)
-	completionTokens := resp.TotalUsage.OutputTokens
+	usage := ownUsage(model, resp.TotalUsage)
+	cost := titleCost(model, usage, overrideCost)
+	promptTokens := contextTokens(usage)
+	completionTokens := usage.OutputTokens
 
 	// Atomically update only title and usage fields to avoid overriding other
 	// concurrent session updates.

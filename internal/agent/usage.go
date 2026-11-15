@@ -6,6 +6,7 @@ import (
 
 	"charm.land/catwalk/v3/pkg/catwalk"
 	"charm.land/fantasy"
+	"charm.land/fantasy/providers/google"
 	"charm.land/fantasy/providers/openai"
 	"charm.land/fantasy/providers/openrouter"
 
@@ -140,7 +141,20 @@ func requestCost(m catwalk.Model, usage fantasy.Usage) float64 {
 	return usageCost(config.PriceForRequest(m, contextTokens(usage)).Pricing, usage)
 }
 
+// ownUsage is usage in the disjoint buckets the rest of Crush reads: Google
+// counts the tokens it served from its cache inside the prompt count as
+// well (promptTokenCount includes cachedContentTokenCount), so a Gemini
+// chat's cached tokens were billed twice, once at the full input price,
+// and its context read high (owner, 2026-11-15: a $2-3 chat showed $21).
+func ownUsage(model Model, usage fantasy.Usage) fantasy.Usage {
+	if model.Model != nil && model.Model.Provider() == google.Name {
+		usage.InputTokens -= min(usage.CacheReadTokens, usage.InputTokens)
+	}
+	return usage
+}
+
 func (a *sessionAgent) updateSessionUsage(model Model, session *session.Session, usage fantasy.Usage, overrideCost *float64, estimated bool) {
+	usage = ownUsage(model, usage)
 	if !usageIsZero(usage) {
 		session.EstimatedUsage = estimated
 	}

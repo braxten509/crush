@@ -24,7 +24,9 @@ const codexAPIUltrafast = "-ultrafast"
 // codexAPIModels are OpenAI's models with their per-use prices for requests
 // of up to 272K input tokens (developers.openai.com/api/docs/pricing,
 // 2026-10-25; cache writes at the 30-minute rate). An ultrafast entry costs
-// 6x. Longer requests cost more: see PriceForRequest.
+// 6x. Longer requests cost more: see PriceForRequest. These prices are
+// only the fallback: OpenAI's live price replaces them once read (see
+// live_prices.go, owner 2026-11-15).
 func codexAPIModels() []catwalk.Model {
 	levels := []string{"low", "medium", "high", "xhigh", "max"}
 	model := func(id, name string, in, out, cached, write float64) catwalk.Model {

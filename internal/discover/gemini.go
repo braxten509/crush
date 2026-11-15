@@ -57,7 +57,8 @@ var geminiThinkingLevels = []string{"low", "medium", "high"}
 // discoverGeminiModels lists the models of a Gemini API key from Google's
 // own models.list, which speaks neither the OpenAI path nor its auth.
 // Models the catalog knows keep its prices and reasoning controls; the
-// rest are described from the listing alone.
+// rest are described from the listing alone. The config lays the live
+// prices over these afterwards.
 func discoverGeminiModels(ctx context.Context, cfg Config, resolver Resolver) ([]catwalk.Model, error) {
 	baseURL, _ := resolver.ResolveValue(cfg.BaseURL)
 	baseURL = strings.TrimSuffix(strings.TrimRight(cmp.Or(baseURL, "https://generativelanguage.googleapis.com"), "/"), "/v1beta")
@@ -114,7 +115,7 @@ func discoverGeminiModels(ctx context.Context, cfg Config, resolver Resolver) ([
 			result = append(result, model)
 		}
 	}
-	return fillMissingPrices(ctx, result), nil
+	return result, nil
 }
 
 // geminiCheckTTL is how long a model's answer to the check is trusted.

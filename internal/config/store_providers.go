@@ -307,6 +307,9 @@ func (s *ConfigStore) refreshDynamicProviderModels(ctx context.Context, provider
 	}
 	cur.Models = models
 	cur.DynamicModels = true
+	// This list skips the config load, so it takes the live prices here.
+	prices := discover.LivePrices(livePricesPath(s.discoveryCacheDir()))
+	cur.Models, _ = livePricedModels(providerID, cur, s.resolver, prices)
 	nc.Providers.Set(providerID, cur)
 	nc.SetupAgents()
 	s.setConfig(nc)

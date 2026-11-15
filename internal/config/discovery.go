@@ -171,25 +171,37 @@ func (s *ConfigStore) discoveryCacheDir() string {
 }
 
 // RefreshDiscoveredModels re-probes every provider whose models came from
-// the discovery cache, and reloads the config when any of them changed. It
-// reports whether a reload happened. Meant to run in the background after
-// startup.
+// the discovery cache, and re-reads the live prices when the saved ones are
+// a day old, and reloads the config when either changed. It reports
+// whether a reload happened. Meant to run in the background after startup.
 func (s *ConfigStore) RefreshDiscoveredModels(ctx context.Context) (bool, error) {
 	s.writeMu.RLock()
 	jobs := s.cachedDiscovery
 	resolver := s.resolver
 	s.writeMu.RUnlock()
 
-	if len(jobs) == 0 {
-		return false, nil
+	dir := s.discoveryCacheDir()
+	// Startup priced the models from the saved live prices without waiting
+	// on the network; a newer read reaches them through the reload.
+	wants := s.Config().livePriceWants(resolver)
+	changed, err := discover.RefreshLivePrices(ctx, livePricesPath(dir), wants)
+	if err != nil {
+		slog.Warn("Failed to read live model prices", "error", err)
 	}
 
-	dir := s.discoveryCacheDir()
+	// A change an earlier refresh saved but failed to reload is still owed.
+	changed = changed || s.reloadOwed.Load()
+	if len(jobs) == 0 {
+		if !changed {
+			return false, nil
+		}
+		return true, s.reloadAfterRefresh(ctx)
+	}
+
 	before := make(map[string][]catwalk.Model, len(jobs))
 	for _, job := range jobs {
 		before[job.id], _ = cachedDiscovery(dir, job, resolver)
 	}
-	changed := false
 	for id, result := range probeDiscovery(ctx, jobs, resolver, dir) {
 		if result.err != nil {
 			slog.Warn("Model discovery failed", "provider", id, "error", result.err)
@@ -200,7 +212,16 @@ func (s *ConfigStore) RefreshDiscoveredModels(ctx context.Context) (bool, error)
 	if !changed {
 		return false, nil
 	}
-	return true, s.ReloadFromDisk(ctx)
+	return true, s.reloadAfterRefresh(ctx)
+}
+
+// reloadAfterRefresh reloads the config for a refresh's change, and marks
+// the reload owed when it fails: the change is already saved, so the next
+// refresh would see nothing new and never apply it otherwise.
+func (s *ConfigStore) reloadAfterRefresh(ctx context.Context) error {
+	err := s.ReloadFromDisk(ctx)
+	s.reloadOwed.Store(err != nil)
+	return err
 }
 
 // sameModels compares two model lists as they are cached, so a list read

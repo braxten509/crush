@@ -149,6 +149,7 @@ func (c *Config) configureProvidersCached(ctx context.Context, env env.Env, reso
 	}
 
 	s.dropVendorWords()
+	s.applyLivePrices()
 
 	return s.pending, s.cached, nil
 }

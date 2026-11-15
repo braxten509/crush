@@ -44,7 +44,7 @@ func TestAbacusDiscoverySupportsCodingModels(t *testing.T) {
 	require.True(t, models[0].CanReason())
 	require.InDelta(t, 2, models[0].Pricing.Input, 0.000001)
 	require.InDelta(t, 10, models[0].Pricing.Output, 0.000001)
-	require.InDelta(t, 0.1, models[0].Pricing.CacheCreate, 0.000001)
+	require.InDelta(t, 0.1, models[0].Pricing.CacheHit, 0.000001)
 	require.Equal(t, int64(200_000), models[1].ContextWindow)
 	require.Equal(t, "responses", models[0].Options.ProviderOptions["abacus_api_format"])
 	require.Equal(t, "responses-only", models[2].ID)

@@ -50,9 +50,12 @@ func maybeRefreshCLIModels(path string) {
 			return
 		}
 		done := make(chan struct{})
+		// Read before the goroutine starts: a refresh still running past
+		// the wait must not read the variable a test puts back.
+		refresh := refreshCLIModelList
 		go func() {
 			defer close(done)
-			refreshCLIModelList(path)
+			refresh(path)
 		}()
 		select {
 		case <-done:

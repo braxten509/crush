@@ -131,7 +131,7 @@ func discoverAnthropicModels(ctx context.Context, cfg Config, resolver Resolver)
 		}
 		afterID = page.LastID
 	}
-	return fillMissingPrices(ctx, models), nil
+	return models, nil
 }
 
 func hasHeader(headers map[string]string, name string) bool {

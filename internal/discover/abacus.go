@@ -49,9 +49,9 @@ func abacusModel(raw json.RawMessage, providers ...catwalk.Provider) (catwalk.Mo
 		ContextWindow:    cmp.Or(entry.ContextLength, int64(200_000)),
 		DefaultMaxTokens: min(cmp.Or(entry.MaxCompletionTokens, int64(32_000)), 128_000),
 		Pricing: catwalk.Pricing{
-			Input:       rate(entry.InputTokenRate),
-			Output:      rate(entry.OutputTokenRate),
-			CacheCreate: rate(entry.CachedInputTokenRate),
+			Input:    rate(entry.InputTokenRate),
+			Output:   rate(entry.OutputTokenRate),
+			CacheHit: rate(entry.CachedInputTokenRate),
 		},
 		Capabilities: catwalk.Capabilities{Vision: slices.Contains(entry.InputModalities, "image")},
 		Options:      catwalk.ModelOptions{ProviderOptions: map[string]any{"abacus_api_format": format}},

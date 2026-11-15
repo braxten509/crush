@@ -239,7 +239,7 @@ func New(ctx context.Context, conn *sql.DB, store *config.ConfigStore, skillsMgr
 	if err := app.InitCoderAgent(ctx); err != nil {
 		return nil, fmt.Errorf("failed to initialize coder agent: %w", err)
 	}
-	go app.refreshDiscoveredModels(ctx, app.AgentCoordinator)
+	go app.keepDiscoveredModelsFresh(ctx, app.AgentCoordinator)
 
 	app.watchLSP(ctx)
 
@@ -305,6 +305,27 @@ func (app *App) watchLSP(ctx context.Context) {
 	// TrackConfigured must run after SetCallback so the callback is already
 	// installed when configured-but-not-yet-started LSPs are announced.
 	go app.LSPManager.TrackConfigured(ctx)
+}
+
+// discoveredModelsEvery is how often a running app looks again for new
+// provider models and prices; the live prices themselves are read at most
+// once a day (owner, 2026-11-15: an engine left running kept old prices).
+const discoveredModelsEvery = 6 * time.Hour
+
+// keepDiscoveredModelsFresh refreshes the discovered models and the live
+// prices at startup and then on a timer, until ctx ends.
+func (app *App) keepDiscoveredModelsFresh(ctx context.Context, coordinator agent.Coordinator) {
+	app.refreshDiscoveredModels(ctx, coordinator)
+	ticker := time.NewTicker(discoveredModelsEvery)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			app.refreshDiscoveredModels(ctx, coordinator)
+		}
+	}
 }
 
 // refreshDiscoveredModels updates custom provider models that startup took

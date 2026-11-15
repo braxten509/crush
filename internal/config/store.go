@@ -62,6 +62,7 @@ type ConfigStore struct {
 	trackedConfigPaths []string                // unique, normalized config file paths
 	snapshots          map[string]fileSnapshot // path -> snapshot at last capture
 	cachedDiscovery    []discoveryJob          // providers whose models came from the discovery cache; guarded by writeMu
+	reloadOwed         atomic.Bool             // a refresh changed models or prices but its reload failed; the next refresh reloads again
 
 	// configMu guards the config pointer field against concurrent
 	// readers (Config) and the writeMu-serialised swap (setConfig). It

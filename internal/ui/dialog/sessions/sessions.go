@@ -94,6 +94,7 @@ func NewSessions(com *common.Common, selectedSessionID string) (*Session, error)
 
 	s.help = help
 	s.list = list.NewFilterableList(sessionItems(com.Styles, sessionsModeNormal, sessions...)...)
+	s.list.SetLiteral(true)
 	s.list.Focus()
 	s.list.SetSelected(s.selectedSessionInx)
 

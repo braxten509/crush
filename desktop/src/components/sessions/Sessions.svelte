@@ -26,6 +26,7 @@
   import { onEvent } from "../../lib/engine/events.js";
   import { leftList } from "../../lib/leftlist/store.svelte.js";
   import { folderName, humanizeTime, infoText, inProject } from "../../lib/sessions/match.js";
+  import { wordFind } from "../../lib/kit/wordfind.js";
   import { isClosed, reopen } from "../../lib/stores/closed.svelte.js";
   import { conn } from "../../lib/stores/connection.svelte.js";
   import { openInFolder } from "../../lib/stores/openchats.svelte.js";
@@ -302,6 +303,7 @@
       groups={() => (folder ? folderName(folder, leftList.home) : "Recent")}
       info={(row) => (folder ? humanizeTime(Number(row.UpdatedAt ?? 0), now) : infoText(row, leftList.home, now))}
       {query}
+      find={wordFind}
       bind:selected
       onChoose={(row) => open(row)}
       label="Sessions"

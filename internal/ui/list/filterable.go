@@ -1,6 +1,9 @@
 package list
 
 import (
+	"slices"
+	"strings"
+
 	"github.com/sahilm/fuzzy"
 )
 
@@ -23,6 +26,15 @@ type FilterableList struct {
 	*List
 	items []FilterableItem
 	query string
+	// literal makes a query match whole typed words, not scattered letters.
+	literal bool
+}
+
+// SetLiteral makes the query match its words as typed, letters side by
+// side and case folded, keeping the items' own order (the chat search,
+// owner 2026-11-16) instead of fuzzy-matching letters anywhere.
+func (f *FilterableList) SetLiteral(literal bool) {
+	f.literal = literal
 }
 
 // NewFilterableList creates a new filterable list.
@@ -108,7 +120,12 @@ func (f *FilterableList) FilteredItems() []Item {
 	}
 
 	items := FilterableItemsSource(f.items)
-	matches := fuzzy.FindFrom(f.query, items)
+	var matches fuzzy.Matches
+	if f.literal {
+		matches = literalFind(f.query, items)
+	} else {
+		matches = fuzzy.FindFrom(f.query, items)
+	}
 	matchedItems := []Item{}
 	resultSize := len(matches)
 	for i := range resultSize {
@@ -128,4 +145,48 @@ func (f *FilterableList) FilteredItems() []Item {
 func (f *FilterableList) Render() string {
 	f.List.SetItems(f.FilteredItems()...)
 	return f.List.Render()
+}
+
+// literalFind keeps the items whose text holds every word of query, case
+// folded, in their own order. MatchedIndexes are the byte offsets of every
+// letter of every place a word appears, for underlining.
+func literalFind(query string, items FilterableItemsSource) fuzzy.Matches {
+	words := strings.Fields(strings.ToLower(query))
+	if len(words) == 0 {
+		return nil
+	}
+	var matches fuzzy.Matches
+	for i := range items {
+		text := items.String(i)
+		lower := strings.ToLower(text)
+		if len(lower) != len(text) {
+			// Folding changed the byte length: offsets would not line up.
+			lower = text
+		}
+		var marks []int
+		all := true
+		for _, word := range words {
+			at := strings.Index(lower, word)
+			if at < 0 {
+				all = false
+				break
+			}
+			for at >= 0 {
+				for b := at; b < at+len(word); b++ {
+					marks = append(marks, b)
+				}
+				next := strings.Index(lower[at+len(word):], word)
+				if next < 0 {
+					break
+				}
+				at += len(word) + next
+			}
+		}
+		if !all {
+			continue
+		}
+		slices.Sort(marks)
+		matches = append(matches, fuzzy.Match{Str: text, Index: i, MatchedIndexes: slices.Compact(marks)})
+	}
+	return matches
 }

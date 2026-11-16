@@ -16,7 +16,8 @@
   // In a kit sheet, ↑/↓ move the selection round the ends (the terminal's
   // lists all wrap, e.g. commands.go:178-193) and Enter calls onChoose; a
   // click selects and a second click within 400 ms chooses (2.0 rule 6).
-  //   items, filterText(item), query, selected (bindable: the selected item's
+  //   items, filterText(item), query, find? (query, strings → matches, as
+  //   fuzzyFind; the chat search passes wordFind), selected (bindable: the selected item's
   //   index in items, -1 with no rows), infoBudget? (a share such as 0.25, or
   //   a percent such as 25), groups? (item → its group's heading), row? (a
   //   snippet row(item, index, {matched, selected}); without it the row draws
@@ -44,6 +45,7 @@
     items = [],
     filterText = (item) => String(item),
     query = "",
+    find = fuzzyFind,
     selected = $bindable(0),
     infoBudget = null,
     groups = null,
@@ -79,7 +81,7 @@
   const visible = $derived.by(() => {
     const q = query ?? "";
     if (!q) return items.map((_, index) => ({ index, matched: [] }));
-    const found = fuzzyFind(q, items.map(textOf));
+    const found = find(q, items.map(textOf));
     if (groups) found.sort((a, b) => a.index - b.index);
     return found.map(({ index, matched }) => ({ index, matched }));
   });

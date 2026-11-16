@@ -12,7 +12,7 @@ import { untrack } from "svelte";
 import { shownAgent } from "../models/store.svelte.js";
 import { openDialog } from "../dialogs.js";
 import { api, uuid } from "../engine/api.js";
-import { clipboard_read, clipboard_write, file_info, file_read, files_list, phone_screenshot } from "../engine/commands.js";
+import { attach_copy, clipboard_read, clipboard_write, file_info, file_read, files_list, phone_screenshot } from "../engine/commands.js";
 import { onEvent, onResync } from "../engine/events.js";
 import { bangAfterPaste, bangAfterTyping, bangFromValue, joinDrafts, PromptHistory } from "../composer/history.js";
 import { absolutePath, fileRows, insertPick, mentionQuery, mentionSpan, moveFocus, opensAt, pickFile, previewPick, rankRows, rankSlash, slashOpens, slashQuery } from "../composer/mentions.js";
@@ -22,6 +22,8 @@ import {
   dropText,
   FILE_TOO_BIG,
   EMPTY_CLIPBOARD,
+  isImagePath,
+  isVideoPath,
   MAX_ATTACHMENT_BYTES,
   NO_PICTURES,
   normalize,
@@ -33,7 +35,7 @@ import {
   textAttachment,
   unreadable,
 } from "../composer/paste.js";
-import { expandRecordings, videoAttachment } from "../composer/recording.js";
+import { expandRecordings, fileAttachment, videoAttachment } from "../composer/recording.js";
 import { planReadyPresent } from "../render/plan.js";
 import { conn, refusedWhileFailed } from "./connection.svelte.js";
 import { addPending, finishPending, markUncertain, messages, resolvePending, returnDraft, takeReturned } from "./messages.svelte.js";
@@ -722,22 +724,58 @@ async function pastePaths(text, sid, start, end) {
     typed({ before: value, value: next, caret: start + text.length, paste: true });
     return;
   }
-  if (!supportsImages(shownAgent())) {
-    notify("warn", NO_PICTURES);
-    return;
-  }
-  // A picture over the attachment limit goes in as its path instead
-  // (owner, 2026-11-04), so the agent can read it from disk.
-  const big = [];
+  await attachFiles(paths, sid, start, end);
+}
+
+// Dropped or pasted files as chips (owner, 2026-11-15): a picture of 5 MB or
+// less, for a model that takes pictures, as the picture itself; a video as a
+// video chip the viewer opens; any other file (a bigger picture too) as a
+// file chip whose path the AI gets. Under 1 GB the file is copied first
+// (attach_copy), so moving the original keeps the chip working. A folder
+// goes in as its path text, at start..end.
+async function attachFiles(paths, sid, start, end) {
+  const dir = workDir();
+  const stat = (p) => file_info(p, dir);
+  const pictures = supportsImages(shownAgent());
+  const folders = [];
   for (const path of paths) {
-    const result = await attachPath(path, { stat, read: (p, max) => file_read(p, dir, max) });
-    if (result.warn === FILE_TOO_BIG) big.push(path);
-    else if (result.error) notify("error", result.error);
-    else if (result.warn) notify("warn", result.warn);
-    else draftFor(sid).attachments.push(result.attachment);
+    let info;
+    try {
+      info = await stat(path);
+    } catch (error) {
+      notify("error", errorText(error));
+      continue;
+    }
+    if (!info.exists) {
+      notify("error", `stat ${path}: no such file or directory`);
+      continue;
+    }
+    if (info.is_dir) {
+      folders.push(path);
+      continue;
+    }
+    if (pictures && isImagePath(path) && info.size <= MAX_ATTACHMENT_BYTES) {
+      const result = await attachPath(path, { stat, read: (p, max) => file_read(p, dir, max) });
+      if (result.attachment) {
+        draftFor(sid).attachments.push(result.attachment);
+        continue;
+      }
+      if (result.warn !== FILE_TOO_BIG) {
+        notify(result.error ? "error" : "warn", result.error ?? result.warn);
+        continue;
+      }
+    }
+    const video = isVideoPath(path);
+    try {
+      const copy = await attach_copy(path, dir, video);
+      const list = draftFor(sid).attachments;
+      list.push(video ? videoAttachment(copy, list, path) : fileAttachment(copy, path, info.mime));
+    } catch (error) {
+      notify("error", errorText(error));
+    }
   }
-  if (big.length === 0 || sid !== typingChat()) return;
-  const insert = dropText(big);
+  if (folders.length === 0 || sid !== typingChat()) return;
+  const insert = dropText(folders);
   const value = draftOf(sid).text;
   const next = value.slice(0, start) + insert + value.slice(end);
   await place(next, start + insert.length, sid);
@@ -837,13 +875,8 @@ async function asJpeg(src) {
 export function dropPaths(paths) {
   if (!Array.isArray(paths) || paths.length === 0) return;
   focusField();
-  const text = dropText(paths);
-  if (pasteText(text)) return;
   const [start, end] = selection();
-  const value = draftOf().text;
-  const next = value.slice(0, start) + text + value.slice(end);
-  place(next, start + text.length);
-  typed({ before: value, value: next, caret: start + text.length, paste: true });
+  attachFiles(paths, typingChat(), start, end);
 }
 
 // Text put in at the selection, as typed (Ctrl+J's new line, keypress.go:270-274).

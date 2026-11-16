@@ -167,7 +167,7 @@ fn absolute(dir: &str) -> AppResult<PathBuf> {
 
 /// A path as given, or relative to cwd. Never expands `~` (the terminal's
 /// paste does not either; a link's `~` is the opener's, opener.rs).
-fn resolve(path: &str, cwd: &str) -> AppResult<PathBuf> {
+pub(crate) fn resolve(path: &str, cwd: &str) -> AppResult<PathBuf> {
     if path.is_empty() {
         return Err(bad_path("no file path was given"));
     }

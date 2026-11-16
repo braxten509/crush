@@ -149,6 +149,12 @@ export async function phone_record_stop() {
   return invoke("phone_record_stop", {});
 }
 
+// A dropped file copied into the recordings folder (or, 1 GB and up, left
+// where it is); a video is probed too (owner, 2026-11-15).
+export async function attach_copy(path, cwd, video) {
+  return invoke("attach_copy", { path, cwd, video });
+}
+
 export async function files_list(cwd, maxDepth, maxItems) {
   return invoke("files_list", { cwd, maxDepth, maxItems });
 }

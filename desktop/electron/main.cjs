@@ -660,8 +660,12 @@ async function serve(request) {
 
 const RECORDINGS = path.join(process.env.XDG_CACHE_HOME && path.isAbsolute(process.env.XDG_CACHE_HOME) ? process.env.XDG_CACHE_HOME : path.join(os.homedir(), ".cache"), "crush", "recordings");
 
+// Phone recordings, and videos dropped on the composer (owner, 2026-11-15).
+const VIDEO_TYPES = { mp4: "video/mp4", m4v: "video/mp4", webm: "video/webm", mkv: "video/x-matroska", mov: "video/quicktime" };
+
 async function serveRecording(request, name) {
-  if (!/^[\w.-]+\.mp4$/u.test(name)) return new Response("not found", { status: 404 });
+  const type = VIDEO_TYPES[/\.(\w+)$/u.exec(name)?.[1]?.toLowerCase() ?? ""];
+  if (!/^[\w.-]+$/u.test(name) || !type) return new Response("not found", { status: 404 });
   const file = path.join(RECORDINGS, name);
   let size;
   try {
@@ -669,7 +673,7 @@ async function serveRecording(request, name) {
   } catch {
     return new Response("not found", { status: 404 });
   }
-  const headers = { "content-type": "video/mp4", "accept-ranges": "bytes" };
+  const headers = { "content-type": type, "accept-ranges": "bytes" };
   const range = /^bytes=(\d*)-(\d*)$/u.exec(request.headers.get("range") ?? "");
   let start = 0;
   let end = size - 1;

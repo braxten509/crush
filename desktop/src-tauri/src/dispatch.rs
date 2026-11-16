@@ -123,6 +123,7 @@ fn sync_call(app: &AppHandle, w: crate::host::Window, cmd: &str, args: &Value) -
         "phone_recording" => ok(crate::phone::recording()),
         "phone_record_start" => res(crate::phone::record_start()),
         "phone_record_stop" => res(crate::phone::record_stop()),
+        "attach_copy" => res(crate::phone::attach_copy(arg(args, "path")?, arg(args, "cwd")?, arg(args, "video")?)),
         "file_info" => res(commands::file_info(arg(args, "path")?, arg(args, "cwd")?)),
         "file_read" => res(commands::file_read(arg(args, "path")?, arg(args, "cwd")?, arg(args, "maxBytes")?)),
         "files_list" => res(commands::files_list(w, arg(args, "cwd")?, arg(args, "maxDepth")?, arg(args, "maxItems")?)),

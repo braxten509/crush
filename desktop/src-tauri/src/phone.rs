@@ -349,3 +349,61 @@ fn probe(local: &Path, file: &str) -> AppResult<PhoneVideo> {
     }
     Ok(video)
 }
+
+/// Files under this size are copied when dropped; bigger ones stay where
+/// they are (owner, 2026-11-15).
+const COPY_LIMIT: u64 = 1 << 30;
+
+#[derive(Serialize)]
+pub struct Attached {
+    #[serde(flatten)]
+    video: PhoneVideo,
+    /// False when the file was too big to copy and `path` is the original.
+    copied: bool,
+}
+
+/// A dropped or pasted file as an attachment (owner, 2026-11-15): under 1 GB
+/// it is copied into the recordings folder, so moving or deleting the
+/// original keeps the chip working; bigger, the original is used, and a video
+/// gets a link there so the player can still open it. A video is probed for
+/// its size, length and frame times.
+pub fn attach_copy(path: String, cwd: String, video: bool) -> AppResult<Attached> {
+    let failed = |e: std::io::Error| AppError::new("attach_failed", format!("Couldn't attach {path}: {e}"));
+    let original = crate::files::resolve(&path, &cwd)?;
+    let meta = std::fs::metadata(&original).map_err(failed)?;
+    if meta.is_dir() {
+        return Err(AppError::new("is_a_directory", "Cannot attach a directory"));
+    }
+    let base = original.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let safe: String = base.chars().map(|c| if c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_') { c } else { '_' }).collect();
+    let stamp = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or_default();
+    let file = format!("dropped-{stamp}-{safe}");
+    let dir = recordings_dir();
+    let local = dir.join(&file);
+    let copied = meta.len() < COPY_LIMIT;
+    if copied || video {
+        std::fs::create_dir_all(&dir).map_err(failed)?;
+    }
+    let kept = if copied {
+        // Into a side file first, so a half copy is never taken for the file.
+        let part = dir.join(format!("{file}.part"));
+        if let Err(e) = std::fs::copy(&original, &part).and_then(|_| std::fs::rename(&part, &local)) {
+            let _ = std::fs::remove_file(&part);
+            return Err(failed(e));
+        }
+        local.clone()
+    } else {
+        if video {
+            std::os::unix::fs::symlink(&original, &local).map_err(failed)?;
+        }
+        original.clone()
+    };
+    let mut out = if video {
+        probe(&local, &file)?
+    } else {
+        PhoneVideo { path: String::new(), file: String::new(), bytes: 0, width: 0, height: 0, duration: 0.0, frames: Vec::new() }
+    };
+    out.path = kept.to_string_lossy().into_owned();
+    out.bytes = meta.len();
+    Ok(Attached { video: out, copied })
+}

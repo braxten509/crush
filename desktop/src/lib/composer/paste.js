@@ -67,6 +67,17 @@ export function isImagePath(path) {
   return lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png");
 }
 
+// A video the composer takes as a video chip (owner, 2026-11-15): the
+// endings the player can open.
+const VIDEO_ENDINGS = [".mp4", ".m4v", ".webm", ".mkv", ".mov"];
+export function isVideoPath(path) {
+  const lower = String(path).toLowerCase();
+  return VIDEO_ENDINGS.some((ending) => lower.endsWith(ending));
+}
+
+// A path the paste rules look up before deciding: a picture or a video.
+const isMediaPath = (path) => isImagePath(path) || isVideoPath(path);
+
 // The Attachment kind (lib/types.js) for a type.
 export function kindOf(mime) {
   if (mime.startsWith("image/")) return "picture";
@@ -123,13 +134,13 @@ export function pathReadings(text) {
 // What a text paste becomes, decided at once (a paste event cannot wait for a
 // file lookup before letting the field take the text):
 //   "attach"  over the threshold: a paste_N.txt attachment (TYPE-011)
-//   "paths"   every path of one reading names a picture: look the files up
-//             with pastedPictures before deciding (TYPE-012)
+//   "paths"   every path of one reading names a picture or a video: look the
+//             files up with pastedPictures before deciding (TYPE-012)
 //   "text"    the field takes it (then bang mode may start, TYPE-013)
 export function pasteRoute(text) {
   if (overThreshold(text)) return "attach";
   const { lines, words } = pathReadings(text);
-  if (lines.every(isImagePath) || (words.length > 0 && words.every(isImagePath))) return "paths";
+  if (lines.every(isMediaPath) || (words.length > 0 && words.every(isMediaPath))) return "paths";
   return "text";
 }
 
@@ -142,7 +153,7 @@ async function look(stat, path) {
 }
 
 // allExistsAndValid (paste.go:87-105): the paths when every one exists and
-// names a picture, else null (the paste is text). stat answers file_info's
+// names a picture or a video, else null (the paste is text). stat answers file_info's
 // {exists, is_dir}. A look that fails counts as a file for this test, as Go's
 // os.IsNotExist does, and attachPath reports it; for choosing the per-line
 // reading it does not (attemptStat).
@@ -150,7 +161,7 @@ export async function pastedPictures(text, stat) {
   const { lines, words } = pathReadings(text);
   const byLine = await Promise.all(lines.map((path) => look(stat, path)));
   const paths = byLine.every((info) => info.exists && !info.failed && !info.is_dir) ? lines : words;
-  if (paths.length === 0 || !paths.every(isImagePath)) return null;
+  if (paths.length === 0 || !paths.every(isMediaPath)) return null;
   const found = await Promise.all(paths.map((path) => look(stat, path)));
   return found.every((info) => info.exists) ? paths : null;
 }

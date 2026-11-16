@@ -5,7 +5,7 @@
   // lib/plugins/composer.js); here are the events only the element sees:
   // typing, pasting, dropped files, focus, and the keys delete mode eats.
   import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-  import { dropText, fileUriPaths } from "../../lib/composer/paste.js";
+  import { fileUriPaths } from "../../lib/composer/paste.js";
   import {
     attachField,
     blurPopup,
@@ -14,7 +14,6 @@
     currentPlaceholder,
     draftOf,
     dropPaths,
-    insertText,
     pastePicture,
     pasteText,
     resumePopup,
@@ -117,8 +116,7 @@
     const uris = fileUriPaths(data.getData("text/uri-list"));
     if (uris.length > 0) {
       event.preventDefault();
-      const text = dropText(uris);
-      if (!pasteText(text)) insertText(text);
+      dropPaths(uris);
       return;
     }
     if (files.length > 0) {

@@ -41,6 +41,56 @@ var usageLimitPattern = regexp.MustCompile(`(?i)usage limit|limit reached|hit yo
 type fallbackOut struct {
 	until time.Time
 	known bool
+	// room is the percent the usage reading still showed when it ran out.
+	// A later reading with more room means the account refilled (a
+	// refill bought on claude.ai, a window that reset early), and the
+	// mark is dropped (owner, 2026-11-17: the sidebar showed the refill
+	// but the chat kept falling back).
+	room float64
+}
+
+// readingRoom is the percent the usage store shows left on an account for
+// a model (model "" reads the account's shared limits only), and whether
+// it shows any.
+func readingRoom(a fallback.Account, model string) (float64, bool) {
+	limits := cliagent.AccountLimits(a.Kind, a.ID, model)
+	if len(limits) == 0 {
+		return 0, false
+	}
+	room := 100.0
+	for _, l := range limits {
+		room = min(room, l.Left())
+	}
+	return room, true
+}
+
+// dropRefilled forgets every out mark whose account or model now shows
+// more room than when it ran out.
+func (c *coordinator) dropRefilled() {
+	c.fallback.mu.Lock()
+	marks := make(map[outKey]fallbackOut, len(c.fallback.out))
+	for k, o := range c.fallback.out {
+		marks[k] = o
+	}
+	c.fallback.mu.Unlock()
+	var gone []outKey
+	for k, o := range marks {
+		if room, ok := readingRoom(k.acct, k.model); ok && room > o.room {
+			gone = append(gone, k)
+		}
+	}
+	if len(gone) == 0 {
+		return
+	}
+	c.fallback.mu.Lock()
+	for _, k := range gone {
+		if o, ok := c.fallback.out[k]; ok && o == marks[k] {
+			delete(c.fallback.out, k)
+		}
+	}
+	c.fallback.mu.Unlock()
+	slog.Info("The fallback order counts refilled accounts as usable again", "count", len(gone))
+	c.saveFallbackMemory()
 }
 
 // outKey is what ran out: a whole account (model ""), or one model on it
@@ -117,6 +167,7 @@ func (c *coordinator) providerKind(provider string) catwalk.Type {
 // limits the account shares and the model's own. The accounts and models
 // that ran out, and the accounts this decision skipped, count as full.
 func (c *coordinator) fallbackReadings(now time.Time, skip map[fallback.Account]bool) fallback.Readings {
+	c.dropRefilled()
 	c.fallback.mu.Lock()
 	out := make(map[outKey]fallbackOut, len(c.fallback.out))
 	for k, o := range c.fallback.out {
@@ -205,6 +256,11 @@ func (c *coordinator) markOut(acct fallback.Account, model string, err error, no
 	key := outKey{acct: acct}
 	if cliagent.LimitNamesModel(acct.Kind, acct.ID, model, err.Error()) {
 		key.model = model
+	}
+	// With no reading to compare, only the reset time ends the mark.
+	o.room = 100
+	if room, ok := readingRoom(acct, key.model); ok {
+		o.room = room
 	}
 	c.fallback.mu.Lock()
 	if c.fallback.out == nil {

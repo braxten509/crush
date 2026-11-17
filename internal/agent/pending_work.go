@@ -78,6 +78,9 @@ type savedOut struct {
 	// An older Crush counted the whole account as out either way (a Fable
 	// limit took Opus along), so its entries are not read.
 	Scoped bool `json:"scoped,omitempty"`
+	// Room is the percent the usage reading still showed when it ran
+	// out; a later reading with more room means it refilled.
+	Room float64 `json:"room,omitempty"`
 }
 
 // savedReturn is the fallback order's planned way back to a block.
@@ -323,7 +326,7 @@ func (c *coordinator) loadFallbackMemory() {
 		if c.fallback.out == nil {
 			c.fallback.out = map[outKey]fallbackOut{}
 		}
-		c.fallback.out[outKey{acct: fallback.Account{Kind: catwalk.Type(o.Kind), ID: o.ID}, model: o.Model}] = fallbackOut{until: o.Until, known: o.Known}
+		c.fallback.out[outKey{acct: fallback.Account{Kind: catwalk.Type(o.Kind), ID: o.ID}, model: o.Model}] = fallbackOut{until: o.Until, known: o.Known, room: o.Room}
 	}
 	for sessionID, r := range saved.Returns {
 		if c.fallback.ret == nil {

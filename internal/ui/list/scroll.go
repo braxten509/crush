@@ -26,6 +26,11 @@ func (l *List) lastOffsetItem() (int, int, int) {
 
 // ScrollToIndex scrolls the list to the given item index.
 func (l *List) ScrollToIndex(index int) {
+	if len(l.items) == 0 {
+		l.offsetIdx = 0
+		l.offsetLine = 0
+		return
+	}
 	if index < 0 {
 		index = 0
 	}

@@ -34,6 +34,9 @@ type subAgentParams struct {
 	// sub-agents roll their cost up themselves after every run, including
 	// runs that fail or are stopped part-way.
 	SkipCostRollup bool
+	// Cleanup runs after the sub-agent run returns, whether synchronously or
+	// in the background.
+	Cleanup func()
 }
 
 // subAgentCall assembles the call a sub-agent turn runs under: the model
@@ -73,6 +76,9 @@ func (c *coordinator) subAgentCall(ctx context.Context, agent SessionAgent, sess
 // It creates a sub-session, runs the agent with the given prompt, and propagates
 // the cost to the parent session.
 func (c *coordinator) runSubAgent(ctx context.Context, params subAgentParams) (fantasy.ToolResponse, error) {
+	if params.Cleanup != nil {
+		defer params.Cleanup()
+	}
 	// Create sub-session
 	agentToolSessionID := c.sessions.CreateAgentToolSessionID(params.AgentMessageID, params.ToolCallID)
 	session, err := c.sessions.CreateTaskSession(ctx, agentToolSessionID, params.SessionID, params.SessionTitle)

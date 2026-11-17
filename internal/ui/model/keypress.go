@@ -180,15 +180,15 @@ func (m *UI) handleInlineKey(msg tea.KeyPressMsg) tea.Cmd {
 	}
 	prev := m.activeInline
 	m.activeInline = nil
-	m.textarea.Focus()
+	focusCmd := m.setFocus(uiFocusEditor)
 	m.updateLayoutAndSize()
 	if cmd != nil {
-		return cmd
+		return tea.Batch(focusCmd, cmd)
 	}
 	if cod, ok := prev.(dialog.CmdOnDone); ok {
-		return cod.PendingCmd()
+		return tea.Batch(focusCmd, cod.PendingCmd())
 	}
-	return nil
+	return focusCmd
 }
 
 // handleRunKey handles the keys that act on the running agent: cancel,

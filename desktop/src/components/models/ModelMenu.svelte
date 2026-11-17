@@ -255,8 +255,9 @@
     try {
       await setAccount(next.id, next.label || next.name);
     } catch (error) {
-      account = null;
       notify("error", error?.message ?? String(error));
+    } finally {
+      account = null;
     }
   }
 

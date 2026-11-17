@@ -519,7 +519,7 @@ func saveUploads(ups []upload) ([]message.Attachment, error) {
 			return nil, fmt.Errorf("attachment %d: %w", i+1, err)
 		}
 		name := filepath.Base(strings.TrimSpace(u.Name))
-		if name == "" || name == "." || name == "/" {
+		if name == "" || name == "." || name == ".." || name == "/" {
 			name = "attachment"
 		}
 		// A folder per upload keeps the file's own name, which the chat shows.

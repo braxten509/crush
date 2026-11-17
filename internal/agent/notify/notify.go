@@ -72,8 +72,11 @@ type RunComplete struct {
 	SubmissionID string
 	SessionID    string
 	RunID        string
-	MessageID    string
-	Text         string
-	Error        string
-	Cancelled    bool
+	// TurnID names the agent turn that ended (Message.TurnID); empty when
+	// the call never started a turn.
+	TurnID    string
+	MessageID string
+	Text      string
+	Error     string
+	Cancelled bool
 }

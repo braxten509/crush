@@ -194,7 +194,10 @@ func NewGrepTool(workingDir string, config config.ToolGrep) fantasy.AgentTool {
 func searchFiles(ctx context.Context, pattern, rootPath, include string, limit int) ([]grepMatch, bool, error) {
 	matches, err := searchWithRipgrep(ctx, pattern, rootPath, include)
 	if err != nil {
-		matches, err = searchFilesWithRegex(pattern, rootPath, include)
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, false, ctxErr
+		}
+		matches, err = searchFilesWithRegexCtx(ctx, pattern, rootPath, include)
 		if err != nil {
 			return nil, false, err
 		}
@@ -216,17 +219,18 @@ func searchFiles(ctx context.Context, pattern, rootPath, include string, limit i
 }
 
 func searchWithRipgrep(ctx context.Context, pattern, path, include string) ([]grepMatch, error) {
-	cmd := getRgSearchCmd(ctx, pattern, path, include)
-	if cmd == nil {
-		return nil, fmt.Errorf("ripgrep not found in $PATH")
-	}
-
 	// Only add ignore files if they exist
+	var ignoreFiles []string
 	for _, ignoreFile := range []string{".gitignore", ".crushignore"} {
 		ignorePath := filepath.Join(path, ignoreFile)
 		if _, err := os.Stat(ignorePath); err == nil {
-			cmd.Args = append(cmd.Args, "--ignore-file", ignorePath)
+			ignoreFiles = append(ignoreFiles, ignorePath)
 		}
+	}
+
+	cmd := getRgSearchCmd(ctx, pattern, path, include, ignoreFiles...)
+	if cmd == nil {
+		return nil, fmt.Errorf("ripgrep not found in $PATH")
 	}
 
 	output, err := cmd.Output()
@@ -285,6 +289,10 @@ type ripgrepMatch struct {
 }
 
 func searchFilesWithRegex(pattern, rootPath, include string) ([]grepMatch, error) {
+	return searchFilesWithRegexCtx(context.Background(), pattern, rootPath, include)
+}
+
+func searchFilesWithRegexCtx(ctx context.Context, pattern, rootPath, include string) ([]grepMatch, error) {
 	matches := []grepMatch{}
 
 	// Use cached regex compilation
@@ -306,6 +314,9 @@ func searchFilesWithRegex(pattern, rootPath, include string) ([]grepMatch, error
 	walker := fsext.NewFastGlobWalker(rootPath)
 
 	err = filepath.Walk(rootPath, func(path string, info os.FileInfo, err error) error {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
 		if err != nil {
 			return nil // Skip errors
 		}

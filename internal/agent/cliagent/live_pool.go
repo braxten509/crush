@@ -91,9 +91,14 @@ func (pool *livePool[K, L]) take(sessionID string, key K, resume string) L {
 // process's output: onLine, when set, sees each line and returns true to
 // stop reading and leave the rest for the next turn. busy, when set, keeps
 // the process open past the idle timeout while it reports work running.
-func (pool *livePool[K, L]) keep(sessionID string, l L, onLine func([]byte) bool, busy func() bool) {
+// onPark, when set, runs after ended is ready and before the process can be
+// taken or read from.
+func (pool *livePool[K, L]) keep(sessionID string, l L, onLine func([]byte) bool, busy func() bool, onPark func()) {
 	base := l.live()
 	base.idle, base.drained, base.ended = make(chan struct{}), make(chan struct{}), make(chan struct{})
+	if onPark != nil {
+		onPark()
+	}
 	go func() {
 		defer close(base.drained)
 		for {
@@ -114,6 +119,9 @@ func (pool *livePool[K, L]) keep(sessionID string, l L, onLine func([]byte) bool
 			}
 		}
 	}()
+	pool.mu.Lock()
+	old, hadOld := pool.m[sessionID]
+	pool.m[sessionID] = l
 	base.timer = time.AfterFunc(claudeIdle, func() {
 		pool.mu.Lock()
 		if pool.m[sessionID] != l {
@@ -131,9 +139,6 @@ func (pool *livePool[K, L]) keep(sessionID string, l L, onLine func([]byte) bool
 		<-base.drained
 		base.p.finish()
 	})
-	pool.mu.Lock()
-	old, hadOld := pool.m[sessionID]
-	pool.m[sessionID] = l
 	pool.mu.Unlock()
 	if hadOld {
 		old.live().stop()

@@ -22,6 +22,7 @@ func MessageFromDomain(m message.Message) Message {
 		UpdatedAt:               m.UpdatedAt,
 		IsSummaryMessage:        m.IsSummaryMessage,
 		IsCompacting:            m.IsCompacting,
+		TurnID:                  m.TurnID,
 	}
 	for _, p := range m.Parts {
 		if part := partFromDomain(p); part != nil {
@@ -108,6 +109,7 @@ func MessageToDomain(m Message) message.Message {
 		UpdatedAt:               m.UpdatedAt,
 		IsSummaryMessage:        m.IsSummaryMessage,
 		IsCompacting:            m.IsCompacting,
+		TurnID:                  m.TurnID,
 	}
 	for _, p := range m.Parts {
 		if part := partToDomain(p); part != nil {

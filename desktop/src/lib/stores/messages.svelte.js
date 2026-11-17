@@ -7,7 +7,7 @@ import { api, onInterrupt, onSend, uuid } from "../engine/api.js";
 import { onEvent, onFolderEvent, onResync } from "../engine/events.js";
 import { prompts } from "./prompts.svelte.js";
 import { queue } from "./queue.svelte.js";
-import { noteChatMessage, sessions, settleBusy } from "./sessions.svelte.js";
+import { endStopping, noteChatMessage, sessions, settleBusy, stoppedTurn } from "./sessions.svelte.js";
 import { notify } from "./ui.svelte.js";
 import { originalDraft } from "../composer/recording.js";
 
@@ -240,10 +240,13 @@ function applySnapshot(sid, chat, list, events, paged = false) {
   const first = list.find((m) => m?.id);
   const kept = [];
   if (paged && first && chat.status === "ready") {
-    for (const id of chat.ids) {
+    const firstAt = chat.ids.indexOf(first.id);
+    const end = firstAt >= 0 ? firstAt : chat.ids.length;
+    for (let i = 0; i < end; i++) {
+      const id = chat.ids[i];
       const m = chat.byId.get(id);
       if (!m || snapshot.has(id)) continue;
-      if ((m.created_at ?? 0) < (first.created_at ?? 0)) kept.push(m);
+      if (firstAt >= 0 || (m.created_at ?? 0) < (first.created_at ?? 0)) kept.push(m);
     }
   }
   chat.byId.clear();
@@ -381,7 +384,12 @@ function applyToChat(sid, kind, m) {
   if (token) buffer(token, kind, m);
   if (chat?.status === "ready") {
     if (kind === "deleted") drop(chat, m.id);
-    else put(chat, m);
+    else {
+      put(chat, m);
+      // A late step of the stopped turn (same turn_id): only this reply.
+      const stopped = stoppedTurn(sid);
+      if (stopped && m?.role === "assistant" && m.turn_id === stopped) markInterrupted(chat, [m.id]);
+    }
     return true;
   }
   return Boolean(token);
@@ -452,24 +460,44 @@ export function isHiddenInterruptedStep(m, shownBefore) {
 // the chat, else it is idle now. As the terminal cancels only the submissions
 // in flight that were not queued (send.go:257-270), a send that would start a
 // run and still waits for its 202 counts for nothing; a held one counts.
+function markInterrupted(chat, ids = chat.ids) {
+  const answered = new Set();
+  for (const id of chat.ids) for (const r of toolResults(chat.byId.get(id))) if (r.tool_call_id) answered.add(r.tool_call_id);
+  for (const id of ids) {
+    const m = chat.byId.get(id);
+    if (m?.role !== "assistant") continue;
+    let stopped = !isFinished(m);
+    for (const call of toolCalls(m)) {
+      if (!call.id || answered.has(call.id) || prompts.callStatus[call.id] === "cancelled") continue;
+      prompts.callStatus[call.id] = "cancelled";
+      stopped = true;
+    }
+    if (stopped && !interrupted.has(m.id)) interrupted.add(m.id);
+  }
+  if ([...chat.active].some((id) => interrupted.has(id))) chat.active = new Set([...chat.active].filter((id) => !interrupted.has(id)));
+}
+
+// The engine named the stopped turn (sessions.checkStopped): its replies
+// in a loaded chat are marked stopped. True when an unfinished reply of a
+// newer turn is already here, so that turn runs and the stop mark must end.
+export function markStoppedTurn(sid, turn) {
+  const chat = messages.bySession[sid];
+  if (!chat || chat.status !== "ready") return false;
+  const own = [];
+  let newer = false;
+  for (const id of chat.ids) {
+    const m = chat.byId.get(id);
+    if (m?.role !== "assistant" || !m.turn_id) continue;
+    if (m.turn_id === turn) own.push(id);
+    else if (!isFinished(m) && !interrupted.has(id)) newer = true;
+  }
+  if (own.length > 0) markInterrupted(chat, own);
+  return newer;
+}
+
 export function interruptChat(sid) {
   const chat = messages.bySession[sid];
-  if (chat) {
-    const answered = new Set();
-    for (const id of chat.ids) for (const r of toolResults(chat.byId.get(id))) if (r.tool_call_id) answered.add(r.tool_call_id);
-    for (const id of chat.ids) {
-      const m = chat.byId.get(id);
-      if (m?.role !== "assistant") continue;
-      let stopped = !isFinished(m);
-      for (const call of toolCalls(m)) {
-        if (!call.id || answered.has(call.id) || prompts.callStatus[call.id] === "cancelled") continue;
-        prompts.callStatus[call.id] = "cancelled";
-        stopped = true;
-      }
-      if (stopped && !interrupted.has(m.id)) interrupted.add(m.id);
-    }
-    if ([...chat.active].some((id) => interrupted.has(id))) chat.active = new Set([...chat.active].filter((id) => !interrupted.has(id)));
-  }
+  if (chat) markInterrupted(chat);
   const continuing = (queue.bySession?.[sid]?.count ?? 0) > 0 || Object.values(messages.pending).some((p) => p.sessionId === sid && (p.acknowledged || p.queued));
   if (continuing) releaseHeld(sid);
   else settleBusy(sid);
@@ -592,6 +620,15 @@ export async function resolvePending(submissionId, restoreIfMissing) {
 // update_workspace.go:33-38): a stop removes it; a failure checks whether it
 // was saved. Neither shows a notice (1.5.3).
 onEvent("run_complete", (_kind, done) => {
+  // The run this window stopped has ended: its unfinished replies are the
+  // stopped ones. Replies of other turns are left alone.
+  const sid = done?.session_id;
+  const stopped = sid ? stoppedTurn(sid) : null;
+  if (stopped && done.turn_id === stopped) {
+    const chat = messages.bySession[sid];
+    if (chat && done.cancelled) markStoppedTurn(sid, stopped);
+    endStopping(sid);
+  }
   const submission = done?.submission_id;
   if (!submission || !messages.pending[submission]) return;
   if (done.cancelled) finishPending(submission, false);

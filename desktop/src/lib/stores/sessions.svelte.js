@@ -4,7 +4,7 @@
 // tools' and title chats are only remembered as children of their chat.
 import { api, onSend, setCurrentSession } from "../engine/api.js";
 import { onEvent, onResync, withHeld } from "../engine/events.js";
-import { chatOf, isFinished, load, messages, parseAgentChatId, readyChat, returnDraft, unload } from "./messages.svelte.js";
+import { chatOf, isFinished, load, markStoppedTurn, messages, parseAgentChatId, readyChat, returnDraft, unload } from "./messages.svelte.js";
 import { keepPromptsFor, seedMarks } from "./prompts.svelte.js";
 import { clearNotice, notify } from "./ui.svelte.js";
 import { dropFiles, setFiles, startFilesRead, ws } from "./workspace.svelte.js";
@@ -47,6 +47,29 @@ function changedSince(sid, field, since) {
 
 const childParent = new Map(); // a child chat's id → its parent's id (session events with a parent)
 const lastSource = new Map(); // sid → "event" | "read": where the stored record's other fields came from
+// Chats this window stopped: sid → the stopped turn's id (the engine's
+// Stop answer; null until it comes). Late steps of that turn (messages with
+// its turn_id) do not make the chat busy. The mark ends when that turn's
+// run_complete comes, a message of another turn arrives, a new send starts,
+// a read made after the Stop says idle, or the Stop fails or stopped nothing.
+const stopping = new Map();
+// sid → ids of turns whose run_complete came (the newest few), so a Stop
+// answer that arrives after its turn already ended ends the mark at once.
+const finishedTurns = new Map();
+export function isStopping(sid) {
+  return stopping.has(sid);
+}
+export function stoppedTurn(sid) {
+  return stopping.get(sid) ?? null;
+}
+export function endStopping(sid) {
+  stopping.delete(sid);
+}
+function noteFinishedTurn(sid, turn) {
+  if (!sid || !turn) return;
+  const seen = finishedTurns.get(sid) ?? [];
+  finishedTurns.set(sid, [...seen.slice(-15), turn]);
+}
 
 function storeSession(s, { fromEvent, since }) {
   const stored = sessions.byId[s.id];
@@ -66,7 +89,10 @@ function storeSession(s, { fromEvent, since }) {
     if (!keep) lastSource.set(s.id, "read");
     next.attached_clients = s.attached_clients ?? 0;
     next.has_unfinished_work = s.has_unfinished_work === true;
-    next.is_busy = changedSince(s.id, "busy", since) ? (stored?.is_busy ?? false) : s.is_busy === true;
+    // Only a read made after the Stop (and any later busy change) may end it.
+    if (s.is_busy !== true && !changedSince(s.id, "busy", since)) stopping.delete(s.id);
+    const isStopping = stopping.has(s.id);
+    next.is_busy = isStopping ? false : (changedSince(s.id, "busy", since) ? (stored?.is_busy ?? false) : s.is_busy === true);
     if (changedSince(s.id, "prompt", since)) {
       next.pending_prompt = stored?.pending_prompt ?? "";
     } else {
@@ -77,7 +103,7 @@ function storeSession(s, { fromEvent, since }) {
     // list's and each chat's reads alike, so a chat that ends with no event
     // stops working).
     if (messages.bySession[s.id]?.status !== "ready" && !changedSince(s.id, "live", since)) {
-      if (s.is_busy === true) sessions.live[s.id] = true;
+      if (!isStopping && s.is_busy === true) sessions.live[s.id] = true;
       else delete sessions.live[s.id];
     }
   }
@@ -185,15 +211,21 @@ export function isHelperChat(id) {
 // What a chat of another folder is doing, from that folder's engine (the
 // left list's 30 s check, owner 2026-10-21): its record's busy, background
 // and prompt fields, and its live flag.
-export function setChatState(id, state) {
+export function setChatState(id, state, since = null) {
   const stored = sessions.byId[id];
   if (!stored || !state) return;
-  sessions.byId[id] = { ...stored, is_busy: state.is_busy === true, has_unfinished_work: state.has_unfinished_work === true, pending_prompt: state.pending_prompt ?? "" };
-  if (state.is_busy === true) sessions.live[id] = true;
+  // Only a read known to start after the Stop may end it; a chat_state
+  // event carries a read the helper made at some earlier moment.
+  if (since !== null && state.is_busy !== true && !changedSince(id, "busy", since)) stopping.delete(id);
+  const busyNow = !stopping.has(id) && state.is_busy === true;
+  sessions.byId[id] = { ...stored, is_busy: busyNow, has_unfinished_work: state.has_unfinished_work === true, pending_prompt: state.pending_prompt ?? "" };
+  if (busyNow) sessions.live[id] = true;
   else delete sessions.live[id];
 }
 
 export function removeSession(id) {
+  stopping.delete(id);
+  finishedTurns.delete(id);
   childParent.delete(id);
   if (!sessions.byId[id]) return;
   delete sessions.byId[id];
@@ -265,6 +297,7 @@ function clearSent(sid, runId) {
 onSend((body, call) => {
   const sid = body?.session_id;
   const runId = body?.run_id;
+  if (sid) stopping.delete(sid);
   if (!sid || !runId) return;
   sessions.sent[sid] = { ...(sessions.sent[sid] ?? {}), [runId]: true };
   Promise.resolve(call).catch(() => clearSent(sid, runId));
@@ -274,6 +307,7 @@ onSend((body, call) => {
 // the next turn, whose messages make the chat busy again.
 onEvent("run_complete", (_kind, done) => {
   const sid = done?.session_id;
+  noteFinishedTurn(sid, done?.turn_id);
   if (!sid || !sessions.byId[sid]) return;
   stamp(sid, "busy");
   stamp(sid, "live");
@@ -286,6 +320,7 @@ onEvent("run_complete", (_kind, done) => {
 // TYPE-046; interruptAgent sets the busy state to `continuing`, send.go:284-287).
 export function settleBusy(sid) {
   if (!sid) return;
+  stopping.set(sid, null);
   stamp(sid, "busy");
   stamp(sid, "live");
   if (sessions.byId[sid]?.is_busy) sessions.byId[sid].is_busy = false;
@@ -293,10 +328,50 @@ export function settleBusy(sid) {
   delete sessions.live[sid];
 }
 
+// After the Stop request settles. A failed one ends the mark and reads the
+// chat again, so a turn that still runs shows as busy. One that stopped no
+// turn ends the mark. Otherwise the mark names the stopped turn: its replies
+// are marked stopped; if it already ended, or a reply of a newer turn is
+// already here, the mark ends; else the chat is read again and a read made
+// now that says idle ends the mark (one that says busy is the stopped turn
+// unwinding, still hidden).
+export async function checkStopped(sid, stopped, turn = "") {
+  if (!sid || !stopping.has(sid)) return;
+  if (!stopped) stopping.delete(sid);
+  else if (!turn) {
+    // Nothing was running (or a manual summary, which names no turn): the
+    // chat stays idle as Stop left it; a read now could still see the
+    // canceled work unwinding and nothing would clear that busy again.
+    stopping.delete(sid);
+    return;
+  } else {
+    stopping.set(sid, turn);
+    const newer = markStoppedTurn(sid, turn);
+    if (newer || (finishedTurns.get(sid) ?? []).includes(turn)) {
+      // Its run_complete already settled the chat; a read now could still
+      // see the ended turn's dispatch entry and show busy again.
+      stopping.delete(sid);
+      return;
+    }
+  }
+  const since = readStart();
+  let read;
+  try {
+    read = await api.agentSession(sid);
+  } catch {
+    return;
+  }
+  if (read?.id === sid) upsertSession(read, { since });
+}
+
 // A message of a known chat: a newer one moves the chat up the list; in a
 // chat this window has not loaded, an assistant message without finish sets
 // the live flag and one with finish clears it (1.5.3).
 export function noteChatMessage(sid, kind, m, { loaded = false } = {}) {
+  // A message of another turn than the stopped one: that turn is new, and
+  // its replies are not the stopped ones.
+  const stopped = stoppedTurn(sid);
+  if (stopped && m?.turn_id && m.turn_id !== stopped) stopping.delete(sid);
   const record = sessions.byId[sid];
   if (!record || kind === "deleted") return;
   const at = m.updated_at ?? 0;
@@ -304,7 +379,7 @@ export function noteChatMessage(sid, kind, m, { loaded = false } = {}) {
     sessions.activity[sid] = at;
     place(sid);
   }
-  if (loaded || m.role !== "assistant") return;
+  if (loaded || m.role !== "assistant" || stopping.has(sid)) return;
   stamp(sid, "live");
   if (!isFinished(m)) sessions.live[sid] = true;
   else delete sessions.live[sid];
@@ -446,16 +521,25 @@ let deferred = []; // sends made while a switch was pending (TYPE-049)
 // {run(sid), text, attachments, hidden, shell}. True when it was held.
 export function deferSend(send) {
   if (!sessions.opening || sessions.opening.id === sessions.currentId) return false;
-  deferred.push(send);
+  deferred.push({ ...send, targetId: sessions.opening.id });
   return true;
+}
+
+function restoreOne(send, targetId = sessions.currentId) {
+  if (send.shell) notify("warn", "Shell command not run: the conversation did not open");
+  else if (!send.hidden) returnDraft(targetId, { text: send.text ?? "", attachments: send.attachments ?? [] });
 }
 
 function runDeferred(sid) {
   const sends = deferred;
   deferred = [];
   for (const send of sends) {
+    if (send.targetId && send.targetId !== sid) {
+      restoreOne(send, sid);
+      continue;
+    }
     Promise.resolve()
-      .then(() => send.run(sid))
+      .then(() => (sessions.currentId === sid && (!sessions.opening || sessions.opening.id === sid) ? send.run(sid) : restoreOne(send)))
       .catch((error) => console.error("a held send failed", error));
   }
 }
@@ -465,10 +549,17 @@ function runDeferred(sid) {
 function restoreDeferred() {
   const sends = deferred;
   deferred = [];
-  for (const send of sends) {
-    if (send.shell) notify("warn", "Shell command not run: the conversation did not open");
-    else if (!send.hidden) returnDraft(sessions.currentId, { text: send.text ?? "", attachments: send.attachments ?? [] });
-  }
+  for (const send of sends) restoreOne(send);
+}
+
+// Switching to a different chat while another is opening drops that open and
+// returns its held prompts instead of sending them to the new chat.
+function abandonOtherOpening(nextId) {
+  if (!sessions.opening || sessions.opening.id === nextId) return;
+  const other = sessions.opening.id;
+  sessions.opening = null;
+  restoreDeferred();
+  if (other !== sessions.currentId) unload(other);
 }
 
 // Drops the switch in flight, so its late result is ignored, and gives its
@@ -623,15 +714,18 @@ export function setJoinWait(wait) {
 
 async function showChat(id) {
   if (id !== sessions.currentId && isKept(id)) return showKept(id);
-  const pending = joinWait();
-  if (pending) await pending.catch(() => {});
   openSeq += 1;
   const seq = openSeq;
+  const pending = joinWait();
+  if (pending) await pending.catch(() => {});
+  if (seq !== openSeq) return false;
+  abandonOtherOpening(id);
   if (id !== sessions.currentId) {
     if (sessions.opening?.id !== id) sessions.opening = { id, title: sessions.byId[id]?.title ?? "", startedAt: Date.now() };
   } else if (sessions.opening) {
     const other = sessions.opening.id;
     sessions.opening = null;
+    restoreDeferred();
     if (other !== id) unload(other);
   }
   report(id);
@@ -670,7 +764,13 @@ async function showChat(id) {
     notify("error", `Couldn't load this chat: ${errorText(error)}`, 5000, { label: "Try again", run: () => openChat(id) });
     return false;
   }
-  if (loaded.value !== true) return false; // the chat went away while it loaded
+  if (loaded.value !== true) {
+    if (sessions.opening?.id === id) sessions.opening = null;
+    report(sessions.currentId);
+    keepPromptsFor(sessions.currentId);
+    restoreDeferred();
+    return false; // the chat went away while it loaded
+  }
   upsertSession(read.value, { since });
   setFiles(id, files.value, filesRead);
   if (historyFailed) noteHistoryFailed(id);
@@ -696,6 +796,8 @@ async function showLocked(id, seq, since) {
     if (seq !== openSeq) return false;
     if (sessions.opening?.id === id) sessions.opening = null;
     report(sessions.currentId);
+    keepPromptsFor(sessions.currentId);
+    restoreDeferred();
     notify("error", `Couldn't load this chat: ${errorText(error)}`, 5000, { label: "Try again", run: () => openChat(id) });
     return false;
   }
@@ -707,6 +809,7 @@ async function showLocked(id, seq, since) {
   if (sessions.opening?.id === id) sessions.opening = null;
   keepPromptsFor(id);
   if (old && old !== id) leave(old);
+  restoreDeferred();
   return true;
 }
 
@@ -716,6 +819,7 @@ async function showLocked(id, seq, since) {
 // caller reads it again once joined (shownJoined).
 export function showKept(id, { refresh = true } = {}) {
   openSeq += 1; // a slower switch still on its way loses
+  abandonOtherOpening(id);
   if (sessions.opening) sessions.opening = null;
   const record = kept.get(id);
   kept.delete(id);

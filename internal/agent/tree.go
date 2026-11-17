@@ -78,8 +78,11 @@ func (c *coordinator) withIdleTree(ctx context.Context, sessionID string, operat
 		return ErrChatLocked
 	}
 	accepted, _ := a.acceptedRuns.Get(sessionID)
-	if accepted > 0 || a.IsSessionBusy(sessionID) || a.QueuedPrompts(sessionID) > 0 {
+	if accepted > 0 || c.IsSessionBusy(sessionID) || a.QueuedPrompts(sessionID) > 0 {
 		return treeBusyError{"wait for the reply and queued prompts to finish, or recall queued prompts first"}
+	}
+	if c.hasRunningDispatchFor(sessionID) {
+		return treeBusyError{"wait for sub-agents and their results to finish; if delivery failed, start a new chat"}
 	}
 	// Completed and delivered records are safe; pending results are not.
 	for _, task := range SessionTasks(sessionID) {

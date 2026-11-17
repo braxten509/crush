@@ -268,6 +268,10 @@ type Message struct {
 	IsSummaryMessage bool
 	// IsCompacting is live CLI status; it is not persisted in history.
 	IsCompacting bool
+	// TurnID names the agent turn that created the message (WithTurnID on
+	// the creating context). Live only: not persisted, empty in history.
+	// Frontends use it to tell a stopped turn's late steps from a new turn.
+	TurnID string
 	// ActivityAt records the last live provider event, not a timer tick.
 	ActivityAt int64
 	Activity   string

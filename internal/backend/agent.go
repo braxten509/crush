@@ -355,12 +355,18 @@ func (b *Backend) AcknowledgeRecalledPrompt(workspaceID, sessionID, requestID st
 // Interrupt stops the active run for the session and lets the next queued
 // prompt run.
 func (b *Backend) Interrupt(workspaceID, sessionID string) error {
+	_, err := b.InterruptTurn(workspaceID, sessionID)
+	return err
+}
+
+// InterruptTurn is Interrupt that also returns the id of the turn it
+// stopped, or "" when none ran.
+func (b *Backend) InterruptTurn(workspaceID, sessionID string) (string, error) {
 	o, err := b.ops(workspaceID)
 	if err != nil {
-		return err
+		return "", err
 	}
-	o.Interrupt(sessionID)
-	return nil
+	return o.InterruptTurn(sessionID), nil
 }
 
 // AddNote keeps text for the session's next prompt. It does not start a run.

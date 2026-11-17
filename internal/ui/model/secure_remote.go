@@ -157,8 +157,9 @@ func (m *UI) handleEngineSecureMsg(msg tea.Msg) (tea.Cmd, bool) {
 		if form, ok := m.activeInline.(*questionform.QuestionForm); ok && form.OwnsSecureForm(typed.FormID) {
 			form.Close()
 			m.activeInline = nil
-			m.textarea.Focus()
+			cmd := m.setFocus(uiFocusEditor)
 			m.updateLayoutAndSize()
+			return cmd, true
 		}
 		return nil, true
 	}

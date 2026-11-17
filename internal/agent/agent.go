@@ -227,6 +227,8 @@ type Model struct {
 // the explicit Del and the function return.
 type activeCancel struct {
 	cancel context.CancelFunc
+	// turnID is the running turn's id; empty for a batch reservation.
+	turnID string
 }
 
 type sessionAgent struct {

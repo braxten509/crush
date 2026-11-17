@@ -39,6 +39,9 @@ type Message struct {
 	UpdatedAt               int64         `json:"updated_at"`
 	IsSummaryMessage        bool          `json:"is_summary_message,omitempty"`
 	IsCompacting            bool          `json:"is_compacting,omitempty"`
+	// TurnID names the live agent turn that created the message; empty in
+	// history reads.
+	TurnID string `json:"turn_id,omitempty"`
 }
 
 // MessageRole represents the role of a message sender.

@@ -138,10 +138,17 @@ type RunComplete struct {
 	SubmissionID string `json:"submission_id,omitempty"`
 	SessionID    string `json:"session_id"`
 	RunID        string `json:"run_id,omitempty"`
+	TurnID       string `json:"turn_id,omitempty"`
 	MessageID    string `json:"message_id"`
 	Text         string `json:"text,omitempty"`
 	Error        string `json:"error,omitempty"`
 	Cancelled    bool   `json:"cancelled,omitempty"`
+}
+
+// InterruptResult answers an interrupt: the id of the turn it stopped
+// (RunComplete.TurnID, Message.TurnID), or "" when no turn was running.
+type InterruptResult struct {
+	TurnID string `json:"turn_id,omitempty"`
 }
 
 // SkillInfo describes a visible skill exposed to a frontend.

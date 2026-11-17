@@ -22,6 +22,7 @@ import (
 	"github.com/charmbracelet/crush/internal/hooks"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/session"
+	"github.com/google/uuid"
 )
 
 // turn is the state of one call to sessionAgent.Run: how it was
@@ -32,6 +33,8 @@ import (
 type turn struct {
 	a    *sessionAgent
 	call SessionAgentCall
+	// id names this turn on its messages and RunComplete (message.TurnID).
+	id string
 
 	// promptNote tells the model how its system prompt changed since the
 	// chat's steady one was sent; promptCommit records it as told once it
@@ -146,7 +149,7 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 	// Add the session to the context. The run context (genCtx) and its
 	// cancel func were already created and registered under the dispatch
 	// mutex for both the accepted and in-process paths.
-	t.ctx = context.WithValue(ctx, tools.SessionIDContextKey, t.call.SessionID)
+	t.ctx = message.WithTurnID(context.WithValue(ctx, tools.SessionIDContextKey, t.call.SessionID), t.id)
 	t.call.onQueuedInput = func(calls []SessionAgentCall) { t.consumedCalls = append(t.consumedCalls, calls...) }
 	defer t.publishOutcome(&retErr)
 	return t.run()
@@ -260,8 +263,10 @@ func (t *turn) dispatch(ctx context.Context) dispatchOutcome {
 		}
 		runCtx = context.WithValue(runCtx, tools.ShellEnvContextKey, env)
 	}
+	t.id = uuid.NewString()
+	runCtx = message.WithTurnID(runCtx, t.id)
 	t.genCtx, t.cancel = context.WithCancel(runCtx)
-	t.ac = &activeCancel{cancel: t.cancel}
+	t.ac = &activeCancel{cancel: t.cancel, turnID: t.id}
 	a.activeRequests.Set(t.call.SessionID, t.ac)
 	if h, ok := a.handoffs.Get(t.call.SessionID); ok && h == t.call.handoff {
 		a.handoffs.Del(t.call.SessionID)
@@ -318,12 +323,34 @@ func (t *turn) interruptOnToolCall() bool {
 		t.toolCallMu.Unlock()
 		return false
 	}
+	t.toolCallMu.Unlock()
+	// Stop cancels this turn under the session's dispatch mutex. Taking it
+	// before the last checks makes "not stopped yet" and "nudge queued" one
+	// step: Stop either came first (genCtx is done) or finds the nudge in
+	// the queue and drops it (startQueueHandoffLocked), so no hidden turn
+	// follows a Stop. Only a call that will interrupt pays for the lock.
+	mu := t.a.sessionMu(t.call.SessionID)
+	mu.Lock()
+	defer mu.Unlock()
+	t.toolCallMu.Lock()
+	if t.interruptedForProgress {
+		t.toolCallMu.Unlock()
+		return true
+	}
+	if t.genCtx != nil && t.genCtx.Err() != nil {
+		t.toolCallMu.Unlock()
+		return false
+	}
+	if _, transitioning := t.a.handoffs.Get(t.call.SessionID); transitioning {
+		t.toolCallMu.Unlock()
+		return false
+	}
 	t.interruptedForProgress = true
 	t.toolCallMu.Unlock()
 	if t.cancel != nil {
 		t.cancel()
 	}
-	t.a.requeueFront(t.call.SessionID, []SessionAgentCall{{
+	t.a.requeueFrontLocked(t.call.SessionID, []SessionAgentCall{{
 		SessionID:              t.call.SessionID,
 		Prompt:                 progressUpdatePrompt,
 		Channel:                t.call.Channel,
@@ -422,7 +449,7 @@ func (t *turn) publishOutcome(retErr *error) {
 	if t.skipRunComplete {
 		return
 	}
-	complete := notify.RunComplete{SessionID: t.call.SessionID, RunID: t.call.RunID}
+	complete := notify.RunComplete{SessionID: t.call.SessionID, RunID: t.call.RunID, TurnID: t.id}
 	if t.currentAssistant != nil {
 		complete.MessageID = t.currentAssistant.ID
 		complete.Text = t.currentAssistant.Content().String()

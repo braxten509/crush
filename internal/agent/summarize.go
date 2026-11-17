@@ -66,7 +66,9 @@ func (a *sessionAgent) summarize(ctx context.Context, sessionID, trigger string,
 	aiMsgs = a.trimPreparedPrompt(sessionID, msgs, aiMsgs, chatModel, approxTokenCount(string(summaryPrompt))+approxTokenCount(systemPromptPrefix))
 
 	genCtx, cancel := context.WithCancel(ctx)
-	ac := &activeCancel{cancel: cancel}
+	// Inside a turn (automatic compaction) Stop still names that turn; a
+	// manual summary runs outside any turn and names none.
+	ac := &activeCancel{cancel: cancel, turnID: message.TurnIDFrom(ctx)}
 	a.activeRequests.Set(sessionID, ac)
 	defer a.activeRequests.CompareAndDelete(sessionID, ac)
 	defer cancel()

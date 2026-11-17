@@ -102,9 +102,13 @@ export async function setEffort(effort, ultracode = null) {
 // The account a Claude Code or Codex model runs on (config.SelectedModel's
 // account; "" is the tool's own login), from the model menu's Account row.
 export async function setAccount(account, name) {
-  if (windowBusy()) return notify("warn", BUSY);
+  if (windowBusy()) {
+    notify("warn", BUSY);
+    return false;
+  }
   const { selected } = await coder();
   if (account) selected.account = account;
   else delete selected.account;
   await save(selected, `Account set to ${name}`);
+  return true;
 }

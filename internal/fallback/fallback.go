@@ -232,7 +232,7 @@ func OnOut(order config.FallbackOrder, kindOf KindOf, at int, read Readings, now
 			}
 			// The wait is for the model the chat would run there.
 			r := read(acct, order.Blocks[target].Model)
-			if !Full(r, 0) {
+			if target != at && !Full(r, order.Blocks[target].MoveAtPercent) {
 				return Action{Kind: Switch, Block: target}
 			}
 			if r.OpenAt.IsZero() {

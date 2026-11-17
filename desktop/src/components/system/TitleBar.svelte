@@ -57,7 +57,8 @@
   let branchWrap = $state(null);
 
   async function toggleBranchMenu() {
-    if (!sessions.currentId) return;
+    const sid = sessions.currentId;
+    if (!sid) return;
     if (branchMenuOpen) {
       branchMenuOpen = false;
       creatingBranch = false;
@@ -68,12 +69,22 @@
     creatingBranch = false;
     newBranchName = "";
     try {
-      const res = await api.gitBranches(sessions.currentId);
+      const res = await api.gitBranches(sid);
+      if (sid !== sessions.currentId || !branchMenuOpen) return;
       branchList = Array.isArray(res?.branches) ? res.branches : [];
     } catch {
+      if (sid !== sessions.currentId || !branchMenuOpen) return;
       branchList = activeBranch ? [activeBranch] : [];
     }
   }
+
+  $effect(() => {
+    void sessions.currentId;
+    branchMenuOpen = false;
+    creatingBranch = false;
+    newBranchName = "";
+    branchList = [];
+  });
 
   async function pickBranch(branch, create = false) {
     const sid = sessions.currentId;

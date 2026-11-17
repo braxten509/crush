@@ -317,7 +317,10 @@ fn scrub_urls(text: &str) -> String {
     let mut rest = text;
     while let Some(at) = rest.find("://") {
         // The scheme is the letters right before "://".
-        let start = rest[..at].rfind(|c: char| !(c.is_ascii_alphanumeric() || "+-.".contains(c))).map_or(0, |i| i + 1);
+        let start = rest[..at]
+            .char_indices()
+            .rfind(|&(_, c)| !(c.is_ascii_alphanumeric() || "+-.".contains(c)))
+            .map_or(0, |(i, c)| i + c.len_utf8());
         let end = rest[at..].find(|c: char| c.is_whitespace() || "\"'<>`".contains(c)).map_or(rest.len(), |i| at + i);
         // Punctuation that ends the sentence is not part of the URL.
         let end = start + rest[start..end].trim_end_matches([':', ',', ';', '.', ')']).len();

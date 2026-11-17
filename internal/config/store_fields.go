@@ -208,10 +208,10 @@ func (s *ConfigStore) updateLocked(scope Scope, mutate func(*Config) map[string]
 	}
 	s.setConfig(nc)
 	// Refresh the staleness snapshot so the file watcher does not treat
-	// our own write as an external change. Safe to touch the snapshot map
-	// here because we hold writeMu.
+	// our own write as an external change, preserving any previously
+	// tracked (discovered) config paths.
 	if path, err := s.configPath(scope); err == nil {
-		s.captureStalenessSnapshot(append(slices.Clone(s.loadedPaths), path))
+		s.trackAndRefreshStaleness(append(slices.Clone(s.loadedPaths), path)...)
 	}
 	return nil
 }

@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"log/slog"
 	"strings"
-
-	"github.com/tidwall/sjson"
 )
 
 // HaltExitCode is the exit code that halts the whole turn. 2 blocks the
@@ -175,27 +173,25 @@ func shallowMerge(base, patch string) (string, error) {
 	if base == "" {
 		base = "{}"
 	}
-	// Ensure base is an object so sjson has somewhere to write.
-	var baseAny any
-	if err := json.Unmarshal([]byte(base), &baseAny); err != nil {
+	var baseMap map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(base), &baseMap); err != nil {
 		return "", err
 	}
-	if _, ok := baseAny.(map[string]any); !ok {
+	if baseMap == nil {
 		return "", errNotObject("tool_input")
 	}
 	var patchMap map[string]json.RawMessage
-	if err := json.Unmarshal([]byte(patch), &patchMap); err != nil {
+	if err := json.Unmarshal([]byte(patch), &patchMap); err != nil || patchMap == nil {
 		return "", errNotObject("updated_input")
 	}
-	out := base
 	for k, v := range patchMap {
-		next, err := sjson.SetRawBytes([]byte(out), k, v)
-		if err != nil {
-			return "", err
-		}
-		out = string(next)
+		baseMap[k] = v
 	}
-	return out, nil
+	out, err := json.Marshal(baseMap)
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
 }
 
 type errNotObject string

@@ -545,6 +545,9 @@ func HasRunningWork(c Coordinator) bool {
 	if c.IsBusy() {
 		return true
 	}
+	if co, ok := c.(*coordinator); ok && co.runningDispatchCount() > 0 {
+		return true
+	}
 	hubsMu.Lock()
 	defer hubsMu.Unlock()
 	for _, h := range hubs {

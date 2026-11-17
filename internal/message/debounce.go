@@ -14,6 +14,10 @@ import (
 // service.mu. The flushing flag serializes concurrent flushers for
 // the same ID so SQL writes never reorder.
 type pendingState struct {
+	// turnID is the message's live turn id (Message.TurnID), kept so an
+	// update built from a SQL read (which has none) still carries it.
+	turnID string
+
 	// latest is the most recent [Message] passed to [Service.Update]
 	// that has not yet been flushed.
 	latest Message
@@ -55,6 +59,16 @@ type liveStatus struct {
 	activityAt int64
 	activity   string
 	detail     string
+}
+
+// keepTurn remembers msg's turn id, or puts the remembered one back on an
+// update that lost it (one built from a SQL read). Caller must hold s.mu.
+func (p *pendingState) keepTurn(msg *Message) {
+	if msg.TurnID != "" {
+		p.turnID = msg.TurnID
+	} else {
+		msg.TurnID = p.turnID
+	}
 }
 
 // rememberLive keeps msg's live fields while it is unfinished. Caller
@@ -124,6 +138,7 @@ func (s *service) Update(ctx context.Context, msg Message) error {
 			p = &pendingState{}
 			s.pending[msg.ID] = p
 		}
+		p.keepTurn(&cloned)
 		p.latest = cloned
 		p.dirty = true
 		p.rememberLive(&cloned)
@@ -137,6 +152,7 @@ func (s *service) Update(ctx context.Context, msg Message) error {
 		p = &pendingState{}
 		s.pending[msg.ID] = p
 	}
+	p.keepTurn(&cloned)
 	p.latest = cloned
 	p.dirty = true
 	p.rememberLive(&cloned)

@@ -113,12 +113,16 @@ func (h *Host) dropRow(id int) {
 	if i < 0 {
 		return
 	}
+	wasActive := i == h.active
 	h.sessions = slices.Delete(h.sessions, i, i+1)
 	if h.confirm != nil && h.confirm.id == id {
 		h.confirm = nil
 	}
 	if i < h.active || h.active >= len(h.sessions) {
 		h.active = max(0, h.active-1)
+	}
+	if wasActive && len(h.sessions) > 0 {
+		h.show(h.active)
 	}
 }
 

@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
@@ -45,7 +46,7 @@ func (c *coordinator) WithIdleChat(ctx context.Context, ids []string, fn func() 
 	if !ok {
 		return fmt.Errorf("locking is unavailable for this agent")
 	}
-	for _, id := range ids {
+	for _, id := range lockIDs(ids) {
 		mu := a.sessionMu(id)
 		mu.Lock()
 		defer mu.Unlock()
@@ -53,8 +54,11 @@ func (c *coordinator) WithIdleChat(ctx context.Context, ids []string, fn func() 
 	for _, id := range ids {
 		accepted, _ := a.acceptedRuns.Get(id)
 		_, summarizing := a.activeRequests.Get(id + "-summarize")
-		if accepted > 0 || summarizing || a.IsSessionBusy(id) || a.QueuedPrompts(id) > 0 {
+		if accepted > 0 || summarizing || c.IsSessionBusy(id) || a.QueuedPrompts(id) > 0 {
 			return treeBusyError{"wait for the reply and queued prompts to finish before locking the chat"}
+		}
+		if c.hasRunningDispatchFor(id) {
+			return treeBusyError{"wait for sub-agents and their results to finish before locking the chat"}
 		}
 		for _, task := range SessionTasks(id) {
 			if task.Status == TaskRunning || !task.Delivered {
@@ -71,6 +75,14 @@ func (c *coordinator) WithIdleChat(ctx context.Context, ids []string, fn func() 
 		}
 	}
 	return fn()
+}
+
+// lockIDs returns a sorted, deduplicated copy of ids so multi-chat locks
+// acquire per-session mutexes in one order without self-deadlocking.
+func lockIDs(ids []string) []string {
+	out := slices.Clone(ids)
+	slices.Sort(out)
+	return slices.Compact(out)
 }
 
 // IdleChatGate is the coordinator's WithIdleChat, for callers holding a
@@ -90,12 +102,13 @@ func (c *coordinator) StopForLock(ctx context.Context, ids []string) error {
 		c.Cancel(id)
 		c.ClearQueue(id)
 	}
+	c.stopTreeDispatched(ids)
 	for {
 		busy := false
 		for _, id := range ids {
 			accepted, _ := a.acceptedRuns.Get(id)
 			_, summarizing := a.activeRequests.Get(id + "-summarize")
-			if accepted > 0 || summarizing || a.IsSessionBusy(id) {
+			if accepted > 0 || summarizing || c.IsSessionBusy(id) || c.hasRunningDispatchFor(id) {
 				busy = true
 				break
 			}

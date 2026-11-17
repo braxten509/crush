@@ -219,7 +219,10 @@ func mergeReadings(a, b sharedLimits) (merged sharedLimits, changed bool) {
 	}
 	merged, account, perModel := a, a.Limits, a.Limits
 	if later {
-		merged.ReadAt, merged.Refills, account = b.ReadAt, b.Refills, b.Limits
+		merged.ReadAt, account = b.ReadAt, b.Limits
+		if b.Refills >= 0 {
+			merged.Refills = b.Refills
+		}
 	}
 	if models {
 		merged.ModelsAt, perModel = b.ModelsAt, b.Limits
@@ -246,7 +249,10 @@ func saveLimits(k limitKey, limits []Limit, refills int, at, modelsAt time.Time)
 	if err == nil {
 		defer unlock()
 	}
-	saved, _ := loadSharedLimits(path)
+	saved, ok := loadSharedLimits(path)
+	if !ok {
+		saved.Refills = -1
+	}
 	merged, changed := mergeReadings(saved, sharedLimits{ReadAt: at, ModelsAt: modelsAt, Limits: limits, Refills: refills})
 	if changed {
 		merged.Owner, merged.Err, merged.Until = sharedLimitsOwner, "", time.Time{}

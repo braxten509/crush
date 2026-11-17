@@ -79,6 +79,11 @@ func (s *sessionScheduler) startQueueHandoffLocked(sessionID string, interrupt b
 	}
 	queued, _ := s.messageQueue.Take(sessionID)
 	calls = append(calls, queued...)
+	if interrupt {
+		calls = slices.DeleteFunc(calls, func(c SessionAgentCall) bool {
+			return c.ProgressUpdateRequired
+		})
+	}
 	s.acceptedMu.Lock()
 	for _, r := range s.acceptedLeases[sessionID] {
 		if r.done.Load() || r.canceled.Load() || s.canceledBySeq(sessionID, r.seq) {

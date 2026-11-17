@@ -77,8 +77,9 @@ func (c *controllerV1) clearQueue(r *http.Request, _ rpc.Empty) (rpc.Empty, erro
 
 // interruptAgent stops the active run and lets the next queued prompt
 // run.
-func (c *controllerV1) interruptAgent(r *http.Request, _ rpc.Empty) (rpc.Empty, error) {
-	return rpc.Empty{}, c.backend.Interrupt(r.PathValue("id"), r.PathValue("sid"))
+func (c *controllerV1) interruptAgent(r *http.Request, _ rpc.Empty) (proto.InterruptResult, error) {
+	turnID, err := c.backend.InterruptTurn(r.PathValue("id"), r.PathValue("sid"))
+	return proto.InterruptResult{TurnID: turnID}, err
 }
 
 // summarizeSession summarizes a session.

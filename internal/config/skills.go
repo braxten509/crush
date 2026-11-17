@@ -40,7 +40,7 @@ func (s *ConfigStore) SetSkillEnabled(name string, enabled bool) error {
 	cfg.Options.DisabledSkills = disabled
 	s.setConfig(cfg)
 	if path, err := s.configPath(ScopeGlobal); err == nil {
-		s.captureStalenessSnapshot(append(slices.Clone(s.loadedPaths), path))
+		s.trackAndRefreshStaleness(append(slices.Clone(s.loadedPaths), path)...)
 	}
 	return nil
 }

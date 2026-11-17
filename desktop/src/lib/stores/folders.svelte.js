@@ -7,7 +7,7 @@ import { folderChatStates } from "../engine/commands.js";
 import { onEvent, onFolderEvent } from "../engine/events.js";
 import { conn, inFolder } from "./connection.svelte.js";
 import { openChats } from "./openchats.svelte.js";
-import { sessions, setChatState } from "./sessions.svelte.js";
+import { readStart, sessions, setChatState } from "./sessions.svelte.js";
 
 export const folders = $state({ byId: {}, states: {} });
 
@@ -31,6 +31,7 @@ export async function loadStates() {
   const chats = openChats.list.filter((c) => c?.id && c.dir && !inFolder(c.dir)).map((c) => ({ id: c.id, dir: c.dir }));
   const client = conn.clientId;
   let found = {};
+  const since = readStart();
   if (chats.length > 0) {
     try {
       found = (await folderChatStates(chats)) ?? {};
@@ -45,7 +46,7 @@ export async function loadStates() {
     const s = found[c.id];
     if (!s || inFolder(c.dir)) continue;
     states[c.id] = { is_busy: s.is_busy === true, has_unfinished_work: s.has_unfinished_work === true, pending_prompt: s.pending_prompt ?? "" };
-    if (sessions.byId[c.id]) setChatState(c.id, states[c.id]);
+    if (sessions.byId[c.id]) setChatState(c.id, states[c.id], since);
   }
   folders.states = states;
 }

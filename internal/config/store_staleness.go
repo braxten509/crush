@@ -27,6 +27,9 @@ type StalenessResult struct {
 // missing, along with sorted lists of affected paths. Stat errors are
 // captured in Errors map but still treated as non-existence for dirty detection.
 func (s *ConfigStore) ConfigStaleness() StalenessResult {
+	s.stalenessMu.RLock()
+	defer s.stalenessMu.RUnlock()
+
 	var result StalenessResult
 	result.Errors = make(map[string]error)
 
@@ -76,6 +79,13 @@ func (s *ConfigStore) ConfigStaleness() StalenessResult {
 // RefreshStalenessSnapshot captures fresh snapshots of all tracked config files.
 // Call this after reloading config to clear dirty state.
 func (s *ConfigStore) RefreshStalenessSnapshot() error {
+	s.stalenessMu.Lock()
+	defer s.stalenessMu.Unlock()
+
+	return s.refreshStalenessSnapshotLocked()
+}
+
+func (s *ConfigStore) refreshStalenessSnapshotLocked() error {
 	if s.snapshots == nil {
 		s.snapshots = make(map[string]fileSnapshot)
 	}
@@ -103,6 +113,13 @@ func (s *ConfigStore) RefreshStalenessSnapshot() error {
 // CaptureStalenessSnapshot captures snapshots for the given paths, building the
 // tracked config paths list. Paths are deduplicated and normalized.
 func (s *ConfigStore) CaptureStalenessSnapshot(paths []string) {
+	s.stalenessMu.Lock()
+	defer s.stalenessMu.Unlock()
+
+	s.captureStalenessSnapshotLocked(paths)
+}
+
+func (s *ConfigStore) captureStalenessSnapshotLocked(paths []string) {
 	// Build unique set of normalized paths
 	seen := make(map[string]struct{})
 	for _, p := range paths {
@@ -148,7 +165,19 @@ func (s *ConfigStore) CaptureStalenessSnapshot(paths []string) {
 	slices.Sort(s.trackedConfigPaths)
 
 	// Capture initial snapshots
-	s.RefreshStalenessSnapshot()
+	s.refreshStalenessSnapshotLocked()
+}
+
+// trackAndRefreshStaleness adds extra paths (alongside any already tracked
+// paths) and refreshes all snapshots without dropping unloaded discovered paths.
+func (s *ConfigStore) trackAndRefreshStaleness(extra ...string) {
+	s.stalenessMu.Lock()
+	defer s.stalenessMu.Unlock()
+
+	paths := make([]string, 0, len(s.trackedConfigPaths)+len(extra))
+	paths = append(paths, s.trackedConfigPaths...)
+	paths = append(paths, extra...)
+	s.captureStalenessSnapshotLocked(paths)
 }
 
 // captureStalenessSnapshot is an alias for CaptureStalenessSnapshot for internal use.

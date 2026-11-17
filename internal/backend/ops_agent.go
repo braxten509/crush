@@ -35,9 +35,21 @@ func (o Ops) StopChat(sessionID string) {
 // Interrupt stops the session's active run and lets the next queued
 // prompt run.
 func (o Ops) Interrupt(sessionID string) {
-	if o.App.AgentCoordinator != nil {
-		o.App.AgentCoordinator.Interrupt(sessionID)
+	o.InterruptTurn(sessionID)
+}
+
+// InterruptTurn is Interrupt that also returns the id of the turn it
+// stopped, or "" when none ran.
+func (o Ops) InterruptTurn(sessionID string) string {
+	coord := o.App.AgentCoordinator
+	if coord == nil {
+		return ""
 	}
+	if named, ok := coord.(interface{ InterruptTurn(string) string }); ok {
+		return named.InterruptTurn(sessionID)
+	}
+	coord.Interrupt(sessionID)
+	return ""
 }
 
 // QueuedPrompts returns the number of prompts queued for the session.

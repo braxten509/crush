@@ -232,6 +232,18 @@ func (s *service) Create(ctx context.Context, sessionID string, params CreateMes
 			return Message{}, err
 		}
 	}
+	if message.TurnID = TurnIDFrom(ctx); message.TurnID != "" {
+		// Seed the pending state so a first Update built from a SQL read
+		// (which has no turn id) still carries it (pendingState.keepTurn).
+		s.mu.Lock()
+		p, ok := s.pending[id]
+		if !ok {
+			p = &pendingState{}
+			s.pending[id] = p
+		}
+		p.turnID = message.TurnID
+		s.mu.Unlock()
+	}
 	// Clone the message before publishing to avoid race conditions with
 	// concurrent modifications to the Parts slice.
 	s.Publish(pubsub.CreatedEvent, message.Clone())

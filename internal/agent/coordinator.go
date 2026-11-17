@@ -370,6 +370,17 @@ func (c *coordinator) Interrupt(sessionID string) {
 	c.currentAgent().Interrupt(sessionID)
 }
 
+// InterruptTurn interrupts like Interrupt and returns the id of the turn
+// it stopped, or "" (see sessionScheduler.InterruptTurn).
+func (c *coordinator) InterruptTurn(sessionID string) string {
+	agent := c.currentAgent()
+	if named, ok := agent.(interface{ InterruptTurn(string) string }); ok {
+		return named.InterruptTurn(sessionID)
+	}
+	agent.Interrupt(sessionID)
+	return ""
+}
+
 func (c *coordinator) CancelAll() {
 	if c.tasks != nil {
 		c.tasks.stopAll()

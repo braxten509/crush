@@ -114,18 +114,22 @@ func (c *coordinator) runAgenticFetch(ctx context.Context, client *http.Client, 
 	if err != nil {
 		return fantasy.NewTextErrorResponse(fmt.Sprintf("Failed to create temporary directory: %s", err)), nil
 	}
-	defer os.RemoveAll(tmpDir)
+	cleanup := func() { _ = os.RemoveAll(tmpDir) }
 
 	fullPrompt, errMsg := agenticFetchPrompt(ctx, client, params, tmpDir)
 	if errMsg != "" {
+		cleanup()
 		return fantasy.NewTextErrorResponse(errMsg), nil
 	}
 
 	agent, err := c.newAgenticFetchAgent(ctx, client, tmpDir)
 	if err != nil {
+		cleanup()
 		return fantasy.ToolResponse{}, err
 	}
 
+	// Delay temp dir removal until the subagent finishes; backgrounding returns
+	// from this tool call while the fetch subagent keeps searching tmpDir.
 	return c.runSubAgentMaybeBackground(ctx, tools.AgenticFetchToolName, accessRead, subAgentParams{
 		Agent:          agent,
 		SessionID:      validationResult.SessionID,
@@ -136,6 +140,7 @@ func (c *coordinator) runAgenticFetch(ctx context.Context, client *http.Client, 
 		SessionSetup: func(sessionID string) {
 			c.permissions.AutoApproveSession(sessionID)
 		},
+		Cleanup: cleanup,
 	})
 }
 

@@ -92,7 +92,10 @@ func (m *UI) sendMessageInternal(content string, hidden bool, attachments ...mes
 
 	ctx := context.Background()
 	ws, sessionID := m.com.Workspace, m.session.ID
+	// The reads go with this message only; later sends must not record them
+	// again with a newer time.
 	fileReads := slices.Clone(m.sessionFileReads)
+	m.sessionFileReads = nil
 	cmds = append(cmds, func() tea.Msg {
 		for _, path := range fileReads {
 			ws.FileTrackerRecordRead(ctx, sessionID, path)

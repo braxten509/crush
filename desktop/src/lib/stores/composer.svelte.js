@@ -40,7 +40,7 @@ import { planReadyPresent } from "../render/plan.js";
 import { conn, refusedWhileFailed } from "./connection.svelte.js";
 import { addPending, finishPending, markUncertain, messages, resolvePending, returnDraft, takeReturned } from "./messages.svelte.js";
 import { queue, recall as recallQueued, recalled, refresh as refreshQueue } from "./queue.svelte.js";
-import { busy, deferSend, ensureSession, onLockChange, sessions, upsertSession } from "./sessions.svelte.js";
+import { busy, checkStopped, deferSend, ensureSession, onLockChange, sessions, upsertSession } from "./sessions.svelte.js";
 import { notify, requestEnd, setFocus, ui } from "./ui.svelte.js";
 import { loadAgent, ws } from "./workspace.svelte.js";
 
@@ -1214,11 +1214,16 @@ async function interruptShown() {
   }
   if (interrupting.has(sid)) return true;
   interrupting = new Set([...interrupting, sid]);
+  let stopped = true;
+  let turn = "";
   try {
-    await api.interrupt(sid);
+    // The engine answers with the id of the turn it stopped (or none).
+    turn = (await api.interrupt(sid))?.turn_id ?? "";
   } catch (error) {
+    stopped = false;
     console.error("interrupt failed", errorText(error));
   } finally {
+    checkStopped(sid, stopped, turn);
     const rest = new Set(interrupting);
     rest.delete(sid);
     interrupting = rest;

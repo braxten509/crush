@@ -30,7 +30,7 @@ var commandWrappers = []commandWrapper{
 	// of the same kind as a `FOO=bar cmd` prefix, so it has to fail the
 	// same way. The assignment is left in place as the inner argv's first
 	// token, which matches nothing and so resolves to itself.
-	{name: "env", valueFlags: []string{"-u", "--unset", "-C", "--chdir", "-S", "--split-string"}},
+	{name: "env", valueFlags: []string{"-u", "--unset", "-C", "--chdir", "--argv0"}},
 	{name: "nohup"},
 	{name: "nice", valueFlags: []string{"-n", "--adjustment"}},
 	{name: "timeout", skipOperands: 1, valueFlags: []string{"-s", "--signal", "-k", "--kill-after"}},
@@ -56,6 +56,43 @@ func ResolveArgv(argv []string) []string {
 	}
 	return argv
 }
+
+// resolveBlockArgv resolves argv for deny-list checks. Unlike [ResolveArgv],
+// it also skips leading NAME=VALUE assignments after `env` so `env FOO=bar
+// curl` is still recognised as `curl` instead of stopping at `FOO=bar`. If
+// only assignments follow `env`, it returns the unpeeled `env` invocation so
+// `env` itself remains matchable.
+func resolveBlockArgv(argv []string) []string {
+	for depth := 0; depth < maxWrapperDepth; depth++ {
+		wasEnv := len(argv) > 0 && normalizeCommand(argv[0]) == "env"
+		inner, ok := peelWrapper(argv)
+		if !ok {
+			return argv
+		}
+		if wasEnv {
+			after := skipEnvAssignments(inner)
+			if len(after) == 0 {
+				return argv
+			}
+			inner = after
+		}
+		argv = inner
+	}
+	return argv
+}
+
+func skipEnvAssignments(args []string) []string {
+	for len(args) > 0 {
+		name, _, ok := strings.Cut(args[0], "=")
+		if !ok || name == "" || strings.HasPrefix(args[0], "-") {
+			break
+		}
+		args = args[1:]
+	}
+	return args
+}
+
+var envNoArgFlags = []string{"-i", "--ignore-environment", "-0", "--null", "-v", "--debug"}
 
 // peelWrapper strips a leading command wrapper and returns the command it
 // would run. The second result is false when argv is not a wrapper, or is a
@@ -87,8 +124,17 @@ func peelWrapper(argv []string) ([]string, bool) {
 		case isFlag(tok):
 			// A flag that takes a separate value consumes the next token
 			// too, unless it was given as --flag=value.
-			consumesValue := slices.Contains(w.valueFlags, flagName(tok)) &&
-				!strings.Contains(tok, "=")
+			name := flagName(tok)
+			isValueFlag := slices.Contains(w.valueFlags, name)
+			// For `env`, fail closed on -S/--split-string (the inner command is
+			// embedded in its string argument, not after it) and on unknown or
+			// clustered flags so trailing operands cannot masquerade as the
+			// inner command.
+			if w.name == "env" && !isValueFlag && !slices.Contains(envNoArgFlags, tok) &&
+				!(strings.HasPrefix(tok, "-u") && len(tok) > 2 && !strings.HasPrefix(tok, "--")) {
+				return nil, false
+			}
+			consumesValue := isValueFlag && !strings.Contains(tok, "=")
 			rest = rest[1:]
 			if consumesValue {
 				if len(rest) == 0 {

@@ -253,7 +253,9 @@ func (m *UI) resetPlanModeState() tea.Cmd {
 	m.setPlanReadyPending("")
 	if _, ok := m.activeInline.(*questionform.PlanHandoffInline); ok {
 		m.activeInline = nil
-		m.textarea.Focus()
+		// Focus goes through setFocus so chat, sidebar and editor agree; its
+		// cursor-blink command is dropped, as the old textarea.Focus() was.
+		_ = m.setFocus(uiFocusEditor)
 	}
 	if m.mode != uiInputModePlan {
 		return nil

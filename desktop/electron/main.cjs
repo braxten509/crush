@@ -188,12 +188,15 @@ function fromHelper(message) {
     }
     case "emit":
       for (const [label, win] of windows) {
+        if (win.isDestroyed()) continue;
         if (message.label === null || message.label === label) win.webContents.send("crush-event", message.event, message.payload);
       }
       break;
-    case "channel":
-      windows.get(message.label)?.webContents.send("crush-channel", message.channel, message.data);
+    case "channel": {
+      const target = windows.get(message.label);
+      if (target && !target.isDestroyed()) target.webContents.send("crush-channel", message.channel, message.data);
       break;
+    }
     case "ask":
       Promise.resolve()
         .then(() => answer(message))
@@ -250,11 +253,12 @@ async function answer(message) {
       return true;
     case "pick-folder": {
       const parent = BrowserWindow.getFocusedWindow() ?? [...windows.values()].find((win) => !win.isDestroyed());
-      const picked = await dialog.showOpenDialog(parent, {
+      const options = {
         title: message.title,
         defaultPath: message.start || undefined,
         properties: ["openDirectory", "createDirectory"],
-      });
+      };
+      const picked = await (parent && !parent.isDestroyed() ? dialog.showOpenDialog(parent, options) : dialog.showOpenDialog(options));
       return picked.canceled ? "" : (picked.filePaths[0] ?? "");
     }
     case "clipboard.write":
@@ -457,8 +461,9 @@ function createWindow(label) {
       spellcheck: false,
     },
   });
+  const webContentsId = win.webContents.id;
   windows.set(label, win);
-  labels.set(win.webContents.id, label);
+  labels.set(webContentsId, label);
   // The page names the window itself (system/title.svelte.js).
   win.on("page-title-updated", (event) => event.preventDefault());
   // The system close button: the page runs its close steps (lib/closing.js),
@@ -470,6 +475,7 @@ function createWindow(label) {
   });
   win.on("closed", () => {
     windows.delete(label);
+    labels.delete(webContentsId);
     send({ t: "window", label, event: "destroyed" });
   });
   for (const event of ["maximize", "unmaximize", "enter-full-screen", "leave-full-screen", "always-on-top-changed"]) {
@@ -523,7 +529,8 @@ ipcMain.handle("crush-invoke", (event, cmd, callArgs) => {
     return (async () => {
       try {
         const parent = BrowserWindow.fromWebContents(event.sender);
-        const picked = await dialog.showSaveDialog(parent, { title: "Export conversation", defaultPath: callArgs.name, filters: [{ name: "Markdown", extensions: ["md"] }] });
+        const options = { title: "Export conversation", defaultPath: callArgs.name, filters: [{ name: "Markdown", extensions: ["md"] }] };
+        const picked = await (parent && !parent.isDestroyed() ? dialog.showSaveDialog(parent, options) : dialog.showSaveDialog(options));
         if (picked.canceled || !picked.filePath) return { ok: false };
         await fs.promises.writeFile(picked.filePath, callArgs.text, "utf8");
         return { ok: true };
@@ -643,7 +650,12 @@ app.whenReady().then(() => {
 // app://localhost/<file>: a file of dist/, with the page's rules.
 async function serve(request) {
   const url = new URL(request.url);
-  let name = decodeURIComponent(url.pathname);
+  let name;
+  try {
+    name = decodeURIComponent(url.pathname);
+  } catch {
+    return new Response("not found", { status: 404 });
+  }
   if (url.host === "localhost" && name.startsWith("/recordings/")) return serveRecording(request, name.slice("/recordings/".length));
   if (name === "/" || name === "") name = "/index.html";
   const file = path.normalize(path.join(DIST, name));
@@ -686,6 +698,10 @@ async function serveRecording(request, name) {
       start = Math.max(0, size - Number(range[2]));
     }
     if (start > end || start >= size) return new Response(null, { status: 416, headers: { "content-range": `bytes */${size}` } });
+  }
+  if (size === 0) {
+    headers["content-length"] = "0";
+    return new Response(null, { status: 200, headers });
   }
   // Streamed from disk, so a long recording is never held in memory whole.
   const body = Readable.toWeb(fs.createReadStream(file, { start, end }));

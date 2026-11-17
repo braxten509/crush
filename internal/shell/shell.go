@@ -202,7 +202,7 @@ func CommandsBlocker(cmds []string) BlockFunc {
 		// of curl, and a rule about curl has to see it as one. The list of
 		// commands allowed to skip a prompt peels the same way, so both
 		// answer "what actually runs here" identically.
-		args = ResolveArgv(args)
+		args = resolveBlockArgv(args)
 		if len(args) == 0 {
 			return false
 		}
@@ -231,7 +231,7 @@ type Rule struct {
 // rule. The argv is resolved through any command wrapper first, so a rule
 // about `npm install -g` catches `nice npm install -g` too.
 func (r Rule) Match(args []string) bool {
-	args = ResolveArgv(args)
+	args = resolveBlockArgv(args)
 	if len(args) == 0 || normalizeCommand(args[0]) != normalizeCommand(r.Command) {
 		return false
 	}
@@ -410,7 +410,7 @@ func CheckCommand(command string, blockFuncs []BlockFunc) CommandCheck {
 					// A named match outranks anything found earlier: it is the
 					// most specific thing that can be said about the command,
 					// and the only finding a user can act on.
-					result = CommandCheck{Matched: true, Reason: normalizeCommand(ResolveArgv(args)[0])}
+					result = CommandCheck{Matched: true, Reason: normalizeCommand(resolveBlockArgv(args)[0])}
 					return false
 				}
 			}

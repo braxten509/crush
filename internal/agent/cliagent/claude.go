@@ -277,8 +277,7 @@ func keepClaude(sessionID string, l *claudeLive) {
 			return true
 		}
 		return false
-	}, l.busy)
-	l.holdRun(sessionID)
+	}, l.busy, func() { l.holdRun(sessionID) })
 }
 
 func startClaude(m *Model, t Turn, key claudeKey) (*claudeLive, error) {
@@ -541,6 +540,10 @@ func (r *claudeRun) readLoop(pending [][]byte) (done bool, err error) {
 				// them again would get them answered twice. They count as
 				// taken, and a late reply comes as an unprompted one.
 				r.stopSteer()
+				if err := r.ctx.Err(); err != nil {
+					r.finished = true
+					return true, err
+				}
 				for _, text := range r.sent.takeAll() {
 					if err := r.t.Emit(Event{Type: EventUserMessage, Text: text}); err != nil {
 						return true, err

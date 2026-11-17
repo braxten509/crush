@@ -579,13 +579,26 @@ func (s *sessionScheduler) cancelActiveLocked(sessionID string) {
 // Interrupt preserves follow-ups and returns immediately. Repeats while the
 // canceled turn and its replacement exchange ownership are idempotent.
 func (s *sessionScheduler) Interrupt(sessionID string) {
+	s.InterruptTurn(sessionID)
+}
+
+// InterruptTurn is Interrupt that also names the turn it stopped (the
+// turn that was active when the dispatch mutex was taken), or "" when no
+// turn was running. Frontends match it to Message.TurnID and the stopped
+// turn's RunComplete, so they never guess which replies were stopped.
+func (s *sessionScheduler) InterruptTurn(sessionID string) string {
 	mu := s.sessionMu(sessionID)
 	mu.Lock()
 	defer mu.Unlock()
+	turnID := ""
+	if ac, ok := s.activeRequests.Get(sessionID); ok && ac != nil {
+		turnID = ac.turnID
+	}
 	if _, transitioning := s.handoffs.Get(sessionID); transitioning {
-		return
+		return turnID
 	}
 	s.startQueueHandoffLocked(sessionID, true)
+	return turnID
 }
 
 func (s *sessionScheduler) ClearQueue(sessionID string) {

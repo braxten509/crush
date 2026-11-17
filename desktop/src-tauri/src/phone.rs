@@ -374,6 +374,9 @@ pub fn attach_copy(path: String, cwd: String, video: bool) -> AppResult<Attached
     if meta.is_dir() {
         return Err(AppError::new("is_a_directory", "Cannot attach a directory"));
     }
+    if !meta.is_file() {
+        return Err(AppError::new("not_a_file", format!("{} is not a regular file", original.display())));
+    }
     let base = original.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
     let safe: String = base.chars().map(|c| if c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_') { c } else { '_' }).collect();
     let stamp = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or_default();

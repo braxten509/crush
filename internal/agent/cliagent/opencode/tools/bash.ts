@@ -82,9 +82,10 @@ All commands run in the current working directory by default. Use the \`workdir\
     )
     fs.closeSync(fd)
 
-    const outcome = await new Promise<"exit" | "background" | "auto-background" | "timeout" | "abort">((resolve) => {
+    let spawnErr: Error | undefined
+    const outcome = await new Promise<"exit" | "background" | "auto-background" | "timeout" | "abort" | "error">((resolve) => {
       const limit = args.timeout ?? defaultTimeout
-      const done = (r: "exit" | "background" | "auto-background" | "timeout" | "abort") => {
+      const done = (r: "exit" | "background" | "auto-background" | "timeout" | "abort" | "error") => {
         clearInterval(tick)
         ctx.abort.removeEventListener("abort", onAbort)
         resolve(r)
@@ -101,16 +102,22 @@ All commands run in the current working directory by default. Use the \`workdir\
         } else if (elapsed > autoBackgroundAfter) done("auto-background")
       }, checkEvery)
       ctx.abort.addEventListener("abort", onAbort)
+      child.on("error", (err) => {
+        spawnErr = err
+        done("error")
+      })
       child.on("exit", () => done("exit"))
     })
 
     const stop = () => {
+      if (!child.pid) return
       try {
-        process.kill(-child.pid!, "SIGTERM")
+        process.kill(-child.pid, "SIGTERM")
       } catch {}
       setTimeout(() => {
+        if (!child.pid) return
         try {
-          process.kill(-child.pid!, "SIGKILL")
+          process.kill(-child.pid, "SIGKILL")
         } catch {}
       }, 3000).unref()
     }
@@ -118,6 +125,13 @@ All commands run in the current working directory by default. Use the \`workdir\
     const cut = (s: string) => (s.length > maxOutput ? "…(earlier output cut)\n" + s.slice(-maxOutput) : s)
 
     switch (outcome) {
+      case "error":
+        fs.rmSync(log, { force: true })
+        return {
+          title: args.description,
+          output: `Failed to execute command: ${spawnErr?.message ?? "unknown error"}`,
+          metadata: { exit: 1, description: args.description },
+        }
       case "background":
       case "auto-background":
         child.unref()

@@ -573,6 +573,8 @@ struct Folder {
     /// The identity of its stream, so the end of an older one starts nothing.
     generation: u64,
     reader: Option<Owned>,
+    /// True while a background stream revival or rejoin is in flight.
+    reviving: bool,
 }
 
 /// A folder the window opened besides the one it joined (`engine_open_folder`).
@@ -591,6 +593,22 @@ fn folder_key(dir: &str) -> String {
         return "/".to_string();
     }
     dir.trim_end_matches('/').to_string()
+}
+
+/// Resolves `dir` to an existing `folders` key, falling back to canonicalization
+/// so symlinked folder paths match the canonical key stored by `plan_for`.
+fn resolve_folder_key(folders: &HashMap<String, Folder>, dir: &str) -> String {
+    let key = folder_key(dir);
+    if key.is_empty() || folders.contains_key(&key) {
+        return key;
+    }
+    if let Ok(canon) = std::fs::canonicalize(dir) {
+        let canon_key = folder_key(&canon.to_string_lossy());
+        if folders.contains_key(&canon_key) {
+            return canon_key;
+        }
+    }
+    key
 }
 
 /// What the engine does with a folder's running work when a window's client
@@ -623,6 +641,8 @@ struct Inner {
     /// The join under way, and whether its event stream already ended.
     joining: Option<u64>,
     joining_lost: bool,
+    /// Non-shown folder joins under way, mapped to `(generation, lost)`.
+    joining_folders: HashMap<String, (u64, bool)>,
     reconnect: Option<JoinHandle<()>>,
 }
 
@@ -702,6 +722,7 @@ impl WindowConn {
                 counter: 0,
                 joining: None,
                 joining_lost: false,
+                joining_folders: HashMap::new(),
                 reconnect: None,
             }),
             calls: Mutex::default(),
@@ -890,16 +911,21 @@ impl WindowConn {
     /// not keep it joined, then makes it the folder the page reads. Nothing
     /// leaves: the folder it showed before stays joined (owner, 2026-10-22).
     async fn show(self: &Arc<Self>, dir: &str, plan: impl Future<Output = AppResult<Plan>>) -> AppResult<OpenResult> {
-        let dir = folder_key(dir);
-        if self.inner().shown.as_deref() == Some(dir.as_str()) {
-            if let Some(opened) = self.inner().opened.clone() {
-                return Ok(opened);
+        let resolved = resolve_folder_key(&self.inner().folders, dir);
+        {
+            let inner = self.inner();
+            if inner.shown.as_deref() == Some(resolved.as_str()) {
+                if let Some(opened) = inner.opened.clone() {
+                    return Ok(opened);
+                }
             }
         }
-        if !self.inner().folders.contains_key(&dir) {
-            self.open_folder(plan).await?;
-        }
-        let (opened, from, link, client_id) = {
+        let dir = if !self.inner().folders.contains_key(&resolved) {
+            self.open_folder(plan).await?.dir
+        } else {
+            resolved
+        };
+        let (opened, from, link, client_id, was_reviving, old_reader) = {
             let mut inner = self.inner();
             if inner.phase == Phase::Closed {
                 return Err(closed());
@@ -912,21 +938,36 @@ impl WindowConn {
                     "Crush Desktop is reconnecting to the Crush engine; try again in a moment.",
                 ));
             }
-            let Some(folder) = inner.folders.get(&dir) else {
+            let Some(folder) = inner.folders.get_mut(&dir) else {
                 return Err(AppError::new(
                     "engine_unavailable",
                     format!("Crush Desktop has not joined {dir}."),
                 ));
             };
+            let was_reviving = folder.reviving;
+            let mut old_reader = None;
+            if was_reviving {
+                folder.reviving = false;
+                old_reader = folder.reader.take();
+            }
             let parts = (folder.opened.clone(), folder.link.clone(), folder.client_id.clone());
-            inner.plan = Some(folder.plan.clone());
+            let plan = folder.plan.clone();
+            inner.plan = Some(plan);
             let from = inner.shown.replace(dir.clone());
             inner.current_session = None;
             inner.opened = Some(parts.0.clone());
-            (parts.0, from, parts.1, parts.2)
+            if was_reviving {
+                // Invalidate any in-flight stream_next / keep_reader from the background revive.
+                inner.counter += 1;
+                let generation = inner.counter;
+                if let Some(folder) = inner.folders.get_mut(&dir) {
+                    folder.generation = generation;
+                }
+                self.start_reconnect(&mut inner);
+            }
+            (parts.0, from, parts.1, parts.2, was_reviving, old_reader)
         };
-        let base = format!("/v1/workspaces/{}", encode(&link.workspace_id));
-        let client = format!("client_id={}", encode(&client_id));
+        drop(old_reader);
         // The folder it left reports no chat, so no phone of a share there
         // thinks one of its chats is on this window's screen.
         let left = from.filter(|old| old != &dir).and_then(|old| {
@@ -940,6 +981,15 @@ impl WindowConn {
             let old_client = format!("client_id={}", encode(&old_client));
             self.send_current_session(&old_link.http, &old_base, &old_client, "").await;
         }
+        if was_reviving {
+            self.log(&format!(
+                "showing {dir} while its stream is reconnecting (workspace {})",
+                opened.workspace["id"]
+            ));
+            return Ok(opened);
+        }
+        let base = format!("/v1/workspaces/{}", encode(&link.workspace_id));
+        let client = format!("client_id={}", encode(&client_id));
         // A folder the window only kept joined runs its agent now (it needs
         // one for the chats the page will send here).
         let init = json!({"interactive": true});
@@ -963,16 +1013,16 @@ impl WindowConn {
     /// work going (keep_work), and the page drops it. The shown folder stays
     /// until another one is shown.
     async fn leave_folder(self: &Arc<Self>, dir: &str) -> AppResult<()> {
-        let dir = folder_key(dir);
-        let folder = {
+        let (dir, folder) = {
             let mut inner = self.inner();
+            let dir = resolve_folder_key(&inner.folders, dir);
             if inner.shown.as_deref() == Some(dir.as_str()) {
                 return Err(AppError::new(
                     "folder_shown",
                     "Crush Desktop shows this folder; show another one first.",
                 ));
             }
-            inner.folders.remove(&dir)
+            (dir.clone(), inner.folders.remove(&dir))
         };
         if let Some(folder) = folder {
             self.log(&format!("letting {dir} go"));
@@ -1023,15 +1073,16 @@ impl WindowConn {
         let base = format!("/v1/workspaces/{}", encode(&workspace_id));
         let client = format!("client_id={}", encode(&plan.client_id));
 
-        let generation = self.begin_join(shown);
+        let dir = folder_key(&plan.cwd);
+        let generation = self.begin_join(shown, &dir);
         let stream = match http.stream(&format!("{base}/events?{client}")).await {
             Ok(stream) => stream,
             Err(e) => {
-                self.end_join(generation);
+                self.end_join(shown, &dir, generation);
                 return Err(held(e));
             }
         };
-        let reader = Owned(Some(self.start_reader(stream, folder_key(&plan.cwd), generation)));
+        let reader = Owned(Some(self.start_reader(stream, dir.clone(), generation)));
 
         // Agent init: a failure is logged, not fatal, as in the terminal
         // (internal/cmd/workspace_setup.go:204-208): a project with no model
@@ -1067,10 +1118,11 @@ impl WindowConn {
             opened: opened.clone(),
             generation,
             reader: None,
+            reviving: false,
         };
         if !shown {
             // The page learns of it from the command's answer, not an event.
-            self.install_folder(folder, reader).await.map_err(|e| (e, None))?;
+            self.install_folder(generation, folder, reader).await.map_err(held)?;
             return Ok(opened);
         }
         let opened = self.install(generation, reader, folder, opened, attempt).await.map_err(held)?;
@@ -1139,22 +1191,32 @@ impl WindowConn {
         }
     }
 
-    fn begin_join(&self, shown: bool) -> u64 {
+    fn begin_join(&self, shown: bool, dir: &str) -> u64 {
         let mut inner = self.inner();
         inner.counter += 1;
         let generation = inner.counter;
         if shown {
             inner.joining = Some(generation);
             inner.joining_lost = false;
+        } else {
+            inner.joining_folders.insert(dir.to_string(), (generation, false));
         }
         generation
     }
 
-    fn end_join(&self, generation: u64) {
+    fn end_join(&self, shown: bool, dir: &str, generation: u64) {
         let mut inner = self.inner();
-        if inner.joining == Some(generation) {
-            inner.joining = None;
-            inner.joining_lost = false;
+        if shown {
+            if inner.joining == Some(generation) {
+                inner.joining = None;
+                inner.joining_lost = false;
+            }
+        } else if inner
+            .joining_folders
+            .get(dir)
+            .is_some_and(|&(join_gen, _)| join_gen == generation)
+        {
+            inner.joining_folders.remove(dir);
         }
     }
 
@@ -1206,7 +1268,7 @@ impl WindowConn {
 
     /// The last join step for a folder the window keeps beside the one it
     /// shows: it joins quietly, reaching the page as no connection event.
-    async fn install_folder(&self, mut folder: Folder, reader: Owned) -> AppResult<OpenedFolder> {
+    async fn install_folder(&self, generation: u64, mut folder: Folder, reader: Owned) -> AppResult<OpenedFolder> {
         let dir = folder_key(&folder.opened.cwd);
         let opened = OpenedFolder {
             dir: dir.clone(),
@@ -1215,10 +1277,31 @@ impl WindowConn {
             engine: folder.opened.engine.clone(),
         };
         folder.reader = Some(reader);
+        folder.reviving = false;
         {
             let mut inner = self.inner();
+            let lost = inner
+                .joining_folders
+                .get(&dir)
+                .is_some_and(|&(join_gen, lost)| join_gen == generation && lost);
+            if inner
+                .joining_folders
+                .get(&dir)
+                .is_some_and(|&(join_gen, _)| join_gen == generation)
+            {
+                inner.joining_folders.remove(&dir);
+            }
             if inner.phase == Phase::Closed {
                 return Err(closed());
+            }
+            if inner.shown.as_deref() == Some(dir.as_str()) {
+                return Err(AppError::new("aborted", "This folder is now shown; reconnect owns it."));
+            }
+            if lost {
+                return Err(AppError::new(
+                    "transport",
+                    "The Crush engine's event stream ended while the window joined it.",
+                ));
             }
             inner.folders.insert(dir.clone(), folder);
         };
@@ -1288,7 +1371,10 @@ impl WindowConn {
             let shown = inner.shown.clone();
             let engines: Vec<std::path::PathBuf> = dirs
                 .iter()
-                .filter_map(|dir| Some(folder_key(dir)).filter(|key| !key.is_empty()).or_else(|| shown.clone()))
+                .filter_map(|dir| {
+                    let key = resolve_folder_key(&inner.folders, dir);
+                    (!key.is_empty()).then_some(key).or_else(|| shown.clone())
+                })
                 .filter_map(|key| inner.folders.get(&key).map(|folder| folder.link.http.socket().to_path_buf()))
                 .collect();
             let gone: Vec<String> = inner
@@ -1321,37 +1407,62 @@ impl WindowConn {
     /// Starts one reconnect; a second trigger while one runs, or a trigger
     /// from an older stream, is ignored.
     fn lost(self: &Arc<Self>, dir: &str, generation: u64, why: &str) {
-        let (shown, current, joining) = {
-            let inner = self.inner();
-            (
-                inner.shown.as_deref() == Some(dir),
-                inner.folders.get(dir).map(|folder| folder.generation),
-                inner.joining,
-            )
-        };
-        if shown && joining == Some(generation) {
-            self.inner().joining_lost = true;
-            return;
+        enum Action {
+            Ignore,
+            Reconnect,
+            Revive,
         }
-        if current != Some(generation) {
-            return;
-        }
-        if shown {
+        let action = {
             let mut inner = self.inner();
-            if inner.phase != Phase::Connected {
+            if inner.joining == Some(generation) {
+                inner.joining_lost = true;
                 return;
             }
-            self.log(&format!("lost the engine ({why}); reconnecting"));
-            if let Some(reader) = inner.folders.get_mut(dir).and_then(|folder| folder.reader.take()) {
-                drop(reader);
+            let shown = inner.shown.as_deref() == Some(dir);
+            if !shown {
+                if let Some((join_gen, lost)) = inner.joining_folders.get_mut(dir) {
+                    if *join_gen == generation {
+                        *lost = true;
+                        return;
+                    }
+                }
             }
-            self.start_reconnect(&mut inner);
-            return;
+            if inner.folders.get(dir).map(|folder| folder.generation) != Some(generation) {
+                Action::Ignore
+            } else if shown {
+                if inner.phase != Phase::Connected {
+                    Action::Ignore
+                } else {
+                    if let Some(reader) = inner.folders.get_mut(dir).and_then(|folder| folder.reader.take()) {
+                        drop(reader);
+                    }
+                    self.start_reconnect(&mut inner);
+                    Action::Reconnect
+                }
+            } else {
+                // A new generation: a reader for the lost one that is still
+                // on its way to keep_reader is dropped there, so it cannot
+                // clear `reviving` and stop the revive started here.
+                inner.counter += 1;
+                let next = inner.counter;
+                if let Some(folder) = inner.folders.get_mut(dir) {
+                    folder.generation = next;
+                    folder.reviving = true;
+                    if let Some(reader) = folder.reader.take() {
+                        drop(reader);
+                    }
+                }
+                Action::Revive
+            }
+        };
+        match action {
+            Action::Ignore => {}
+            Action::Reconnect => self.log(&format!("lost the engine ({why}); reconnecting")),
+            Action::Revive => {
+                self.log(&format!("{dir}'s stream ended ({why}); taking it up again"));
+                self.revive_stream(dir.to_string());
+            }
         }
-        // A folder the window keeps beside the shown one: take its stream up
-        // again, since that stream is what holds its claim on the engine.
-        self.log(&format!("{dir}'s stream ended ({why}); taking it up again"));
-        self.revive_stream(dir.to_string());
     }
 
     /// Opens a folder's event stream again, quietly, with the same backoff the
@@ -1409,7 +1520,17 @@ impl WindowConn {
                 return Ok(());
             }
         }
-        self.join_as(plan, 0, false).await.map_err(|(e, _)| e)?;
+        match self.join_as(plan, 0, false).await {
+            Ok(_) => {}
+            Err((e, holder)) => {
+                if self.inner().phase == Phase::Closed {
+                    if let Some(http) = holder {
+                        self.retire(&http, &plan.client_id).await;
+                    }
+                }
+                return Err(e);
+            }
+        }
         // Its chats are read again: the new engine's events start now.
         self.push_side(dir, Vec::new(), true);
         Ok(())
@@ -1427,9 +1548,15 @@ impl WindowConn {
     }
 
     /// The link of a joined folder with a new stream generation, or None once
-    /// it has left the window.
+    /// it has left the window or became the shown folder.
     fn stream_next(&self, dir: &str) -> Option<(Link, String, u64, Arc<Plan>)> {
         let mut inner = self.inner();
+        if inner.shown.as_deref() == Some(dir) {
+            return None;
+        }
+        if !inner.folders.get(dir)?.reviving {
+            return None;
+        }
         inner.counter += 1;
         let generation = inner.counter;
         let folder = inner.folders.get_mut(dir)?;
@@ -1439,7 +1566,11 @@ impl WindowConn {
 
     fn keep_reader(&self, dir: &str, generation: u64, reader: Owned) {
         let mut inner = self.inner();
+        if inner.shown.as_deref() == Some(dir) && inner.phase != Phase::Connected {
+            return;
+        }
         if let Some(folder) = inner.folders.get_mut(dir).filter(|folder| folder.generation == generation) {
+            folder.reviving = false;
             let old = folder.reader.replace(reader);
             drop(old);
         }
@@ -1536,9 +1667,16 @@ impl WindowConn {
                 "Crush Desktop lost its connection to the Crush engine; nothing was sent.",
             ));
         }
-        let key = match dir.map(folder_key) {
-            Some(key) if !key.is_empty() => key,
-            _ => inner.shown.clone().ok_or_else(not_open)?,
+        let key = match dir {
+            Some(raw) => {
+                let resolved = resolve_folder_key(&inner.folders, raw);
+                if !resolved.is_empty() {
+                    resolved
+                } else {
+                    inner.shown.clone().ok_or_else(not_open)?
+                }
+            }
+            None => inner.shown.clone().ok_or_else(not_open)?,
         };
         let folder = inner.folders.get(&key).ok_or_else(|| {
             AppError::new(

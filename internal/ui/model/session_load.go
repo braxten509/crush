@@ -289,6 +289,8 @@ func (m *UI) applyLoadedSession(msg loadSessionMsg) []tea.Cmd {
 			cmds = append(cmds, cmd)
 		}
 		m.turnOutcome = ""
+		// @-file reads queued for another chat must not leak into this one.
+		m.sessionFileReads = nil
 	}
 	m.setState(uiChat, m.focus)
 	m.session = sess

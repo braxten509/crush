@@ -29,8 +29,9 @@ func (m *UI) handleSecureEntryMsg(msg tea.Msg) (cmd tea.Cmd, ok bool) {
 	case secureQuestionClosedMsg:
 		if form, ok := m.activeInline.(*questionform.QuestionForm); ok && form.OwnsSecureForm(typed.form) {
 			m.dropQuestionForm()
-			m.textarea.Focus()
+			cmd := m.setFocus(uiFocusEditor)
 			m.updateLayoutAndSize()
+			return cmd, true
 		}
 		return nil, true
 	case questionform.SecureQuestionPaste:

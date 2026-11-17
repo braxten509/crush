@@ -151,7 +151,7 @@ func recordFileChange(edit editContext, sessionID, filePath, oldContent, newCont
 // history version and its content, and a read in the file tracker. Like
 // recordFileChange, it logs history failures instead of returning them.
 func recordNewFile(edit editContext, sessionID, filePath, content string) error {
-	if filechange.InRepository(filechange.RepositoryRoot(edit.workingDir), edit.workingDir, filePath) {
+	if edit.files != nil && filechange.InRepository(filechange.RepositoryRoot(edit.workingDir), edit.workingDir, filePath) {
 		// File can't be in the history so we create a new file history.
 		if _, err := edit.files.Create(edit.ctx, sessionID, filePath, ""); err != nil {
 			slog.Error("Error creating file history", "error", err)
@@ -160,7 +160,9 @@ func recordNewFile(edit editContext, sessionID, filePath, content string) error 
 			slog.Error("Error creating file history version", "error", err)
 		}
 	}
-	edit.filetracker.RecordRead(edit.ctx, sessionID, filePath)
+	if edit.filetracker != nil {
+		edit.filetracker.RecordRead(edit.ctx, sessionID, filePath)
+	}
 	return nil
 }
 

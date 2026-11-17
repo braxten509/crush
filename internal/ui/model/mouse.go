@@ -165,14 +165,16 @@ func (m *UI) dragChat(msg tea.MouseMotionMsg) (tea.Cmd, updateFlow) {
 	// inline components. It is for dragging a selection, so a move with no
 	// button held (sent while something asks for every move) never
 	// scrolls: that would leave the newest messages out of view.
-	if msg.Button != tea.MouseNone && (m.activeInline == nil || m.focus != uiFocusEditor) {
-		if msg.Y <= 0 {
+	// Adjust for chat area position.
+	y := msg.Y - m.layout.main.Min.Y
+	if msg.Button != tea.MouseNone && m.chat.Height() > 0 && (m.activeInline == nil || m.focus != uiFocusEditor) {
+		if y <= 0 {
 			m.chat.ScrollBy(-1)
 			if !m.chat.SelectedItemInView() {
 				m.chat.SelectPrev()
 				m.chat.ScrollToSelected()
 			}
-		} else if msg.Y >= m.chat.Height()-1 {
+		} else if y >= m.chat.Height()-1 {
 			m.chat.ScrollBy(1)
 			if !m.chat.SelectedItemInView() {
 				m.chat.SelectNext()
@@ -181,8 +183,7 @@ func (m *UI) dragChat(msg tea.MouseMotionMsg) (tea.Cmd, updateFlow) {
 		}
 	}
 
-	// Adjust for chat area position
-	m.chat.HandleMouseDrag(msg.X-m.layout.main.Min.X, msg.Y-m.layout.main.Min.Y)
+	m.chat.HandleMouseDrag(msg.X-m.layout.main.Min.X, y)
 	return nil, flowContinue
 }
 

@@ -416,7 +416,11 @@ func setLimitsAt(k limitKey, limits []Limit, refills int, at time.Time) {
 	}
 	delete(limitStore.lastErr, k)
 	delete(limitStore.seeded, k)
-	known, modelsAt := limitStore.refills[k], limitStore.modelsAt[k]
+	known := -1
+	if v, ok := limitStore.refills[k]; ok {
+		known = v
+	}
+	modelsAt := limitStore.modelsAt[k]
 	limitStore.Unlock()
 	saveLimits(k, limits, known, at, modelsAt)
 	limitsChanged(k)

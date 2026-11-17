@@ -103,7 +103,9 @@ func (m *UI) handleWorkspaceEvent(msg tea.Msg) (tea.Cmd, updateFlow, bool) {
 			cmds = append(cmds, cmd)
 		}
 	case pubsub.Event[question.Notification]:
-		m.handleQuestionNotification(msg.Payload)
+		if cmd := m.handleQuestionNotification(msg.Payload); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 	case pubsub.Event[pinentry.Event]:
 		cmds = append(cmds, m.handlePinentryEvent(msg.Payload))
 	case pubsub.Event[pinentry.PromptRequest]:

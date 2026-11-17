@@ -29,12 +29,15 @@ func StopChatWork(c Coordinator, sessionID string) {
 		}
 	}
 	cancelTree([]string{sessionID})
-	tree := chatTree(sessionID)
+	tree := chatTree(sessionID, co)
 	hubsMu.Lock()
 	listed := slices.Clone(hubs)
 	hubsMu.Unlock()
 	for _, h := range listed {
 		h.stopTreeTasks(tree)
+	}
+	if co != nil {
+		co.stopTreeDispatched(tree)
 	}
 	for _, id := range tree {
 		stopChatJobs(id)
@@ -54,12 +57,19 @@ func StopChatWork(c Coordinator, sessionID string) {
 
 // chatTree lists sessionID and the chats of its sub-agents, theirs, and so
 // on, ended ones included: an ended helper's own helper may still run.
-func chatTree(sessionID string) []string {
+func chatTree(sessionID string, co *coordinator) []string {
 	tree := []string{sessionID}
 	for i := 0; i < len(tree); i++ {
 		for _, t := range SessionTasks(tree[i]) {
 			if t.ChildID != "" && !slices.Contains(tree, t.ChildID) {
 				tree = append(tree, t.ChildID)
+			}
+		}
+		if co != nil && co.dispatched != nil {
+			for _, entry := range co.dispatched.Seq2() {
+				if entry.ParentSessionID == tree[i] && entry.SessionID != "" && !slices.Contains(tree, entry.SessionID) {
+					tree = append(tree, entry.SessionID)
+				}
 			}
 		}
 	}

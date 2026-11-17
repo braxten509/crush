@@ -923,6 +923,47 @@ func (c *coordinator) stopAllDispatched(reason string, timeout time.Duration) {
 	}
 }
 
+// hasRunningDispatchFor reports whether any detached subagent owned by or
+// running as sessionID is still active.
+func (c *coordinator) hasRunningDispatchFor(sessionID string) bool {
+	if c == nil || c.dispatched == nil {
+		return false
+	}
+	for _, entry := range c.dispatched.Seq2() {
+		if (entry.ParentSessionID == sessionID || entry.SessionID == sessionID) && entry.running() {
+			return true
+		}
+	}
+	return false
+}
+
+// runningDispatchCount counts detached subagents currently running.
+func (c *coordinator) runningDispatchCount() int {
+	if c == nil || c.dispatched == nil {
+		return 0
+	}
+	n := 0
+	for _, entry := range c.dispatched.Seq2() {
+		if entry.running() {
+			n++
+		}
+	}
+	return n
+}
+
+// stopTreeDispatched stops running detached subagents whose parent chat is in
+// tree without reporting back to the closing parent.
+func (c *coordinator) stopTreeDispatched(tree []string) {
+	if c == nil || c.dispatched == nil {
+		return
+	}
+	for _, entry := range c.dispatched.Seq2() {
+		if slices.Contains(tree, entry.ParentSessionID) {
+			entry.stop(stopForShutdown)
+		}
+	}
+}
+
 // trackSubSession marks a subagent session as live until the returned func
 // is called. The coordinator's busy check consults this, so a reader settling
 // half-finished sessions never mistakes a working subagent for a dead one.

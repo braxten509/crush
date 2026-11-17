@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 
 	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/config"
@@ -68,10 +69,14 @@ func home(kind catwalk.Type) (string, error) {
 	return "", fmt.Errorf("%s has no accounts", kind)
 }
 
+var prepareMu sync.Mutex
+
 // Prepare makes an account's folder, or brings it up to date: whatever the
 // tool's own folder gained since is linked in, and Claude's MCP servers are
 // copied into the account's own settings file. It returns the folder.
 func Prepare(kind catwalk.Type, id string) (string, error) {
+	prepareMu.Lock()
+	defer prepareMu.Unlock()
 	dir := config.AccountDir(id)
 	if dir == "" {
 		return "", errors.New("account 1 is the tool's own folder")
@@ -97,7 +102,7 @@ func Prepare(kind catwalk.Type, id string) (string, error) {
 			}
 			target := filepath.Join(dir, name)
 			if link, err := os.Readlink(target); err == nil && link == filepath.Join(src, name) {
-				if err := os.Remove(target); err != nil {
+				if err := os.Remove(target); err != nil && !os.IsNotExist(err) {
 					return "", err
 				}
 			}
@@ -112,7 +117,7 @@ func Prepare(kind catwalk.Type, id string) (string, error) {
 		if _, err := os.Lstat(target); err == nil {
 			continue // linked before, or the account's own
 		}
-		if err := os.Symlink(filepath.Join(src, name), target); err != nil {
+		if err := os.Symlink(filepath.Join(src, name), target); err != nil && !os.IsExist(err) {
 			return "", err
 		}
 	}
@@ -176,11 +181,25 @@ func syncClaudeSettings(dir string) error {
 	if err != nil {
 		return err
 	}
-	tmp := path + ".crush-tmp"
-	if err := os.WriteFile(tmp, next, 0o600); err != nil {
+	tmp, err := os.CreateTemp(dir, ".claude.json.crush-*.tmp")
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, path)
+	tmpName := tmp.Name()
+	if _, err := tmp.Write(next); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpName)
+		return err
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		_ = os.Remove(tmpName)
+		return err
+	}
+	return nil
 }
 
 // LoginArgv is the command that signs an account in, in a terminal.

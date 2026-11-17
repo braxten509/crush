@@ -88,12 +88,12 @@ func (m *UI) focusActiveInline(focus uiFocusState) {
 func (m *UI) closeDoneInline() tea.Cmd {
 	prev := m.activeInline
 	m.activeInline = nil
-	m.textarea.Focus()
+	focusCmd := m.setFocus(uiFocusEditor)
 	m.updateLayoutAndSize()
 	if cod, ok := prev.(dialog.CmdOnDone); ok {
-		return cod.PendingCmd()
+		return tea.Batch(focusCmd, cod.PendingCmd())
 	}
-	return nil
+	return focusCmd
 }
 
 // forwardMouseToTextarea forwards a mouse event to the textarea with
@@ -383,7 +383,9 @@ func (m *UI) applyFileCompletion(msg fileCompletionMsg) tea.Cmd {
 	if msg.noSession && slices.Contains(m.sessionFileReads, msg.absPath) {
 		return nil
 	}
-	m.sessionFileReads = append(m.sessionFileReads, msg.absPath)
+	if !slices.Contains(m.sessionFileReads, msg.absPath) {
+		m.sessionFileReads = append(m.sessionFileReads, msg.absPath)
+	}
 	if msg.attachment == nil || !m.attachments.Update(*msg.attachment) {
 		return nil
 	}

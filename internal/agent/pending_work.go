@@ -285,7 +285,7 @@ func (c *coordinator) saveFallbackMemory() {
 	c.fallback.mu.Lock()
 	out := make([]savedOut, 0, len(c.fallback.out))
 	for k, o := range c.fallback.out {
-		out = append(out, savedOut{Kind: string(k.acct.Kind), ID: k.acct.ID, Model: k.model, Until: o.until, Known: o.known, Scoped: true})
+		out = append(out, savedOut{Kind: string(k.acct.Kind), ID: k.acct.ID, Model: k.model, Until: o.until, Room: o.room, Known: o.known, Scoped: true})
 	}
 	var ret map[string]savedReturn
 	for sessionID, r := range c.fallback.ret {

@@ -71,8 +71,9 @@ type ConfigStore struct {
 	// build a fresh Config rather than mutating the live one.
 	configMu sync.RWMutex
 
-	mu      sync.Mutex   // serialises config file writes
-	writeMu sync.RWMutex // serialises in-memory config production (mutators + reload); RLock for readers
+	mu          sync.Mutex   // serialises config file writes
+	writeMu     sync.RWMutex // serialises in-memory config production (mutators + reload); RLock for readers
+	stalenessMu sync.RWMutex // guards trackedConfigPaths and snapshots
 
 	// refreshSF collapses concurrent in-process OAuth refreshes for the
 	// same provider into a single attempt. Combined with the per-provider

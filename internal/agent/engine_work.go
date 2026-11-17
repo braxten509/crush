@@ -29,6 +29,7 @@ func RunningWork(c Coordinator) (chats, helpers int) {
 	if co.tasks != nil {
 		helpers = co.tasks.runningCount()
 	}
+	helpers += co.runningDispatchCount()
 	return len(co.busySessions()), helpers
 }
 

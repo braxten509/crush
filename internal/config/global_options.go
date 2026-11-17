@@ -8,7 +8,12 @@ import "context"
 // launcher`, which reads options.remote_launch_target at each launch
 // (desktop design 5-6, G-17).
 func GlobalOptions(ctx context.Context) (*Options, error) {
-	cfg, _, err := loadFromConfigPaths(ctx, []string{GlobalConfig(), GlobalConfigData()})
+	cfg, _, err := loadFromConfigPaths(ctx, []string{
+		systemConfigPath,
+		GlobalConfig(),
+		shellConfigSibling(GlobalConfig()),
+		GlobalConfigData(),
+	})
 	if err != nil {
 		return nil, err
 	}

@@ -237,7 +237,7 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 	r.catalogWindow, r.catalogLimit, r.effectivePercent = codexCatalogContext(m.ID)
 	defer func() {
 		if r.finished && keep && r.threadID != "" {
-			codexSessions.keep(t.SessionID, &codexLive{liveProc: liveProc[codexKey]{p: p, lines: lines, key: key}, thread: r.threadID}, nil, nil)
+			codexSessions.keep(t.SessionID, &codexLive{liveProc: liveProc[codexKey]{p: p, lines: lines, key: key}, thread: r.threadID}, nil, nil, nil)
 		} else {
 			p.finish()
 		}

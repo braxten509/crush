@@ -124,7 +124,7 @@ var (
 	QueuedSummaries  = Op[Empty, []message.QueuedPromptSummary]{Method: get, Path: "/v1/workspaces/{id}/agent/sessions/{sid}/prompts/list"}
 	ClearQueue       = Op[Empty, Empty]{Method: post, Path: "/v1/workspaces/{id}/agent/sessions/{sid}/prompts/clear"}
 	RecallQueued     = Op[Empty, *proto.AgentMessage]{Method: post, Path: "/v1/workspaces/{id}/agent/sessions/{sid}/prompts/recall"}
-	InterruptAgent   = Op[Empty, Empty]{Method: post, Path: "/v1/workspaces/{id}/agent/sessions/{sid}/interrupt"}
+	InterruptAgent   = Op[Empty, proto.InterruptResult]{Method: post, Path: "/v1/workspaces/{id}/agent/sessions/{sid}/interrupt"}
 	SummarizeSession = Op[Empty, Empty]{Method: post, Path: "/v1/workspaces/{id}/agent/sessions/{sid}/summarize"}
 	RunShellCommand  = Op[proto.ShellCommandRequest, proto.ShellCommandResponse]{Method: post, Path: "/v1/workspaces/{id}/agent/sessions/{sid}/shell"}
 )

@@ -360,28 +360,62 @@ func (s *Service) StopLockingWith(ctx context.Context, id, password string) erro
 	}
 	s.goBackground(func(ctx context.Context) {
 		defer s.release(id)
-		if err := s.stopNow(ctx, id, state); err != nil {
+		if err := s.stopNow(ctx, id); err != nil {
 			s.notify(id, err)
 		}
 	})
 	return nil
 }
 
-func (s *Service) stopNow(ctx context.Context, id, state string) error {
+func (s *Service) stopNow(ctx context.Context, id string) error {
 	mount, err := s.openVault(ctx)
 	if err != nil {
 		return err
 	}
-	if state == session.LockStateLocked {
-		if err := s.unlockNow(ctx, id); err != nil {
+	var unlock func()
+	defer func() {
+		if unlock != nil {
+			unlock()
+		}
+	}()
+	for {
+		state, _, _, err := s.state(ctx, id)
+		if err != nil {
 			return err
 		}
+		if state == "" {
+			return nil
+		}
+		if state == session.LockStateLocked || state == session.LockStateUnlocking {
+			if err := s.unlockNow(ctx, id); err != nil {
+				return err
+			}
+			continue
+		}
+		lockRelease, err := s.chatLock(ctx, id)
+		if err != nil {
+			return err
+		}
+		now, _, _, err := s.state(ctx, id)
+		if err != nil {
+			lockRelease()
+			return err
+		}
+		if now == "" {
+			lockRelease()
+			return nil
+		}
+		if now == session.LockStateLocked || now == session.LockStateUnlocking {
+			lockRelease()
+			continue
+		}
+		if now != session.LockStateUnlocked && now != session.LockStateRelock {
+			lockRelease()
+			return ErrBusyLocking
+		}
+		unlock = lockRelease
+		break
 	}
-	unlock, err := s.chatLock(ctx, id)
-	if err != nil {
-		return err
-	}
-	defer unlock()
 	if err := os.RemoveAll(filepath.Join(mount, "chats", safeName(id))); err != nil {
 		return err
 	}
@@ -685,7 +719,10 @@ func (s *Service) collect(ctx context.Context, ids []string, digests, exclusive 
 			}
 			for _, path := range pathPattern.FindAllString(text, -1) {
 				path = strings.TrimRight(path, ".,;:)]}")
-				if !hasPrefix(path, prefixes) || seen[path] || !fileExists(path) || strings.HasSuffix(path, "crush.db") {
+				if !hasPrefix(path, prefixes) || seen[path] || strings.HasPrefix(filepath.Base(path), "crush.db") {
+					continue
+				}
+				if info, err := os.Lstat(path); err != nil || !info.Mode().IsRegular() {
 					continue
 				}
 				if strings.Contains(path, string(filepath.Separator)+"file-history"+string(filepath.Separator)) {

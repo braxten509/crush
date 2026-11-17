@@ -46,17 +46,21 @@ func getRgCmd(ctx context.Context, globPattern string) *exec.Cmd {
 	return exec.CommandContext(ctx, name, args...)
 }
 
-func getRgSearchCmd(ctx context.Context, pattern, path, include string) *exec.Cmd {
+func getRgSearchCmd(ctx context.Context, pattern, path, include string, ignoreFiles ...string) *exec.Cmd {
 	name := GetRg()
 	if name == "" {
 		return nil
 	}
-	// Use -n to show line numbers, -0 for null separation to handle Windows paths
-	args := []string{"--json", "-H", "-n", "-0", pattern}
+	// Use -n to show line numbers, -0 for null separation to handle Windows paths.
+	// Use -e and -- so patterns or paths starting with '-' are never parsed as flags.
+	args := []string{"--json", "-H", "-n", "-0"}
 	if include != "" {
 		args = append(args, "--glob", include)
 	}
-	args = append(args, path)
+	for _, ignoreFile := range ignoreFiles {
+		args = append(args, "--ignore-file", ignoreFile)
+	}
+	args = append(args, "-e", pattern, "--", path)
 
 	return exec.CommandContext(ctx, name, args...)
 }

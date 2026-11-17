@@ -120,12 +120,14 @@ func (m *UI) handleChannelMessage(ev mcp.Event) tea.Cmd {
 // pending at a time, so any notification means the current form
 // is stale regardless of BatchID. The CLI update form isn't one of
 // the service's questions, so it stays.
-func (m *UI) handleQuestionNotification(_ question.Notification) {
+func (m *UI) handleQuestionNotification(_ question.Notification) tea.Cmd {
 	if form, ok := m.activeInline.(*questionform.QuestionForm); ok && !m.cliUpdatePromptOpen() && !form.HasSecureEntry() {
 		m.activeInline = nil
-		m.textarea.Focus()
+		cmd := m.setFocus(uiFocusEditor)
 		m.updateLayoutAndSize()
+		return cmd
 	}
+	return nil
 }
 
 // handlePermissionNotification updates tool items when permission state changes.

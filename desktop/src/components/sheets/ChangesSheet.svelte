@@ -251,7 +251,7 @@
   >
     {#if files !== null && !tiny}
       <nav class="files" aria-label="Changed files" {@attach size((rect) => (listWidth = rect.width))}>
-        {#each files as file, i (file.path)}
+        {#each files as file, i (`${file.path}\u0000${i}`)}
           <button class="list-row" type="button" onclick={() => jumpTo(i)}>
             <span class="square {kindTone(file.kind)}" aria-hidden="true"></span>
             <span class="path">{listPath(file)}</span>
@@ -264,7 +264,7 @@
         {/each}
       </nav>
       <div class="diffs" bind:this={scroller} onscroll={() => (scrollTop = scroller.scrollTop)}>
-        {#each files as file, i (file.path)}
+        {#each files as file, i (`${file.path}\u0000${i}`)}
           {@const head = fileHead(file)}
           <section class="file" bind:this={sections[i]}>
             <button class="file-head" type="button" data-path={file.path} aria-expanded={!folded[i]} onclick={() => fold(i)}>

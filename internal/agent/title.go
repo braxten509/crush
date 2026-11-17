@@ -49,14 +49,16 @@ func (a *sessionAgent) generateTitle(ctx context.Context, sessionID string, user
 	}
 
 	// Ensure the session always gets a title even if every path below
-	// fails or the context is cancelled before we finish.
+	// fails or the context is cancelled before we finish: the start of the
+	// prompt, as for an empty reply, so a chat whose title models all
+	// failed (out of usage, too slow) is never left "Untitled".
 	var titleSaved bool
 	defer func() {
 		if !titleSaved {
 			// WithoutCancel also drops the title timeout's deadline.
 			fallbackCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 			defer cancel()
-			if err := a.sessions.Rename(fallbackCtx, sessionID, DefaultSessionName); err != nil {
+			if err := a.sessions.Rename(fallbackCtx, sessionID, cleanTitle("", userPrompt)); err != nil {
 				slog.Error("Failed to save fallback session title", "error", err)
 			}
 		}
@@ -64,7 +66,7 @@ func (a *sessionAgent) generateTitle(ctx context.Context, sessionID string, user
 
 	resp, model, success := a.streamTitle(ctx, sessionID, userPrompt)
 	if !success {
-		// The deferred fallback will save the default session name.
+		// The deferred fallback names the chat from the prompt.
 		return
 	}
 

@@ -205,7 +205,7 @@ func (r *codexRun) handleNotification(msg rpcMessage) (done bool, err error) {
 	case "item/started":
 		r.writing = false
 		r.writingDeferred = false
-		r.openItems[params.Item.ID] = true
+		r.openItems[params.Item.ID] = params.Item.Type
 		err = r.handleItemStarted(params.Item)
 	case "item/completed":
 		delete(r.openItems, params.Item.ID)
@@ -323,6 +323,15 @@ func (r *codexRun) handleItemStarted(item codexItem) (err error) {
 			text.WriteString(c.Text)
 		}
 		if typed := withoutImagePaths(text.String()); r.sent.take(typed) {
+			// A message steered in while the model wrote or thought cuts
+			// that item short: Codex never completes it, and the reply to
+			// the message starts a new step.
+			for id, kind := range r.openItems {
+				if kind == "agentMessage" || kind == "reasoning" {
+					delete(r.openItems, id)
+				}
+			}
+			r.textOpen, r.reasoned = false, false
 			err = r.t.Emit(Event{Type: EventUserMessage, Text: typed})
 		}
 	case "agentMessage":

@@ -203,8 +203,8 @@ type codexRun struct {
 	retrying     bool
 	stall        *time.Timer
 	// openItems holds the items Codex started and has not completed, such
-	// as a running tool call; while any is open, silence is expected.
-	openItems map[string]bool
+	// as a running tool call, by type; while any is open, silence is expected.
+	openItems map[string]string
 	// approvals counts requests waiting on the user.
 	approvals atomic.Int32
 
@@ -280,7 +280,7 @@ func newCodexRun(ctx context.Context, m *Model, t Turn) *codexRun {
 		ctx: ctx, m: m, t: t,
 		openCmds:     map[string]time.Time{},
 		backgrounded: map[string]bool{},
-		openItems:    map[string]bool{},
+		openItems:    map[string]string{},
 		calls:        map[string][2]string{},
 		changes:      map[string][]codexChange{},
 		output:       map[string]*strings.Builder{},

@@ -449,10 +449,10 @@ func CanBackground(kind catwalk.Type) bool {
 }
 
 // SteersAnyTime reports whether a CLI folds a queued message into its
-// running turn at any step (OpenCode's own server takes it), not only while
-// a tool runs.
+// running turn at any step (OpenCode's own server takes it, Codex's
+// turn/steer cuts the reply it is writing short), not only while a tool runs.
 func SteersAnyTime(kind catwalk.Type) bool {
-	return kind == config.TypeOpenCodeCLI || kind == config.TypeOpenCodeZenCLI
+	return kind == config.TypeOpenCodeCLI || kind == config.TypeOpenCodeZenCLI || kind == config.TypeCodexCLI
 }
 
 // unprompted holds the handlers [OnUnprompted] registered, one per

@@ -10,14 +10,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// AGY's plan is read over HTTP, so nothing in its stream carries new
+// AGY's plan is read over HTTP, so nothing in its ACP stream carries new
 // usage: the meter must be refreshed as its tool steps run, not only when
 // the turn ends.
 func TestAGYLimitsRefreshDuringToolSteps(t *testing.T) {
-	fakeCLI(t, "agy", `{"event":"init","conversation_id":"conv1"}
-{"event":"step_update","step_update":{"step_index":1,"state":"ACTIVE","step_type":"tool","tool_name":"run_command","tool_info":{"parameters":{"CommandLine":"touch a"}}}}
-{"event":"step_update","step_update":{"step_index":1,"state":"DONE","step_type":"tool","tool_name":"run_command","tool_info":{"parameters":{"CommandLine":"touch a"}}}}
-{"event":"result","result":{"status":"SUCCESS"}}
+	fakeCLI(t, "agy", `{"jsonrpc":"2.0","id":"1","result":{"protocolVersion":1}}
+{"jsonrpc":"2.0","id":"2","result":{"sessionId":"conv1"}}
+{"jsonrpc":"2.0","id":"set-model","result":{}}
+{"jsonrpc":"2.0","method":"session/update","params":{"update":{"sessionUpdate":"tool_call","toolCallId":"c1","name":"run_command","kind":"execute","title":"touch a","status":"in_progress","rawInput":{"CommandLine":"touch a"}}}}
+{"jsonrpc":"2.0","method":"session/update","params":{"update":{"sessionUpdate":"tool_call_update","toolCallId":"c1","name":"run_command","kind":"execute","status":"completed","rawInput":{"CommandLine":"touch a"}}}}
+{"jsonrpc":"2.0","id":"3","result":{"stopReason":"end_turn"}}
 `)
 	// Skip the real ~/.local/bin/agy.
 	t.Setenv("HOME", t.TempDir())

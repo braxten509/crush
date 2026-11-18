@@ -8,8 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Grok gives its tools no standard kind and AGY renamed its own, so the
-// Crush tool is found from the name and the input fields.
+// Grok gives its tools no standard kind and AGY names its fields its own
+// way, so the Crush tool is found from the kind, name and input fields.
 func TestOtherCLIToolNamesMapToCrushTools(t *testing.T) {
 	t.Parallel()
 	for _, test := range []struct {
@@ -23,22 +23,12 @@ func TestOtherCLIToolNamesMapToCrushTools(t *testing.T) {
 		{"grok", "other", "search_replace", map[string]any{"file_path": "/p/a.go", "old_string": "x", "new_string": "y"}, tools.EditToolName, "new_string", "y"},
 		{"grok", "other", "write", map[string]any{"file_path": "/p/b.go", "content": "z"}, tools.WriteToolName, "content", "z"},
 		{"grok", "other", "list_dir", map[string]any{"path": "/p"}, "list_dir", "path", "/p"},
+		{"agy", "edit", "edit_file", map[string]any{"Path": "/p/a.go", "Target": "x", "Replacement": "y"}, tools.EditToolName, "file_path", "/p/a.go"},
+		{"agy", "read", "read_file", map[string]any{"Path": "/p/a.go"}, tools.ViewToolName, "file_path", "/p/a.go"},
 	} {
 		name, input := acpTool2Crush(&acpTool{kind: test.kind, title: test.name, input: test.input})
 		require.Equal(t, test.want, name, "%s %s", test.cli, test.name)
 		require.Equal(t, test.value, field(t, input, test.field), "%s %s", test.cli, test.name)
-	}
-	for _, test := range []struct {
-		name   string
-		params map[string]any
-		want   string
-	}{
-		{"edit_file", map[string]any{"Path": "/p/a.go"}, tools.EditToolName},
-		{"read_file", map[string]any{"Path": "/p/a.go"}, tools.ViewToolName},
-	} {
-		name, input := agyTool(test.name, test.params)
-		require.Equal(t, test.want, name, "agy %s", test.name)
-		require.Equal(t, "/p/a.go", field(t, input, "file_path"), "agy %s", test.name)
 	}
 }
 

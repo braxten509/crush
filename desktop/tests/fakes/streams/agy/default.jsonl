@@ -1,5 +1,4 @@
-{"event":"init","conversation_id":"$SESSION"}
-{"event":"step_update","step_update":{"step_index":0,"state":"ACTIVE","step_type":"agent_response","text_delta":"Reply from the "}}
-{"event":"step_update","step_update":{"step_index":0,"state":"ACTIVE","step_type":"agent_response","text_delta":"fake Antigravity."}}
-{"event":"step_update","step_update":{"step_index":0,"state":"DONE","step_type":"agent_response","usage":{"input_tokens":30,"output_tokens":8,"thinking_tokens":0,"cache_read_tokens":0}}}
-{"event":"result","result":{"status":"SUCCESS","response":"Reply from the fake Antigravity."}}
+{"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "$SESSION", "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "Reply from the "}}}}
+{"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "$SESSION", "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "fake Antigravity."}}}}
+{"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "$SESSION", "update": {"sessionUpdate": "usage_update", "used": 38, "size": 1048576}}}
+{"jsonrpc": "2.0", "id": "$REQUEST", "result": {"stopReason": "end_turn", "usage": {"inputTokens": 30, "outputTokens": 8, "cachedReadTokens": 0, "thoughtTokens": 0}}}

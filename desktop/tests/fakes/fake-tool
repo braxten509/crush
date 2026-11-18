@@ -6,7 +6,7 @@ named after each tool, and:
   ({tool, stdin, at}) in $FAKE_TOOL_LOG;
 - speaks each tool's protocol the way Crush drives it (internal/agent/cliagent):
   Claude Code's stream-json, Codex's app-server JSON-RPC, the Agent Client
-  Protocol for Grok and OpenCode, and AGY's print-mode stream-json;
+  Protocol for Grok, OpenCode and AGY;
 - replays a recorded stream per prompt from tests/fakes/streams/<tool>/<name>.jsonl,
   <name> being the first word of the user's text (the prompt after the blocks
   the engine puts first, such as <crush_skill_settings>; else the first word
@@ -26,7 +26,7 @@ named after each tool, and:
 
 Stream files hold the tool's own output for one prompt, one JSON object per
 line, written from the formats the Go fakes pin (cliagent_test.go:43-63 for
-Claude, :74-86 for Codex, cli_more_test.go:18-34 for ACP, :87-95 for AGY), not
+Claude, :74-86 for Codex, cli_more_test.go:18-34 for ACP), not
 from real sessions. In string values $SESSION is the native session (thread,
 conversation) ID, $TURN the turn ID, $PROMPT the prompt, $CWD the folder, $UUID
 a fresh UUID each time and $UUID1, $UUID2, ... one fresh UUID each per replay;
@@ -39,9 +39,9 @@ Codex's approval requests) waits for Crush's answer, and a denial turns that
 tool's result into an error. They are skipped where the real tool would not
 ask: Claude under --permission-mode bypassPermissions, Codex under approval
 policy "never". An interrupt (Claude's interrupt request, ACP's session/cancel,
-Codex's turn/interrupt, SIGINT for AGY) stops the replay the way the tool does.
+Codex's turn/interrupt) stops the replay the way the tool does.
 """
-import json, os, re, signal, sys, threading, time, uuid
+import json, os, re, sys, threading, time, uuid
 
 TOOL = os.path.basename(sys.argv[0])
 ARGS = sys.argv[1:]
@@ -466,7 +466,7 @@ class Codex(Proto):
             send({"id": rid, "error": {"code": -32601, "message": "not supported by the fake"}})
 
 
-# Grok and OpenCode: the Agent Client Protocol (internal/agent/cliagent/acp.go) --
+# Grok, OpenCode and AGY: the Agent Client Protocol (internal/agent/cliagent/acp.go) --
 
 def acp_text(prompt):
     return "".join(p.get("text", "") for p in prompt or [] if isinstance(p, dict) and p.get("type") == "text")
@@ -531,7 +531,7 @@ class ACP(Proto):
         elif method == "_x.ai/session/fork" and TOOL == "grok":
             # Grok's fork: a new session keeping prompts 0..targetPromptIndex.
             send({"jsonrpc": "2.0", "id": rid, "result": {"newSessionId": "ses-" + uuid.uuid4().hex[:12]}})
-        elif method == "session/load":
+        elif method in ("session/load", "session/resume"):
             self.session = params.get("sessionId")
             send({"jsonrpc": "2.0", "id": rid, "result": {}})
         elif method in ("session/set_model", "session/set_config_option"):
@@ -559,35 +559,6 @@ class ACP(Proto):
                 self.replay.stop()
         elif rid is not None:
             send({"jsonrpc": "2.0", "id": rid, "error": {"code": -32601, "message": "not supported by the fake"}})
-
-
-# AGY: print mode stream-json (internal/agent/cliagent/agy.go) -------------------
-
-class AGY(Proto):
-    def __init__(self):
-        super().__init__()
-        self.session = flag("--conversation") or "conv-" + uuid.uuid4().hex[:12]
-
-    def reply_ids(self, sent):
-        return {"session": self.session}
-
-    def on_line(self, obj):
-        if obj.get("event") != "user" or self.replay is not None:
-            return
-        content = (obj.get("message") or {}).get("content")
-        text = content if isinstance(content, str) else claude_text(obj.get("message"))
-        subs = Subs(SESSION=self.session, PROMPT=text, CWD=os.getcwd())
-        title = title_of(text)
-        subs.title = title is not None
-        if title is not None:
-            lines = [{"event": "init", "conversation_id": "$SESSION"},
-                     {"event": "step_update", "step_update": {"step_index": 1, "state": "ACTIVE", "step_type": "agent_response", "text_delta": title}},
-                     {"event": "step_update", "step_update": {"step_index": 1, "state": "DONE", "step_type": "agent_response"}},
-                     {"event": "result", "result": {"status": "SUCCESS", "response": title}}]
-        else:
-            lines = load_stream(pick_stream(text)) or [{"event": "init", "conversation_id": "$SESSION"},
-                                                       {"event": "result", "result": {"status": "SUCCESS"}}]
-        self.start(lines, subs)
 
 
 def serve(proto):
@@ -628,15 +599,12 @@ def main():
         os.execvp(rest[0], rest)
     elif TOOL == "codex" and ARGS[:1] == ["app-server"]:
         serve(Codex())
-    elif TOOL in ("grok", "opencode") and ("stdio" in ARGS or ARGS[:1] == ["acp"]):
+    elif TOOL in ("grok", "opencode", "agy") and ("stdio" in ARGS or ARGS[:1] == ["acp"]):
         serve(ACP())
     elif TOOL == "agy" and ARGS[:1] == ["models"]:
         print_models(f"{m}\t{n}" for m, n in MODELS["agy"])
     elif TOOL == "opencode" and ARGS[:1] == ["models"]:
         print_models(m for m, _ in MODELS["opencode"])
-    elif TOOL == "agy" and (flag("--input-format") == "stream-json" or any(a.startswith("--print") for a in ARGS)):
-        signal.signal(signal.SIGINT, lambda *_: os._exit(130))
-        serve(AGY())
     return 0
 
 

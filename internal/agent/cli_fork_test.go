@@ -165,20 +165,30 @@ for line in sys.stdin:
         send({'jsonrpc': '2.0', 'id': mid, 'result': {}})
 `
 
-// The fake AGY names its conversations conv<n>, or keeps --conversation;
-// with FAIL it has lost every conversation and always starts a new one.
+// The fake AGY speaks ACP and names its conversations conv<n>; with FAIL it
+// has lost every conversation, so session/resume fails.
 const forkFakeAGY = `
-def flag(name):
-    return args[args.index(name) + 1] if name in args else None
-conv = (None if FAIL else flag('--conversation')) or 'conv%d' % bump('sessions')
+sid = None
 for line in sys.stdin:
     log({'stdin': line.rstrip('\n')})
-    text = 'Reply %d.' % bump('replies')
-    send({'event': 'init', 'conversation_id': conv})
-    send({'event': 'step_update', 'step_update': {'step_index': 1, 'state': 'ACTIVE', 'step_type': 'agent_response', 'text_delta': text}})
-    send({'event': 'step_update', 'step_update': {'step_index': 1, 'state': 'DONE', 'step_type': 'agent_response'}})
-    send({'event': 'result', 'result': {'status': 'SUCCESS', 'response': text}})
-    break
+    msg = json.loads(line)
+    method, mid, params = msg.get('method'), msg.get('id'), msg.get('params') or {}
+    if method == 'initialize':
+        send({'jsonrpc': '2.0', 'id': mid, 'result': {'protocolVersion': 1}})
+    elif method == 'session/new':
+        sid = 'conv%d' % bump('sessions')
+        send({'jsonrpc': '2.0', 'id': mid, 'result': {'sessionId': sid}})
+    elif method == 'session/resume':
+        if FAIL:
+            send({'jsonrpc': '2.0', 'id': mid, 'error': {'code': -32603, 'message': 'Failed to read session'}})
+            continue
+        sid = params['sessionId']
+        send({'jsonrpc': '2.0', 'id': mid, 'result': {'sessionId': sid}})
+    elif method == 'session/prompt':
+        send({'jsonrpc': '2.0', 'method': 'session/update', 'params': {'sessionId': sid, 'update': {'sessionUpdate': 'agent_message_chunk', 'content': {'type': 'text', 'text': 'Reply %d.' % bump('replies')}}}})
+        send({'jsonrpc': '2.0', 'id': mid, 'result': {'stopReason': 'end_turn'}})
+    elif method and mid is not None:
+        send({'jsonrpc': '2.0', 'id': mid, 'result': {}})
 `
 
 // forkRig runs chats and branches through one agent CLI's fake.
@@ -320,7 +330,7 @@ func requests(t *testing.T, calls []forkCall, method string) []map[string]any {
 }
 
 // promptText is what the fake was asked in its turn: the user line of
-// Claude and AGY, turn/start's input for Codex, session/prompt for ACP.
+// Claude, turn/start's input for Codex, session/prompt for ACP and AGY.
 func promptText(t *testing.T, calls []forkCall) string {
 	t.Helper()
 	var texts []string
@@ -566,9 +576,8 @@ func TestAGYWrittenCopy(t *testing.T) {
 
 	r.send(branch, "Third")
 	calls := r.calls()
-	args := argv(calls)
-	require.Len(t, args, 1)
-	require.NotContains(t, args[0], "--conversation", "no session is resumed or forked")
+	require.Len(t, argv(calls), 1)
+	require.Empty(t, requests(t, calls, "session/resume"), "no session is resumed or forked")
 	prompt := promptText(t, calls)
 	require.Contains(t, prompt, handoffWrittenCopyIntro)
 	require.Contains(t, prompt, "Reply 1.")

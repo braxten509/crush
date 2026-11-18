@@ -7,10 +7,12 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/secretguard"
 	"github.com/stretchr/testify/require"
@@ -93,92 +95,138 @@ cat >/dev/null
 	}
 }
 
+// AGY runs through its ACP server: the model is set with session/set_model,
+// its tool shapes map onto Crush's tools, the context meter gets the
+// window AGY reports, and an unknown conversation fails to resume.
 func TestAGYTurn(t *testing.T) {
-	fakeCLI(t, "agy", `{"event":"init","conversation_id":"conv1"}
-{"event":"step_update","step_update":{"step_index":1,"state":"DONE","step_type":"agent_response","usage":{"input_tokens":10,"output_tokens":2,"cache_read_tokens":4}}}
-{"event":"step_update","step_update":{"step_index":2,"state":"ACTIVE","step_type":"tool","tool_name":"run_command","tool_info":{"parameters":{"CommandLine":"touch a"}}}}
-{"event":"step_update","step_update":{"step_index":2,"state":"DONE","step_type":"tool","tool_name":"run_command","tool_info":{"parameters":{"CommandLine":"touch a"}}}}
-{"event":"step_update","step_update":{"step_index":3,"state":"ERROR","step_type":"tool","tool_name":"view_file","tool_info":{"parameters":{"AbsolutePath":"/nope"},"error":{"message":"no such file"}}}}
-{"event":"step_update","step_update":{"step_index":4,"state":"ACTIVE","step_type":"agent_response","text_delta":"Done."}}
-{"event":"result","result":{"status":"SUCCESS"}}
-`)
-	// Skip the real ~/.local/bin/agy.
-	t.Setenv("HOME", t.TempDir())
+	dir := t.TempDir()
+	viewed := filepath.Join(dir, "notes.txt")
+	require.NoError(t, os.WriteFile(viewed, []byte("alpha"), 0o644))
+	script := `#!/bin/sh
+read -r _
+echo '{"jsonrpc":"2.0","id":"1","result":{"protocolVersion":1}}'
+read -r open
+case "$open" in *session/resume*)
+  echo '{"jsonrpc":"2.0","id":"2","error":{"code":-32603,"message":"Failed to read session"}}'
+  cat >/dev/null; exit 0;;
+esac
+echo '{"jsonrpc":"2.0","id":"2","result":{"sessionId":"conv1"}}'
+read -r model
+case "$model" in *'"session/set_model"'*'"modelId":"m"'*) ;; *) exit 9;; esac
+echo '{"jsonrpc":"2.0","id":"set-model","result":{}}'
+read -r _
+cat <<'EOF'
+{"jsonrpc":"2.0","method":"session/update","params":{"update":{"sessionUpdate":"usage_update","used":0,"size":1048576}}}
+{"jsonrpc":"2.0","method":"session/update","params":{"update":{"sessionUpdate":"tool_call","toolCallId":"c1","name":"run_command","kind":"execute","title":"touch a","status":"in_progress","rawInput":{"CommandLine":"touch a","WaitMsBeforeAsync":10000}}}}
+{"jsonrpc":"2.0","method":"session/update","params":{"update":{"sessionUpdate":"tool_call_update","toolCallId":"c1","name":"run_command","kind":"execute","title":"touch a","status":"completed","rawInput":{"CommandLine":"touch a"},"content":[{"type":"content","content":{"type":"text","text":"Command exited with code 0."}}]}}}
+{"jsonrpc":"2.0","method":"session/update","params":{"update":{"sessionUpdate":"tool_call","toolCallId":"c2","name":"read_file","kind":"read","title":"File notes.txt","status":"in_progress","rawInput":{"Path":"VIEWED"}}}}
+{"jsonrpc":"2.0","method":"session/update","params":{"update":{"sessionUpdate":"tool_call_update","toolCallId":"c2","name":"read_file","kind":"read","title":"File notes.txt","status":"completed","rawInput":{"Path":"VIEWED"}}}}
+{"jsonrpc":"2.0","method":"session/update","params":{"update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"Done."}}}}
+{"jsonrpc":"2.0","id":"3","result":{"stopReason":"end_turn","usage":{"inputTokens":10,"outputTokens":2,"cachedReadTokens":4,"thoughtTokens":3}}}
+EOF
+cat >/dev/null
+`
+	script = strings.ReplaceAll(script, "VIEWED", viewed)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "agy"), []byte(script), 0o755))
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("HOME", t.TempDir()) // skip the real ~/.local/bin/agy
+
 	events, err := collect(t, "agy", "")
 	require.NoError(t, err)
-	require.Equal(t, []EventType{
-		EventSession, EventUsage,
-		EventToolStart, EventToolCall, EventToolResult,
-		EventToolStart, EventToolCall, EventToolResult,
-		EventText,
-	}, types(events))
-	require.Equal(t, int64(6), events[1].Usage.InputTokens)
-	require.JSONEq(t, `{"command":"touch a","description":""}`, events[3].Input)
-	require.True(t, events[7].IsError)
+	var calls, results []Event
+	var limit int64
+	var usage *Event
+	for i, e := range events {
+		switch e.Type {
+		case EventToolCall:
+			calls = append(calls, e)
+		case EventToolResult:
+			results = append(results, e)
+		case EventContextBudget:
+			limit = max(limit, e.ContextLimit)
+		case EventUsage:
+			usage = &events[i]
+		}
+	}
+	require.Len(t, calls, 2)
+	require.Equal(t, "bash", calls[0].Name)
+	require.Equal(t, "touch a", field(t, calls[0].Input, "command"))
+	require.Equal(t, "view", calls[1].Name)
+	require.Len(t, results, 2)
+	require.Contains(t, results[1].Metadata, "alpha", "a read shows the file, which AGY leaves out")
+	require.EqualValues(t, 1048576, limit)
+	require.NotNil(t, usage)
+	require.EqualValues(t, 10, usage.Usage.InputTokens)
+	require.EqualValues(t, 3, usage.Usage.ReasoningTokens)
 
-	// An unknown conversation makes agy start a new one silently.
 	_, err = collect(t, "agy", "other")
 	require.ErrorIs(t, err, ErrResume)
 }
 
-// A steered line either folds into AGY's turn or runs as its next turn in
-// the same process; the turn reads that answer too before it ends.
+// A message sent while AGY runs a tool goes in at once as another
+// session/prompt. AGY answers the prompt it was on straight away and goes on
+// with the same turn; the message shows once the tool ends and the model's
+// next step starts, and the turn ends with the message's own answer.
 func TestAGYSteersDuringATool(t *testing.T) {
-	previous := agyFollowUpWait
-	agyFollowUpWait = 200 * time.Millisecond
-	t.Cleanup(func() { agyFollowUpWait = previous })
-	for name, nextTurn := range map[string]string{
-		"folded": "",
-		"next turn": `echo '{"event":"step_update","step_update":{"step_index":2,"state":"ACTIVE","step_type":"agent_response","text_delta":"Two."}}'
-echo '{"event":"result","result":{"status":"SUCCESS"}}'
-`,
-	} {
-		t.Run(name, func(t *testing.T) {
-			dir := t.TempDir()
-			script := `#!/bin/sh
-read -r first
-case "$first" in *'"event":"user"'*) ;; *) exit 7;; esac
-echo '{"event":"init","conversation_id":"conv1"}'
-echo '{"event":"step_update","step_update":{"step_index":1,"state":"ACTIVE","step_type":"tool","tool_name":"run_command","tool_info":{"parameters":{"CommandLine":"ls"}}}}'
+	dir := t.TempDir()
+	script := `#!/bin/sh
+read -r _
+echo '{"jsonrpc":"2.0","id":"1","result":{"protocolVersion":1}}'
+read -r _
+echo '{"jsonrpc":"2.0","id":"2","result":{"sessionId":"conv1"}}'
+read -r _
+echo '{"jsonrpc":"2.0","id":"set-model","result":{}}'
+read -r _
+echo '{"jsonrpc":"2.0","method":"session/update","params":{"update":{"sessionUpdate":"tool_call","toolCallId":"c1","name":"run_command","kind":"execute","title":"sleep 5","status":"in_progress","rawInput":{"CommandLine":"sleep 5"}}}}'
 read -r steer
-case "$steer" in *PINEAPPLE*) ;; *) exit 8;; esac
-echo '{"event":"step_update","step_update":{"step_index":1,"state":"DONE","step_type":"tool","tool_name":"run_command","tool_info":{"parameters":{"CommandLine":"ls"},"output":"a.txt"}}}'
-echo '{"event":"result","result":{"status":"SUCCESS"}}'
-` + nextTurn + `cat >/dev/null
+case "$steer" in *'"id":"steer-1"'*PINEAPPLE*) ;; *) exit 8;; esac
+cat <<'EOF'
+{"jsonrpc":"2.0","id":"3","result":{"stopReason":"end_turn","usage":{"inputTokens":10,"outputTokens":1}}}
+{"jsonrpc":"2.0","method":"session/update","params":{"update":{"sessionUpdate":"tool_call_update","toolCallId":"c1","name":"run_command","kind":"execute","status":"completed","rawInput":{"CommandLine":"sleep 5"},"content":[{"type":"content","content":{"type":"text","text":"done"}}]}}}
+{"jsonrpc":"2.0","method":"session/update","params":{"update":{"sessionUpdate":"usage_update","used":20,"size":1048576}}}
+{"jsonrpc":"2.0","method":"session/update","params":{"update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"Two."}}}}
+{"jsonrpc":"2.0","id":"steer-1","result":{"stopReason":"end_turn","usage":{"inputTokens":5,"outputTokens":2}}}
+EOF
+cat >/dev/null
 `
-			require.NoError(t, os.WriteFile(filepath.Join(dir, "agy"), []byte(script), 0o755))
-			t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
-			t.Setenv("HOME", t.TempDir()) // skip the real ~/.local/bin/agy
-			m := &Model{Kind: config.TypeAGYCLI, ID: "m", Dir: t.TempDir()}
-			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
-			defer cancel()
-			var given atomic.Bool
-			var confirmed, texts []string
-			err := m.Run(ctx, Turn{
-				Prompt: "hi",
-				Emit: func(e Event) error {
-					switch e.Type {
-					case EventUserMessage:
-						confirmed = append(confirmed, e.Text)
-					case EventText:
-						texts = append(texts, e.Text)
-					}
-					return nil
-				},
-				Steer: func() string {
-					if given.Swap(true) {
-						return ""
-					}
-					return "PINEAPPLE"
-				},
-			})
-			require.NoError(t, err)
-			require.Equal(t, []string{"PINEAPPLE"}, confirmed)
-			if nextTurn != "" {
-				require.Equal(t, []string{"Two."}, texts, "the steered line's own answer is read")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "agy"), []byte(script), 0o755))
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("HOME", t.TempDir()) // skip the real ~/.local/bin/agy
+	m := &Model{Kind: config.TypeAGYCLI, ID: "m", Dir: t.TempDir()}
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	var given atomic.Bool
+	var mu sync.Mutex
+	var order []EventType
+	var confirmed []string
+	var usage fantasy.Usage
+	err := m.Run(ctx, Turn{
+		Prompt: "hi",
+		Emit: func(e Event) error {
+			mu.Lock()
+			defer mu.Unlock()
+			order = append(order, e.Type)
+			switch e.Type {
+			case EventUserMessage:
+				confirmed = append(confirmed, e.Text)
+			case EventUsage:
+				usage = e.Usage
 			}
-		})
-	}
+			return nil
+		},
+		Steer: func() string {
+			if given.Swap(true) {
+				return ""
+			}
+			return "PINEAPPLE"
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"PINEAPPLE"}, confirmed)
+	shown := slices.Index(order, EventUserMessage)
+	require.Greater(t, shown, slices.Index(order, EventToolResult), "shown after the tool it waited on")
+	require.Less(t, shown, slices.Index(order, EventText), "shown before the step that read it")
+	require.EqualValues(t, 15, usage.InputTokens, "both prompts' usage counts")
 }
 
 func TestClaudeSettingsReachTheCLI(t *testing.T) {

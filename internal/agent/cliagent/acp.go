@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
 	"net/http/httptrace"
 	"net/url"
@@ -23,9 +24,10 @@ import (
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/message"
 )
 
-// Grok and OpenCode speak the Agent Client Protocol (agentclientprotocol.com):
+// Grok, OpenCode and AGY speak the Agent Client Protocol (agentclientprotocol.com):
 // JSON-RPC over stdio with session/new|load, session/prompt, streamed
 // session/update notifications and session/request_permission requests.
 type acpUpdate struct {
@@ -71,6 +73,7 @@ type acpUsage struct {
 	OutputTokens     int64 `json:"outputTokens"`
 	CachedReadTokens int64 `json:"cachedReadTokens"`
 	ReasoningTokens  int64 `json:"reasoningTokens"`
+	ThoughtTokens    int64 `json:"thoughtTokens"` // AGY's name for reasoning tokens
 }
 
 // acpTool tracks one tool call while its details stream in.
@@ -130,6 +133,21 @@ type acpRun struct {
 	// result reports all its steps together, too many for the context meter.
 	contextUsed  int64
 	contextLimit int64
+	// AGY takes a session/prompt at any time and folds it into the turn at
+	// the model's next step, answering the prompt it ends with no usage at
+	// once. The message is shown at the next step boundary after that.
+	// running are AGY's shell calls not yet finished (crush name, input),
+	// moved those Ctrl+B already showed in the background; handleMu keeps
+	// that move from running inside the read loop's handling of a line.
+	// usage adds up the answers to AGY's prompts: each covers only its own
+	// part of the turn.
+	usage     fantasy.Usage
+	firstDone bool // AGY answered the turn's first prompt
+	handleMu  sync.Mutex
+	bgMu      sync.Mutex
+	running   map[string][2]string
+	moved     map[string]bool
+
 	// steerURL and steerPassword reach OpenCode's own server. ACP refuses a
 	// second session/prompt while one runs; the server's delivery:"steer"
 	// folds the message in at the next step.
@@ -149,6 +167,12 @@ type acpRun struct {
 // runACP drives an ACP agent started with args. setModel selects m.ID with
 // session/set_config_option (or legacy session/set_model) for agents that take no model flag.
 func runACP(ctx context.Context, m *Model, t Turn, name string, args []string, setModel bool) error {
+	return runACPWith(ctx, m, t, name, name, args, setModel)
+}
+
+// runACPWith is runACP for an agent started through another program: bin
+// runs it, name says which agent it is.
+func runACPWith(ctx context.Context, m *Model, t Turn, name, bin string, args []string, setModel bool) error {
 	if name == "opencode" && !t.NoTools {
 		if env, signal := opencodeEnv(m.KeepsWholeContext(), t.AutoBackground); signal != "" {
 			t.Env = append(slices.Clone(t.Env), env...)
@@ -158,7 +182,7 @@ func runACP(ctx context.Context, m *Model, t Turn, name string, args []string, s
 			}
 		}
 	}
-	p, err := m.startTurnProc(t.NoTools, t.Env, name, args...)
+	p, err := m.startTurnProc(t.NoTools, t.Env, bin, args...)
 	if err != nil {
 		return err
 	}
@@ -176,6 +200,11 @@ func runACP(ctx context.Context, m *Model, t Turn, name string, args []string, s
 		calls:    map[string]*acpTool{},
 		loading:  t.Resume != "",
 		steerIDs: map[string]string{},
+		running:  map[string][2]string{},
+		moved:    map[string]bool{},
+	}
+	if name == "agy" && t.SessionID != "" && !t.NoTools {
+		defer onBackground(t.SessionID, r.toBackground)()
 	}
 
 	stop := p.watchCancel(ctx, func() {
@@ -193,10 +222,11 @@ func runACP(ctx context.Context, m *Model, t Turn, name string, args []string, s
 	}})
 
 	r.stopSteer = func() {}
-	if name == "opencode" {
-		r.stopSteer = pollSteerReady(r.t, r.prompted.Load, r.steer)
+	if name == "opencode" || name == "agy" {
+		r.stopSteer = r.pollSteer()
 	}
-	defer r.stopSteer()
+	// AGY restarts steering while its turn goes on; stop the last one.
+	defer func() { r.stopSteer() }()
 	for p.lines.Scan() {
 		var msg rpcMessage
 		if json.Unmarshal(p.lines.Bytes(), &msg) != nil {
@@ -209,20 +239,11 @@ func runACP(ctx context.Context, m *Model, t Turn, name string, args []string, s
 			continue
 		}
 
-		var done bool
-		var err error
-		switch {
-		case msg.Method == "" && strings.HasPrefix(id, "steer-"):
-			done, err = r.handleSteerResponse(id, msg)
-		case msg.Method == "":
-			done, err = r.handleResponse(id, msg)
-		case msg.Method == "session/update" && r.loading:
-			r.countReplayed(msg)
+		r.handleMu.Lock()
+		done, err, skip := r.handleLine(id, msg)
+		r.handleMu.Unlock()
+		if skip {
 			continue
-		case msg.Method != "session/update":
-			continue
-		default:
-			err = r.handleUpdate(msg)
 		}
 		if done || err != nil {
 			return err
@@ -240,6 +261,25 @@ func runACP(ctx context.Context, m *Model, t Turn, name string, args []string, s
 	return exitError(name, p)
 }
 
+// handleLine handles one message from the agent other than its requests.
+// done reports that the turn ended, with err.
+func (r *acpRun) handleLine(id string, msg rpcMessage) (done bool, err error, skip bool) {
+	switch {
+	case msg.Method == "" && strings.HasPrefix(id, "steer-"):
+		done, err = r.handleSteerResponse(id, msg)
+	case msg.Method == "":
+		done, err = r.handleResponse(id, msg)
+	case msg.Method == "session/update" && r.loading:
+		r.countReplayed(msg)
+		return false, nil, true
+	case msg.Method != "session/update":
+		return false, nil, true
+	default:
+		err = r.handleUpdate(msg)
+	}
+	return done, err, false
+}
+
 // openSession loads the native session resume, or starts a new one when
 // it is empty.
 func (r *acpRun) openSession(resume string) {
@@ -247,6 +287,10 @@ func (r *acpRun) openSession(resume string) {
 	method := "session/new"
 	if resume != "" {
 		method, params["sessionId"] = "session/load", resume
+		if r.name == "agy" {
+			// session/resume opens it without replaying its history.
+			method = "session/resume"
+		}
 	}
 	r.loaded = resume
 	_ = r.p.send(map[string]any{"jsonrpc": "2.0", "id": acpSessionID, "method": method, "params": params})
@@ -259,7 +303,24 @@ func (r *acpRun) steer(text string) bool {
 	if r.steerHTTP(text) {
 		return true
 	}
-	if !r.toolRunning.Load() {
+	return r.steerPrompt(text, text)
+}
+
+// pollSteer starts handing queued messages to the agent. AGY gets images
+// as file paths, as with its first prompt.
+func (r *acpRun) pollSteer() func() {
+	if r.name == "agy" {
+		return pollSteerInputRetry(r.t, r.prompted.Load, func(text string, attachments []message.Attachment) bool {
+			return r.steerPrompt(text, withImagePaths(text, attachments))
+		})
+	}
+	return pollSteerReady(r.t, r.prompted.Load, r.steer)
+}
+
+// steerPrompt sends prompt, the queued message text, as a session/prompt
+// into the running turn.
+func (r *acpRun) steerPrompt(text, prompt string) bool {
+	if r.name != "agy" && !r.toolRunning.Load() {
 		return false
 	}
 	r.steerMu.Lock()
@@ -270,7 +331,7 @@ func (r *acpRun) steer(text string) bool {
 	r.sent.add(text)
 	if r.p.send(map[string]any{"jsonrpc": "2.0", "id": id, "method": "session/prompt", "params": map[string]any{
 		"sessionId": *r.session.Load(),
-		"prompt":    []any{map[string]any{"type": "text", "text": text}},
+		"prompt":    []any{map[string]any{"type": "text", "text": prompt}},
 	}}) != nil {
 		r.steerMu.Lock()
 		delete(r.steerIDs, id)
@@ -428,10 +489,54 @@ func (r *acpRun) handleSteerResponse(id string, msg rpcMessage) (done bool, err 
 	} else if err := r.confirm(text); err != nil {
 		return true, err
 	}
+	if r.name == "agy" {
+		// A message AGY took in runs as the rest of the turn, so its
+		// failure (out of usage, say) is the turn's.
+		if msg.Error != nil {
+			return true, fmt.Errorf("%s: %s", r.name, msg.Error.Message)
+		}
+		// The turn ends with the last prompt's answer, which has its usage;
+		// an earlier one was ended by the next message AGY took in.
+		r.final = msg.Result
+		return r.agyPromptAnswered()
+	}
 	if r.final != nil && r.openSteers() == 0 {
 		return true, acpFinish(r.name, r.final, r.t.Emit)
 	}
 	return false, nil
+}
+
+// agyPromptAnswered ends AGY's turn once no message it took in is still
+// running, or keeps steering while one is.
+func (r *acpRun) agyPromptAnswered() (done bool, err error) {
+	if u := acpResultUsage(r.final); u != nil {
+		r.usage.InputTokens += u.InputTokens
+		r.usage.OutputTokens += u.OutputTokens
+		r.usage.CacheReadTokens += u.CacheReadTokens
+		r.usage.ReasoningTokens += u.ReasoningTokens
+	}
+	if !r.firstDone {
+		return false, nil // the first prompt's answer is still to come
+	}
+	r.stopSteer()
+	if r.openSteers() > 0 {
+		// The prompt was ended by a message AGY took in; that message runs
+		// on in the same turn and is shown at its next step.
+		r.boundary = false
+		r.stopSteer = r.pollSteer()
+		return false, nil
+	}
+	RefreshLimitsDuringTurn(r.ctx, r.m.Kind, r.m.Account)
+	if r.usage != (fantasy.Usage{}) {
+		if err := r.t.Emit(Event{Type: EventUsage, Usage: r.usage}); err != nil {
+			return true, err
+		}
+	}
+	finishErr := acpStop(r.name, r.final)
+	if err := r.emitContextUsed(); err != nil {
+		return true, err
+	}
+	return true, finishErr
 }
 
 // handleResponse handles the agent's response to one of Crush's requests.
@@ -485,7 +590,10 @@ func (r *acpRun) handleResponse(id string, msg rpcMessage) (done bool, err error
 		if err := r.t.Emit(Event{Type: EventSession, Session: sid}); err != nil {
 			return true, err
 		}
-		if r.setModel {
+		if r.setModel && r.name == "agy" {
+			// AGY's model option names the model without its effort.
+			_ = r.p.send(map[string]any{"jsonrpc": "2.0", "id": "set-model", "method": "session/set_model", "params": map[string]any{"sessionId": sid, "modelId": r.m.ID}})
+		} else if r.setModel {
 			_ = r.p.send(map[string]any{"jsonrpc": "2.0", "id": "set-model", "method": "session/set_config_option", "params": map[string]any{"sessionId": sid, "configId": "model", "value": r.m.ID}})
 		}
 		if r.name == "opencode" && r.t.Effort != "" {
@@ -500,6 +608,13 @@ func (r *acpRun) handleResponse(id string, msg rpcMessage) (done bool, err error
 		r.steerMu.Unlock()
 		r.prompted.Store(true)
 	case acpPromptID:
+		if r.name == "agy" {
+			if err := r.emitPromptMarker(); err != nil {
+				return true, err
+			}
+			r.final, r.firstDone = msg.Result, true
+			return r.agyPromptAnswered()
+		}
 		r.stopSteer()
 		if err := r.emitPromptMarker(); err != nil {
 			return true, err
@@ -527,20 +642,33 @@ func (r *acpRun) handleUpdate(msg rpcMessage) error {
 	switch u := params.Update; {
 	case u.SessionUpdate == "tool_call_update" && (u.Status == "completed" || u.Status == "failed"):
 		r.boundary = true
+	case u.SessionUpdate == "usage_update" && r.name == "agy":
+		// AGY reports the context after each model step.
+		r.boundary = true
 	case u.SessionUpdate == "agent_message_chunk", u.SessionUpdate == "agent_thought_chunk", u.SessionUpdate == "tool_call":
 		// The model's next step, which has the messages sent before it.
-		if (r.boundary || r.final != nil) && r.sent.pending() > 0 {
+		// AGY ends the prompt it was on as soon as it takes one in, mid
+		// step, so its message waits for the step after.
+		taken := r.boundary || r.final != nil
+		if r.name == "agy" {
+			taken = r.boundary && r.final != nil
+		}
+		if taken && r.sent.pending() > 0 {
 			if err := r.confirmAll(); err != nil {
 				return err
 			}
 		}
 		r.boundary = false
 	}
-	if r.name == "opencode" && r.m.Kind == config.TypeOpenCodeCLI && params.Update.SessionUpdate == "tool_call" {
+	if params.Update.SessionUpdate == "tool_call" && (r.name == "agy" || r.name == "opencode" && r.m.Kind == config.TypeOpenCodeCLI) {
 		RefreshLimitsDuringTurn(r.ctx, r.m.Kind, r.m.Account)
 	}
-	if r.name == "opencode" && params.Update.SessionUpdate == "usage_update" && params.Update.Size > 0 {
-		event := openCodeContextBudget(openCodeBudgetWindow(params.Update.Size, r.m))
+	if (r.name == "opencode" || r.name == "agy") && params.Update.SessionUpdate == "usage_update" && params.Update.Size > 0 {
+		// AGY does not say where below the window it compacts.
+		event := Event{Type: EventContextBudget, ContextLimit: params.Update.Size, ContextEstimated: true}
+		if r.name == "opencode" {
+			event = openCodeContextBudget(openCodeBudgetWindow(params.Update.Size, r.m))
+		}
 		event.ContextUsed = params.Update.Used
 		r.contextUsed, r.contextLimit = params.Update.Used, event.ContextLimit
 		if err := r.t.Emit(event); err != nil {
@@ -556,6 +684,9 @@ func (r *acpRun) handleUpdate(msg rpcMessage) error {
 			}
 		}
 	}
+	if r.name == "agy" {
+		return r.agyToolUpdate(params.Update)
+	}
 	if err := acpHandleUpdate(params.Update, r.calls, r.t.Emit); err != nil {
 		return err
 	}
@@ -565,17 +696,30 @@ func (r *acpRun) handleUpdate(msg rpcMessage) error {
 
 // acpFinish reports a finished session/prompt's usage and stop reason.
 func acpFinish(name string, result json.RawMessage, emit func(Event) error) error {
-	var res struct {
-		StopReason string    `json:"stopReason"`
-		Usage      *acpUsage `json:"usage"`
-		Meta       *acpUsage `json:"_meta"`
-	}
-	_ = json.Unmarshal(result, &res)
-	if u := acpTurnUsage(res.Usage, res.Meta); u != nil {
+	if u := acpResultUsage(result); u != nil {
 		if err := emit(Event{Type: EventUsage, Usage: *u}); err != nil {
 			return err
 		}
 	}
+	return acpStop(name, result)
+}
+
+// acpResultUsage is a session/prompt answer's usage, if it has any.
+func acpResultUsage(result json.RawMessage) *fantasy.Usage {
+	var res struct {
+		Usage *acpUsage `json:"usage"`
+		Meta  *acpUsage `json:"_meta"`
+	}
+	_ = json.Unmarshal(result, &res)
+	return acpTurnUsage(res.Usage, res.Meta)
+}
+
+// acpStop is the error a session/prompt answer's stop reason means.
+func acpStop(name string, result json.RawMessage) error {
+	var res struct {
+		StopReason string `json:"stopReason"`
+	}
+	_ = json.Unmarshal(result, &res)
 	switch res.StopReason {
 	case "cancelled":
 		return context.Canceled
@@ -660,6 +804,10 @@ func acpHandleUpdate(u acpUpdate, calls map[string]*acpTool, emit func(Event) er
 			if !failed {
 				_, input := acpTool2Crush(tc)
 				meta = resultMetadata(tc.crushName, input, out)
+				if tc.crushName == tools.ViewToolName && out == "" {
+					// AGY's file reads come back without the text.
+					meta = diskMetadata(tc.crushName, input, out)
+				}
 				if strings.Contains(out, openCodeBackgroundMark) {
 					meta = markBackground(tc.crushName, meta)
 				}
@@ -736,7 +884,7 @@ func acpText(raw json.RawMessage) string {
 func acpTurnUsage(usage, meta *acpUsage) *fantasy.Usage {
 	switch {
 	case usage != nil && usage.InputTokens+usage.CachedReadTokens > 0:
-		return &fantasy.Usage{InputTokens: usage.InputTokens, OutputTokens: usage.OutputTokens, CacheReadTokens: usage.CachedReadTokens, ReasoningTokens: usage.ReasoningTokens}
+		return &fantasy.Usage{InputTokens: usage.InputTokens, OutputTokens: usage.OutputTokens, CacheReadTokens: usage.CachedReadTokens, ReasoningTokens: usage.ReasoningTokens + usage.ThoughtTokens}
 	case meta != nil && meta.InputTokens > 0:
 		return &fantasy.Usage{InputTokens: meta.InputTokens - meta.CachedReadTokens, OutputTokens: meta.OutputTokens, CacheReadTokens: meta.CachedReadTokens, ReasoningTokens: meta.ReasoningTokens}
 	}
@@ -797,4 +945,63 @@ func acpRequest(ctx context.Context, m *Model, t Turn, p *proc, msg rpcMessage, 
 		}
 	}
 	_ = p.send(map[string]any{"jsonrpc": "2.0", "id": msg.ID, "result": map[string]any{"outcome": map[string]any{"outcome": "cancelled"}}})
+}
+
+// agyToolUpdate handles AGY's tool updates, keeping track of its running
+// shell calls for [acpRun.toBackground]. A call already shown in the
+// background has its real end left out.
+func (r *acpRun) agyToolUpdate(u acpUpdate) error {
+	done := u.Status == "completed" || u.Status == "failed"
+	r.bgMu.Lock()
+	moved := r.moved[u.ToolCallID]
+	if done {
+		delete(r.running, u.ToolCallID)
+		delete(r.moved, u.ToolCallID)
+	}
+	r.bgMu.Unlock()
+	if moved {
+		if done {
+			delete(r.calls, u.ToolCallID)
+		}
+		return nil
+	}
+	if err := acpHandleUpdate(u, r.calls, r.t.Emit); err != nil {
+		return err
+	}
+	if tc := r.calls[u.ToolCallID]; tc != nil && tc.announced && tc.crushName == tools.BashToolName {
+		_, input := acpTool2Crush(tc)
+		r.bgMu.Lock()
+		r.running[u.ToolCallID] = [2]string{tc.crushName, input}
+		r.bgMu.Unlock()
+	}
+	r.toolRunning.Store(len(r.calls) > 0)
+	return nil
+}
+
+// toBackground shows AGY's running shell calls as moved to the background,
+// the way Ctrl+B does for the other CLIs. AGY carries on with its turn
+// while a slow command runs; only the chat waited on it.
+func (r *acpRun) toBackground() bool {
+	r.bgMu.Lock()
+	calls := r.running
+	r.running = map[string][2]string{}
+	for id := range calls {
+		r.moved[id] = true
+	}
+	r.bgMu.Unlock()
+	if len(calls) == 0 {
+		return false
+	}
+	go func() {
+		r.handleMu.Lock()
+		defer r.handleMu.Unlock()
+		for _, id := range slices.Sorted(maps.Keys(calls)) {
+			call := calls[id]
+			meta := markBackground(call[0], resultMetadata(call[0], call[1], agyBackgroundNote))
+			if r.t.Emit(Event{Type: EventToolResult, ID: id, Name: call[0], Output: agyBackgroundNote, Metadata: meta}) != nil {
+				return
+			}
+		}
+	}()
+	return true
 }

@@ -221,6 +221,7 @@ type codexRun struct {
 	changes  map[string][]codexChange
 	output   map[string]*strings.Builder
 	textOpen bool
+	reasoned bool // thinking was shown, so a new part starts on its own line
 }
 
 func runCodex(ctx context.Context, m *Model, t Turn) error {
@@ -462,10 +463,19 @@ func (r *codexRun) readLoop(lines <-chan []byte) (done bool, err error) {
 				return true, err
 			}
 		}
-		if (msg.Method == "item/completed" || msg.Method == "turn/plan/updated") && r.t.StallRetry > 0 && !r.itemsOpen() {
+		if (msg.Method == "item/completed" || msg.Method == "turn/plan/updated") && r.t.StallRetry > 0 && !r.itemsOpen() && !codexUserItem(msg) {
 			stall.Reset(r.stallWait())
 		}
 	}
+}
+
+// codexUserItem reports whether msg completes the user's own message. That
+// is not a step of the model's, so the wait for its first output, which can
+// pass 20 seconds on a long prompt, is no stall.
+func codexUserItem(msg rpcMessage) bool {
+	var params codexParams
+	_ = json.Unmarshal(msg.Params, &params)
+	return params.Item.Type == "userMessage"
 }
 
 // codexSideNotice lists notifications that say nothing about the model's
@@ -569,7 +579,9 @@ func (r *codexRun) steer(text string, attachments []message.Attachment) bool {
 func (r *codexRun) startTurn(input []any) {
 	r.writing = false
 	r.writingDeferred = false
-	params := map[string]any{"threadId": r.threadID, "input": input}
+	// Since Codex 0.169 the model's thinking is sent only when a summary
+	// is asked for; without it a turn stays silent until its first tool.
+	params := map[string]any{"threadId": r.threadID, "input": input, "summary": "auto"}
 	if r.t.Effort != "" {
 		params["effort"] = r.t.Effort
 	}

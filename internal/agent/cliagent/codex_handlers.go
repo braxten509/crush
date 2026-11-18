@@ -168,7 +168,14 @@ func (r *codexRun) handleNotification(msg rpcMessage) (done bool, err error) {
 		if r.compacting {
 			break
 		}
+		r.reasoned = true
 		err = r.t.Emit(Event{Type: EventReasoning, Text: params.Delta})
+	case "item/reasoning/summaryPartAdded":
+		// Each part is its own heading; without a break between them the
+		// thought line would show every heading run together.
+		if r.reasoned && !r.compacting {
+			err = r.t.Emit(Event{Type: EventReasoning, Text: "\n\n"})
+		}
 	case "item/commandExecution/outputDelta":
 		if r.output[params.ItemID] == nil {
 			r.output[params.ItemID] = &strings.Builder{}

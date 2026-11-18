@@ -201,6 +201,7 @@ type Options struct {
 	DisabledSkills            []string     `json:"disabled_skills,omitempty" jsonschema:"description=List of skill names to disable and hide from the agent,example=crush-config"`
 	CheckInMinutes            *int         `json:"check_in_minutes,omitempty" jsonschema:"description=Minutes between automatic progress check-ins Crush sends the agent while its background jobs and sub-agents run (services excluded). 0 turns them off.,default=2,minimum=0"`
 	InterruptAfterToolCalls   *int         `json:"interrupt_after_tool_calls,omitempty" jsonschema:"description=Consecutive tool calls without a user-visible update before Crush interrupts the agent and asks for a progress update. 0 turns this off.,default=21,minimum=0"`
+	InterruptSubAgents        *bool        `json:"interrupt_sub_agents,omitempty" jsonschema:"description=Whether sub-agents are also interrupted for a progress update after interrupt_after_tool_calls consecutive tool calls without one,default=true"`
 	StallRetrySeconds         *int         `json:"stall_retry_seconds,omitempty" jsonschema:"description=Seconds an agent CLI's reply may stop arriving before Crush asks the model again on a fresh request (Codex: after a finished step\\, while nothing runs; Claude Code: its own no-data limit\\, at least 10). 0 leaves each CLI's own limit (Codex: 5 minutes\\, Claude Code: 3 minutes).,default=20,minimum=0"`
 	AutoBackgroundSeconds     *int         `json:"auto_background_seconds,omitempty" jsonschema:"description=Whole seconds a command an agent runs may hold the turn before Crush moves it to the background.,default=120,minimum=11,maximum=3600"`
 	RequestTimeout            *int         `json:"request_timeout,omitempty" jsonschema:"description=Timeout in seconds for each LLM API request. Streaming responses are aborted only after this much inactivity between tokens\\, so slow but active streams are never killed; the wait for the first token gets at least five minutes for prompt prefill. 0 disables it\\, negative values are invalid.,default=60,example=120,example=300,example=0"`
@@ -249,6 +250,13 @@ func (o *Options) GetInterruptAfterToolCalls() int {
 		return DefaultInterruptAfterToolCalls
 	}
 	return max(0, *o.InterruptAfterToolCalls)
+}
+
+// GetInterruptSubAgents reports whether sub-agents are interrupted for a
+// progress update like the main agent is (owner, 2026-11-18: on unless
+// turned off).
+func (o *Options) GetInterruptSubAgents() bool {
+	return o == nil || o.InterruptSubAgents == nil || *o.InterruptSubAgents
 }
 
 // DefaultStallRetry is how long an agent CLI's reply may stop arriving

@@ -333,7 +333,9 @@ func runToReport(ctx context.Context, agent SessionAgent, call SessionAgentCall)
 		return box.result, box.err
 	default:
 	}
-	if err != nil || !box.handedOn.Load() {
+	// A call handed on (summarized, or stopped for a progress update, which
+	// ends its turn as canceled) ends in a later turn: wait for that one.
+	if !box.handedOn.Load() {
 		return result, err
 	}
 	select {

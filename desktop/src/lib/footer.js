@@ -359,9 +359,13 @@ const EFFORT_WORDS = ["minimal", "low", "medium", "high", "xhigh", "max"];
 
 // A model name's words in lower case (cliagent.nameWords):
 // "gemini-4-argon-high" and "Gemini 4 Argon" share gemini, 4 and argon. A
-// version stays whole (3.8 is no 3).
+// version stays whole (3.8 is no 3), and one written with a dash is the same
+// version: claude-opus-5-5-high is Antigravity's "Claude Opus 5.5". Only
+// short numbers on both sides, so a date (4-20250514) stays apart.
+const DASHED_VERSION = /(^|[^\p{L}\p{N}.])(\d{1,2})-(\d{1,2})($|[^\p{L}\p{N}.])/gu;
 export function nameWords(name) {
   return String(name ?? "")
+    .replace(DASHED_VERSION, "$1$2.$3$4")
     .toLowerCase()
     .split(/[^\p{L}\p{N}.]+/u)
     .map((word) => word.replace(/^\.+|\.+$/gu, ""))

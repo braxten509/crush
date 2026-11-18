@@ -286,11 +286,12 @@ const progressUpdatePrompt = "Before making another tool call, update the user b
 // stopped 131 times; after this many it carries on.
 const maxProgressStops = 3
 
-// interruptOnToolCall counts main-agent tool calls since the last visible
-// assistant text. It cancels the active turn at the limit and queues an
-// invisible progress nudge before the task resumes.
+// interruptOnToolCall counts tool calls since the last visible assistant
+// text, a sub-agent's too unless options.interrupt_sub_agents is off. It
+// cancels the active turn at the limit and queues an invisible progress
+// nudge before the task resumes.
 func (t *turn) interruptOnToolCall() bool {
-	if t.a == nil || t.a.isSubAgent {
+	if t.a == nil || (t.a.isSubAgent && (t.a.cfg == nil || !t.a.cfg.Config().Options.GetInterruptSubAgents())) {
 		return false
 	}
 	t.toolCallMu.Lock()
@@ -346,6 +347,9 @@ func (t *turn) interruptOnToolCall() bool {
 		return false
 	}
 	t.interruptedForProgress = true
+	report := t.call.report
+	report.handOn()
+	t.call.report = nil
 	t.toolCallMu.Unlock()
 	if t.cancel != nil {
 		t.cancel()
@@ -374,6 +378,10 @@ func (t *turn) interruptOnToolCall() bool {
 		FrequencyPenalty: t.call.FrequencyPenalty,
 		PresencePenalty:  t.call.PresencePenalty,
 		OnAuthRefresh:    t.call.OnAuthRefresh,
+		// A sub-agent's report comes from the turn that finally ends its
+		// work, so the nudge takes the call's report over; this canceled
+		// turn must not fill it. A main chat's call has none.
+		report: report,
 	}})
 	return true
 }

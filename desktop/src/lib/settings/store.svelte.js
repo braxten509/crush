@@ -119,6 +119,17 @@ export async function setInterruptAfterToolCalls(text) {
   }
 }
 
+// Sub-agents are stopped for a progress update like the main chat (owner,
+// 2026-11-18); on unless turned off.
+export async function toggleInterruptSubAgents() {
+  const next = options().interrupt_sub_agents === false;
+  try {
+    await setOption("options.interrupt_sub_agents", next);
+  } catch (error) {
+    notify("error", errorText(error));
+  }
+}
+
 // Seconds a CLI's reply may stop arriving before Crush asks again (owner,
 // 2026-11-02); 0 leaves each CLI's own limit.
 export async function setStallRetrySeconds(text) {

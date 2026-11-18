@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -305,11 +306,18 @@ func usageModel(limits []Limit, model string) string {
 	return best
 }
 
+// dashedVersion is a version written with a dash in a model id: the 5-5 of
+// claude-opus-5-5-high, which its usage limit names 5.5 ("Claude Opus 5.5").
+// Only short numbers on both sides, so a date (4-20250514) stays apart.
+var dashedVersion = regexp.MustCompile(`(^|[^\pL\pN.])(\d{1,2})-(\d{1,2})($|[^\pL\pN.])`)
+
 // nameWords are a model name's words in lower case: "gemini-4-argon-high"
 // and "Gemini 4 Argon" share gemini, 4 and argon. A version stays whole
-// (3.8 is no 3).
+// (3.8 is no 3), and one written with a dash is the same version (5-5 is
+// 5.5).
 func nameWords(name string) []string {
 	var words []string
+	name = dashedVersion.ReplaceAllString(name, "${1}${2}.${3}${4}")
 	for _, word := range strings.FieldsFunc(strings.ToLower(name), func(r rune) bool { return r != '.' && !unicode.IsLetter(r) && !unicode.IsDigit(r) }) {
 		if word = strings.Trim(word, "."); word != "" {
 			words = append(words, word)

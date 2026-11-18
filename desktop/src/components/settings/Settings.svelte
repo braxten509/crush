@@ -28,6 +28,7 @@
     setAgentCpus,
     setCheckInMinutes,
     setInterruptAfterToolCalls,
+    toggleInterruptSubAgents,
     setStallRetrySeconds,
     setLaunchTarget,
     setSidebarShown,
@@ -230,6 +231,16 @@
     <div class="row">
       <span class="name">Interrupt after</span>
       <span class="field"><input type="text" inputmode="numeric" bind:value={interruptAfterToolCalls} onfocus={() => ((editing = "interrupt_after_tool_calls"), (atFocus = interruptAfterToolCalls))} onblur={saveInterruptAfterToolCalls} onkeydown={fieldKey} aria-label="Tool calls without an update" /> consecutive tool calls without an update (0 disables)</span>
+    </div>
+    <div class="row">
+      <span class="name">Interrupt sub-agents too</span>
+      <button
+        type="button"
+        class="switch"
+        role="switch"
+        aria-checked={options().interrupt_sub_agents !== false}
+        aria-label="Interrupt sub-agents too"
+        onclick={toggleInterruptSubAgents}></button>
     </div>
     <div class="row">
       <span class="name">Ask again when a reply is stuck after</span>

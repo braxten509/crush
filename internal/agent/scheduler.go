@@ -251,10 +251,19 @@ func (s *sessionScheduler) enqueueCall(call SessionAgentCall) {
 	queued.QueueOnly = false
 	if call.Accepted != nil && call.Accepted.handoff != nil {
 		pending, _ := s.interrupting.Get(call.SessionID)
-		s.interrupting.Set(call.SessionID, appendQueuedInOrder(pending, queued))
+		if queued.CheckIn {
+			pending = replaceQueuedCheckIn(pending, queued)
+		} else {
+			pending = appendQueuedInOrder(pending, queued)
+		}
+		s.interrupting.Set(call.SessionID, pending)
 		return
 	}
-	existing = appendQueuedInOrder(existing, queued)
+	if queued.CheckIn {
+		existing = replaceQueuedCheckIn(existing, queued)
+	} else {
+		existing = appendQueuedInOrder(existing, queued)
+	}
 	s.messageQueue.Set(call.SessionID, existing)
 	if s, _ := s.steering.Get(call.SessionID); s != nil {
 		select {
@@ -262,6 +271,22 @@ func (s *sessionScheduler) enqueueCall(call SessionAgentCall) {
 		default:
 		}
 	}
+}
+
+// replaceQueuedCheckIn drops any unread check-ins already sitting in calls
+// and inserts the newer one in queue order, keeping the fresher progress note
+// without stacking copies.
+func replaceQueuedCheckIn(calls []SessionAgentCall, queued SessionAgentCall) []SessionAgentCall {
+	kept := make([]SessionAgentCall, 0, len(calls))
+	for _, c := range calls {
+		if c.CheckIn && c.Channel == queued.Channel && c.NonInteractive == queued.NonInteractive {
+			releaseQueuedCall(c, nil)
+			fillReports(c, nil, nil)
+			continue
+		}
+		kept = append(kept, c)
+	}
+	return appendQueuedInOrder(kept, queued)
 }
 
 // requeueFront puts calls back at the front of the session's queue.
@@ -304,6 +329,28 @@ func (s *sessionScheduler) compatibleQueuedCalls(first, next SessionAgentCall) b
 		firstMeta, _ := parseChannelMeta(first.Prompt)
 		nextMeta, _ := parseChannelMeta(next.Prompt)
 		return sameQueuedChannelRoute(s.host.queuedChannelReply(first.Channel), firstMeta, nextMeta)
+	}
+	return true
+}
+
+// canFoldIntoTurn reports whether a queued call may join a turn that is
+// already running. Unlike compatibleQueuedCalls, a running progress-update
+// nudge or summary continuation (NotRecallable) is an active turn that
+// accepts normal follow-ups once it is underway.
+func (s *sessionScheduler) canFoldIntoTurn(running, next SessionAgentCall) bool {
+	if running.CLIContinue || next.CLIContinue || next.NotRecallable {
+		return false
+	}
+	if running.NonInteractive != next.NonInteractive || running.Channel != next.Channel {
+		return false
+	}
+	if running.Channel != "" {
+		runningMeta := running.channelMeta
+		if runningMeta == nil {
+			runningMeta, _ = parseChannelMeta(running.Prompt)
+		}
+		nextMeta, _ := parseChannelMeta(next.Prompt)
+		return sameQueuedChannelRoute(s.host.queuedChannelReply(running.Channel), runningMeta, nextMeta)
 	}
 	return true
 }

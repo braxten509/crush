@@ -28,7 +28,7 @@ func (a *sessionAgent) takeQueuedForStep(ctx context.Context, call SessionAgentC
 	mu := a.sessionMu(call.SessionID)
 	mu.Lock()
 	var fold, canceled []SessionAgentCall
-	if queued, _ := a.messageQueue.Get(call.SessionID); len(queued) > 0 && a.compatibleQueuedCalls(call, queued[0]) {
+	if queued, _ := a.messageQueue.Get(call.SessionID); len(queued) > 0 && a.canFoldIntoTurn(call, queued[0]) {
 		fold, canceled = a.drainQueueForStepLocked(call.SessionID)
 	}
 	mu.Unlock()

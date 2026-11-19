@@ -90,6 +90,10 @@ type SessionAgentCall struct {
 	// CLIContinue shows a reply the agent CLI started on its own between
 	// turns instead of sending Prompt (cliagent.Turn.Continue).
 	CLIContinue bool
+	// CheckIn marks an automatic background-work progress check-in. While
+	// one sits unread in the queue, a newer check-in replaces it instead of
+	// stacking copies behind a busy turn.
+	CheckIn bool
 	// QueueOnly delivers the call only into an active turn; on an idle
 	// session Run returns ErrSessionIdle instead of starting one.
 	QueueOnly bool

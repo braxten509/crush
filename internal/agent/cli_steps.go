@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"charm.land/fantasy"
@@ -86,6 +87,9 @@ type cliSteps struct {
 	// steerAnyTime lets a CLI that folds a second prompt into the running
 	// turn take queued messages before a tool starts (OpenCode).
 	steerAnyTime bool
+	// visibleText is set once this turn emits non-empty text, letting a
+	// progress-update turn accept mid-turn messages right after its update.
+	visibleText atomic.Bool
 
 	// todoMeta is what each to-do tool call changed, shown with its result.
 	todoMeta map[string]string
@@ -196,8 +200,11 @@ func (s *cliSteps) steerCalls(images bool) (string, []message.Attachment) {
 	if s.ctx.Err() != nil || (!s.steerAnyTime && !s.toolRunning()) {
 		return "", nil
 	}
+	if s.call.ProgressUpdateRequired && !s.visibleText.Load() && !s.toolRunning() {
+		return "", nil
+	}
 	queued, _ := s.a.messageQueue.Get(s.sessionID)
-	if len(queued) > 0 && !s.a.compatibleQueuedCalls(s.call, queued[0]) {
+	if len(queued) > 0 && !s.a.canFoldIntoTurn(s.call, queued[0]) {
 		return "", nil
 	}
 	fold, canceled := s.a.drainQueueForStepLocked(s.sessionID)
@@ -515,6 +522,12 @@ func (s *cliSteps) handleText(e cliagent.Event) error {
 	}
 	if err := s.endThinking(); err != nil {
 		return err
+	}
+	if strings.TrimSpace(e.Text) != "" && s.visibleText.CompareAndSwap(false, true) {
+		select {
+		case s.steerReady <- struct{}{}:
+		default:
+		}
 	}
 	s.content = appendText(s.content, e.Text)
 	return s.sc.OnTextDelta("0", e.Text)

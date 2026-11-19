@@ -369,6 +369,59 @@ func TestOpenCodeSteersWhileNoToolRuns(t *testing.T) {
 	require.Empty(t, strict.steer())
 }
 
+// Progress-update and summary-continuation turns carry NotRecallable so they
+// are not recalled or merged while queued, yet once running they must accept
+// mid-turn queued prompts instead of leaving them stuck until the turn ends.
+func TestProgressUpdateTurnAcceptsQueuedPromptsAfterVisibleUpdate(t *testing.T) {
+	sa, _ := newCancelTestAgent(t)
+	sess, err := sa.sessions.Create(t.Context(), "progress steer")
+	require.NoError(t, err)
+	nudge := SessionAgentCall{
+		SessionID:              sess.ID,
+		Prompt:                 progressUpdatePrompt,
+		HiddenUserMessage:      true,
+		NotRecallable:          true,
+		ProgressUpdateRequired: true,
+	}
+	sa.enqueueCall(SessionAgentCall{SessionID: sess.ID, Prompt: "how is progress"})
+
+	ready := make(chan struct{}, 1)
+	s := &cliSteps{
+		call:         nudge,
+		running:      map[string]bool{},
+		a:            sa,
+		ctx:          t.Context(),
+		sessionID:    sess.ID,
+		steerAnyTime: true,
+		steerReady:   ready,
+		open:         true,
+		sc:           fantasy.AgentStreamCall{OnTextDelta: func(string, string) error { return nil }},
+	}
+	require.Empty(t, s.steer(), "waits for the brief progress update before folding queued prompts")
+
+	require.NoError(t, s.handleText(cliagent.Event{Type: cliagent.EventText, Text: "Working on batch 1."}))
+	select {
+	case <-ready:
+	default:
+		t.Fatal("visible text did not wake the steering poller")
+	}
+	requireInOrder(t, s.steer(), "how is progress")
+	require.Empty(t, sa.QueuedPromptsList(sess.ID))
+
+	// Native turns fold queued prompts into a running NotRecallable turn too,
+	// while still refusing to fold a queued NotRecallable nudge into a turn.
+	sa.enqueueCall(SessionAgentCall{SessionID: sess.ID, Prompt: "follow-up"})
+	folded, err := sa.takeQueuedForStep(t.Context(), nudge, false, false)
+	require.NoError(t, err)
+	require.Len(t, folded, 1)
+	require.Empty(t, sa.QueuedPromptsList(sess.ID))
+
+	sa.enqueueCall(nudge)
+	notFolded, err := sa.takeQueuedForStep(t.Context(), SessionAgentCall{SessionID: sess.ID, Prompt: "normal"}, false, false)
+	require.NoError(t, err)
+	require.Empty(t, notFolded)
+}
+
 func TestQueueBatchUnconfirmedSteeringRestoresOriginalsInOrder(t *testing.T) {
 	sa, _, broker := newCancelTestAgentWithRunComplete(t)
 	events := broker.Subscribe(t.Context())

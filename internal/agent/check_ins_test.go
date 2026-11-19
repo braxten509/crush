@@ -424,3 +424,26 @@ func TestFirstCheckInWaitsForTheOldestWork(t *testing.T) {
 	checkInLoop(t.Context(), 5*time.Millisecond, done, func() bool { return false }, func() time.Time { return notBefore }, func(time.Duration) string { return "note" }, send)
 	require.False(t, sentAt.Before(notBefore), "a note before the work had run a full interval")
 }
+
+// While a session is busy and cannot consume queued prompts yet, a newer
+// automatic check-in replaces the unread check-in already waiting in line
+// instead of stacking stale copies alongside user messages.
+func TestQueuedCheckInReplacesUnreadCheckIn(t *testing.T) {
+	t.Parallel()
+
+	sa, _ := newCancelTestAgent(t)
+	var released []error
+	sa.enqueueCall(SessionAgentCall{
+		SessionID: "busy",
+		Prompt:    "check-in 1",
+		CheckIn:   true,
+		queuedSessionRunRelease: func(err error) {
+			released = append(released, err)
+		},
+	})
+	sa.enqueueCall(SessionAgentCall{SessionID: "busy", Prompt: "user question"})
+	sa.enqueueCall(SessionAgentCall{SessionID: "busy", Prompt: "check-in 2", CheckIn: true})
+
+	require.Equal(t, []string{"user question", "check-in 2"}, sa.QueuedPromptsList("busy"))
+	require.Equal(t, []error{nil}, released, "replacing an unread check-in releases its reservation without failing the run")
+}

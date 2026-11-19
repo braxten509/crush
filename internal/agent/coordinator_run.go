@@ -238,6 +238,7 @@ func (c *coordinator) runTurn(ctx context.Context, accept *AcceptedRun, report *
 	call.HostContext = c.hostContext.Get()
 	call.HiddenUserMessage = message.HiddenUserMessage(ctx)
 	call.CLIContinue = ctx.Value(cliContinueKey{}) != nil
+	call.CheckIn = ctx.Value(checkInKey{}) != nil
 	call.Attachments = attachments
 	call.OnComplete = onComplete
 	call.Accepted = accept

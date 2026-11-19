@@ -29,6 +29,14 @@ func withCLIContinue(ctx context.Context) context.Context {
 	return context.WithValue(ctx, cliContinueKey{}, true)
 }
 
+type checkInKey struct{}
+
+// withCheckIn marks an automatic progress check-in run so unread copies in
+// the queue are replaced instead of piling up.
+func withCheckIn(ctx context.Context) context.Context {
+	return context.WithValue(ctx, checkInKey{}, true)
+}
+
 // RunIDFromContext returns the RunID set by [WithRunID], or "" if
 // none was set or the value is not a string. Exported because the
 // coordinator and tests in other packages need to read it; safe to

@@ -22,6 +22,10 @@ const POLL_MS = 1500;
 let seq = 0;
 let seenShown = ""; // the shown chat, once a read has listed it
 
+const sameChats = (a, b) =>
+  a.length === b.length &&
+  a.every((c, i) => c?.id === b[i]?.id && c?.dir === b[i]?.dir && c?.title === b[i]?.title && c?.opened === b[i]?.opened);
+
 // Exported as refreshOpenChats for tests.
 async function read() {
   const mine = ++seq;
@@ -34,7 +38,8 @@ async function read() {
   }
   if (mine !== seq) return;
   const before = openChats.list;
-  openChats.list = Array.isArray(list) ? list : [];
+  const next = Array.isArray(list) ? list : [];
+  if (!sameChats(before, next)) openChats.list = next;
   // A chat closed in the terminal stops its phone share (owner, 2026-10-21).
   for (const c of before) if (!openChats.list.some((n) => n.id === c.id)) chatClosed(c.id);
   openChats.loaded = true;
@@ -86,11 +91,13 @@ const sameDir = (a, b) => {
 // engine, and only a folder the window has not joined is read from its saved
 // files (owner, 2026-10-22: several folders are open at once).
 function chatFolderOf(sid) {
-  const root = rootChatOf(sid);
-  if (!root || root === sessions.opening?.id) return null;
-  const dir = openChats.list.find((c) => c.id === root)?.dir ?? "";
-  if (!dir) return null;
-  return { dir, joined: inFolder(dir) || joinedFolder(dir) };
+  return untrack(() => {
+    const root = rootChatOf(sid);
+    if (!root || root === sessions.opening?.id) return null;
+    const dir = openChats.list.find((c) => c.id === root)?.dir ?? "";
+    if (!dir) return null;
+    return { dir, joined: inFolder(dir) || joinedFolder(dir) };
+  });
 }
 setChatFolder(chatFolderOf);
 

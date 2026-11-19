@@ -119,7 +119,10 @@
 
   $effect(() => watchModels());
   $effect(() => {
-    loadAvailability(sessions.currentId).catch((error) => console.error("provider availability", error));
+    const sid = sessions.currentId;
+    untrack(() => {
+      loadAvailability(sid).catch((error) => console.error("provider availability", error));
+    });
   });
 
   const byProvider = $derived(availability.sessionId === sessions.currentId ? availability.byProvider : {});

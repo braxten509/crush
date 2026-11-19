@@ -12,13 +12,17 @@ let sequence = 0;
 
 // loadAvailability reads the folder's reasons. A failed read keeps the last
 // answer for the same chat: no reason must never mean "this one can run".
+// Re-reading a chat that already has a ready answer refreshes quietly without
+// flashing "Checking…" over every row.
 export async function loadAvailability(sessionId = "") {
   const mine = ++sequence;
   if (availability.sessionId !== sessionId) {
     availability.sessionId = sessionId;
     availability.byProvider = {};
+    availability.state = "loading";
+  } else if (availability.state !== "ready") {
+    availability.state = "loading";
   }
-  availability.state = "loading";
   try {
     const result = await api.providerAvailability(sessionId);
     if (mine !== sequence) return;

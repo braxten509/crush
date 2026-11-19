@@ -246,6 +246,47 @@ describe("the model menu (ModelMenu.svelte)", () => {
     expect(modelRows().every((row) => row.disabled)).toBe(true);
   });
 
+  it("does not flash checking on unrelated reactive updates or when reopened on the same chat", async () => {
+    state.routes["GET config"] = config();
+    const { setChatFolder } = await import("../../lib/engine/api.js");
+    const { sessions } = await import("../../lib/stores/sessions.svelte.js");
+    let checks = 0;
+    let hold = false;
+    let release;
+    state.routes["GET providers/availability"] = () => {
+      checks += 1;
+      if (hold) return new Promise((resolve) => (release = resolve));
+      return { providers: {} };
+    };
+    setChatFolder((sid) => {
+      void sessions.opening;
+      return sid === "chat-1" ? { dir: "/home/test/dev/crush", joined: true } : null;
+    });
+    sessions.currentId = "chat-1";
+    mount();
+    await settle();
+    expect(checks).toBe(1);
+    expect(modelRows().every((row) => !row.dataset.check)).toBe(true);
+
+    // Changing reactive state read by chatFolder must not re-run the check.
+    sessions.opening = { id: "other" };
+    await settle();
+    expect(checks).toBe(1);
+    expect(modelRows().every((row) => !row.dataset.check)).toBe(true);
+
+    // Reopening the menu on the same ready chat refreshes quietly without flashing checking.
+    svelte.unmount(host);
+    host = null;
+    document.body.replaceChildren();
+    hold = true;
+    mount();
+    await settle();
+    expect(checks).toBe(2);
+    expect(modelRows().every((row) => !row.dataset.check)).toBe(true);
+    release({ providers: {} });
+    await settle();
+  });
+
   it("keeps the menu open after a choice, so the effort level can be picked too", async () => {
     state.routes["GET config"] = config();
     mount();

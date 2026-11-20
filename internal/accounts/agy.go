@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -179,11 +180,24 @@ func RunAGYProfile(ctx context.Context, id, name string, args []string, login bo
 		path = filepath.Join(cli, path)
 		wrap = append(wrap, "--bind-try", path, path)
 	}
-	for _, path := range []string{filepath.Join(cli, "settings.json"), filepath.Join(gemini, "skills")} {
-		wrap = append(wrap, "--ro-bind-try", path, path)
+	skills := filepath.Join(gemini, "skills")
+	wrap = append(wrap, "--ro-bind-try", skills, skills, "--dir", cli)
+	// AGY saves its settings (the terms answer too) and setup steps by
+	// replacing the file, which a shared read-only file refuses. These start
+	// as copies of account 1's; what AGY writes stays in the sandbox.
+	var copies []*os.File
+	for _, path := range []string{filepath.Join(cli, "settings.json"), filepath.Join(cli, "jetski_state.pbtxt")} {
+		file, err := os.Open(path)
+		if err != nil {
+			continue
+		}
+		defer file.Close()
+		wrap = append(wrap, "--perms", "0600", "--file", strconv.Itoa(3+len(copies)), path)
+		copies = append(copies, file)
 	}
 	cmd := exec.CommandContext(ctx, "bwrap", append(append(wrap, "--", name), args...)...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	cmd.ExtraFiles = copies
 	err = cmd.Run()
 	if cause := context.Cause(ctx); cause != nil {
 		return cause

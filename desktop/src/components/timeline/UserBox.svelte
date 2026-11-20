@@ -9,6 +9,7 @@
   // Placed by UserItem and PendingItem.
   import { untrack } from "svelte";
   import Chip from "../render/Chip.svelte";
+  import BranchLines from "./BranchLines.svelte";
   import { decorationHandler, decorationsFor } from "../../lib/decorations.js";
   import { safeHref } from "../../lib/render/links.js";
   import { sourceMapOf } from "../../lib/render/sourcemap.js";
@@ -38,6 +39,7 @@
   const webLink = (chip) => (chip.kind === "picture" && !chip.viewable && /^https?:/i.test(chip.src ?? "") ? safeHref(chip.src) : null);
 </script>
 
+<div class="frame">
 <div class="box">
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
   <div class="text" bind:this={body} {onclick}></div>
@@ -54,12 +56,26 @@
     </div>
   {/if}
 </div>
+<!-- The branch lines start at the box's left edge and never widen it. -->
+<div class="lines"><BranchLines {messageId} /></div>
+</div>
 
 <style>
   /* Your messages sit on the right, at most 70% wide, on the band's fill,
      so you tell them from the AI's at a glance (owner's pick C, 2026-10-20). */
-  .box {
+  .frame {
     max-width: 70%;
+    min-width: 0;
+    display: grid;
+    justify-items: end;
+  }
+  .lines {
+    justify-self: stretch;
+    width: 0;
+    min-width: 100%;
+  }
+  .box {
+    max-width: 100%;
     box-sizing: border-box;
     background: var(--band);
     border: 1px solid var(--rule-faint);

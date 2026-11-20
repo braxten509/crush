@@ -15,9 +15,9 @@ over its socket. Each step is named after its row and saves <ROW>.png.
          (33 characters and "…"), its field holding quoteDraft(words) in full
          with the caret at the end; back in S the words are a link to the
          open branch and the reply has a key
-  B6     words of the short reply ending inside a word branch; words starting
-         at that very point (touching) branch too; words over both are refused
-         (Branch from here disabled) and nothing is sent
+  B6     words of the short reply ending inside a word branch; the same words
+         branch a second time (owner, 2026-11-19), and the reply shows one
+         line per branch under it
   B3     words of your own second message: the branch ends with that message;
          the next send's AI request (fake AI log) holds it unanswered before
          the new prompt (one message more than the source's request for it)
@@ -561,25 +561,16 @@ def main():
             check(head.startswith("Short") and any(head.endswith("chat " + part) for part in ("k", "ke", "kee", "keep")),
                   f"the first cut ends inside a word ({head!r})")
             check(app.open_chat(S), "back in the source chat")
-            # The link now ends inside "keeps": the word is drawn as two text
-            # nodes, the link's and the rest, so the rest starts at the link's end.
-            rest = "keeps"[len(head.rsplit(" ", 1)[-1]):] if head else "eps"
-            words = app.bring_into_view(key_a1, [rest, "plain", "going"])
-            w_rest, w_plain = find_word(words, rest), find_word(words, "plain")
-            second, _, _ = make_branch(app, word_point(w_rest, frac=0.0), word_point(w_plain, end=True), word_point(find_word(words, "going"), frac=0.5), "B6 touching")
+            # The words stay plain, so the same selection works again.
+            words = app.bring_into_view(key_a1, ["Short", "keeps", "chat"])
+            w_short, w_keeps = find_word(words, "Short"), find_word(words, "keeps")
+            second, _, _ = make_branch(app, word_point(w_short), word_point(w_keeps, frac=0.5), word_point(find_word(words, "chat"), frac=0.5), "B6 again")
             l2 = engine.origin(second) if second else None
-            check(bool(l1 and l2) and l2["highlight_start"] == l1["highlight_end"],
-                  f"words starting where the link ends branch too: touching ranges work ({(l1 or {}).get('highlight_end')} → {(l2 or {}).get('highlight_start')}, {(l2 or {}).get('highlight_text')!r})")
+            check(bool(l1 and l2) and second != first and (l2["highlight_start"], l2["highlight_end"]) == (l1["highlight_start"], l1["highlight_end"]),
+                  f"the same words branch a second time ({(l1 or {}).get('highlight_text')!r} → {(l2 or {}).get('highlight_text')!r})")
             check(app.open_chat(S), "back in the source chat")
-            words = app.bring_into_view(key_a1, ["chat", "going"])
-            count = len(engine.links())
-            menu = select_and_menu(app, word_point(find_word(words, "chat")), word_point(find_word(words, "going"), end=True), word_point(find_word(words, "going"), frac=0.5))
-            entry = menu_entry(menu, "Branch from here")
-            check(bool(entry) and entry.get("disabled"), f"words over both links: Branch from here is disabled ({entry})")
-            click_menu(app, "Branch from here")
-            grew, _, _ = poll(lambda: len(engine.links()), lambda n: n != count, 0.4)
-            check(not grew and app.chat_id() == S, "pressing it anyway sends nothing: no branch is made")
-            key("Escape")
+            _, lines, _ = poll(lambda: [l for l in app.shown_links() if l.get("session_id") in (first, second)], lambda ls: len(ls) == 2, 3)
+            check(bool(lines) and all(l.get("mid") == a1 for l in lines), f"the reply shows one line per branch ({app.shown_links()})")
             s.update(B6=[x for x in (first, second) if x])
         if stop_after("B6"):
             return
@@ -602,12 +593,14 @@ def main():
                 ok, got, _ = poll(lambda: engine.messages(B3), lambda ms: len(ms) >= 5 and any(p.get("type") == "finish" for p in ms[-1].get("parts") or []), 30)
                 roles = [m["role"] for m in got]
                 check(ok and roles[:5] == ["user", "assistant", "user", "user", "assistant"], f"the send ran after the copied message, unanswered before it ({roles})")
-                asks = [e for e in fake_ai_requests() if e.get("kind") in ("turn", "default") and "B3 check" in (e.get("last_user") or "")]
+                # The log cuts last_user short, and a system note may come first, so the
+                # quoted words find the branch's request, not the prompt's tail.
+                asks = [e for e in fake_ai_requests() if e.get("kind") in ("turn", "default") and "> turn medium" in (e.get("last_user") or "")]
                 source = [e for e in fake_ai_requests() if e.get("kind") in ("turn", "default") and (e.get("last_user") or "") == "Seed turn medium 2"]
                 n_branch = asks[0].get("messages") if asks else None
                 n_source = source[0].get("messages") if source else None
                 check(n_branch is not None and n_source is not None and n_branch == n_source + 1,
-                      f"the AI request holds the copied message unanswered, then the new prompt: one message more than the source's request for it ({n_branch} vs {n_source})")
+                      f"the AI request holds the copied message unanswered, then the new prompt: one message more than the source's request for it ({n_branch} vs {n_source}; last asks {[(e.get('kind'), (e.get('last_user') or '')[-40:]) for e in fake_ai_requests()[-3:]]})")
                 s["B3"] = B3
         if stop_after("B3"):
             return

@@ -1,7 +1,7 @@
 // Branching (desktop-design 3.1 to 3.3, 4.2, 4.8; PLAN.md:99-104): the
-// right-click menu's "Branch from here" (order 10), the branch links drawn
-// over a message's words and what a click on one does, the list's
-// `chat.close` action, and the probe's `branch` section.
+// right-click menu's "Branch from here" (order 10), opening a branch from
+// the lines under a message (components/timeline/BranchLines.svelte), the
+// list's `chat.close` action, and the probe's `branch` section.
 //
 // Branch from here: the timeline's selection becomes a cut of one message's
 // stored text (lib/branch.js); a cut that cannot branch disables the entry
@@ -11,14 +11,12 @@
 import { tick } from "svelte";
 import { registerAction } from "../actions.js";
 import { HINTS, branchErrorText, branchTitle, canBranch, cutOfRange, quoteDraft } from "../branch.js";
-import { registerDecorationHandler, registerDecorationSource } from "../decorations.js";
 import { api } from "../engine/api.js";
 import { registerMenuItem } from "../menu.js";
 import { probeSection } from "../probe.js";
-import { sourceMapOf } from "../render/sourcemap.js";
 import { closeChat, closed, isClosed, reopen } from "../stores/closed.svelte.js";
 import { caretToEdge, focusField, setText } from "../stores/composer.svelte.js";
-import { links, linksFor, parentOf, upsertLink } from "../stores/links.svelte.js";
+import { links, parentOf, upsertLink } from "../stores/links.svelte.js";
 import { messages } from "../stores/messages.svelte.js";
 import { openChat, sessions, upsertSession } from "../stores/sessions.svelte.js";
 import { notify } from "../stores/ui.svelte.js";
@@ -42,12 +40,9 @@ function verdictOf(ctx) {
   const cut = ctx?.range ? cutOfRange(ctx.range, ctx.items ?? []) : { error: "empty" };
   const mid = cut.message_id ?? (ctx?.message?.id ?? "");
   const message = mid ? (chat?.byId.get(mid) ?? null) : null;
-  const verdict = canBranch(message, cut, linksOnMessage(mid), { answered: answeredIn(chat) });
+  const verdict = canBranch(message, cut, { answered: answeredIn(chat) });
   return verdict.ok ? { ok: true, cut, message } : verdict;
 }
-
-// Every link on a message (not only the ones shown): the overlap rule counts them all.
-const linksOnMessage = (mid) => (mid ? (links.byParentMessage[mid] ?? []) : []);
 
 let making = false;
 
@@ -96,8 +91,6 @@ registerMenuItem({
 
 // -- Links (3.3, 4.8) --
 
-registerDecorationSource((messageId) => linksFor(messageId));
-
 // A closed branch is listed again first (demo core.js:52-60).
 export async function openBranch(sid) {
   if (!sid) return false;
@@ -105,47 +98,10 @@ export async function openBranch(sid) {
   return openChat(sid);
 }
 
-registerDecorationHandler("branch-link", (decoration) => {
-  openBranch(decoration?.data?.session_id).catch((error) => console.error("opening a branch failed", error));
-});
-
-// The link's decoration and the branch it opens, from one of its drawn spans.
-function decorationOf(span) {
-  const root = span?.closest?.(".md, .text");
-  const map = root ? sourceMapOf(root) : null;
-  return map?.decorations?.[Number(span.dataset.deco)] ?? null;
-}
-
 const branchName = (sid) => sessions.byId[sid]?.title || "branch";
 
 export function linkTitle(sid) {
   return `${isClosed(sid) ? "Reopen" : "Open"} ${branchName(sid)}`;
-}
-
-// A branch link over a web link's words wins: its click is taken on the way
-// down, before the web link's guard (render/links.js) could open the address
-// and before the view's own routing, so only the branch opens. A click that
-// ends a selection is left alone, as on every link.
-function onBranchLinkClick(event) {
-  const span = event.target?.closest?.(".md-deco-branch-link");
-  if (!span?.closest("a") || event.button !== 0) return;
-  if (span.ownerDocument.getSelection?.()?.isCollapsed === false) return;
-  const sid = decorationOf(span)?.data?.session_id;
-  if (!sid) return;
-  event.preventDefault();
-  event.stopPropagation();
-  openBranch(sid).catch((error) => console.error("opening a branch failed", error));
-}
-
-// The title a link shows on hover (4.8), set as the pointer reaches it; the
-// span's own title is the nearest, so a web link under it never shows its own.
-if (typeof document !== "undefined") {
-  document.addEventListener("mouseover", (event) => {
-    const span = event.target?.closest?.(".md-deco-branch-link");
-    const sid = span ? decorationOf(span)?.data?.session_id : "";
-    if (sid) span.title = linkTitle(sid);
-  });
-  document.addEventListener("click", onBranchLinkClick, true);
 }
 
 // -- Closing (4.8): the action phase 5's palette lists; its key is the 5-6 design's --
@@ -194,29 +150,20 @@ function lettersRect(node, firstOnly = false) {
   return r.width ? { x: r.x, y: r.y, w: r.width, h: r.height } : null;
 }
 
-// The drawn links of the shown chat: one entry per decoration, with all its
-// spans' rects. Other listed chats stay drawn out of sight (TimelineStack);
-// their links are not shown ones.
+// The drawn branch lines of the shown chat (BranchLines.svelte): text is the
+// words branched from, label the title the line shows. Other
+// listed chats stay drawn out of sight (TimelineStack); their lines are not
+// shown ones.
 function shownLinks() {
-  const out = new Map();
-  for (const span of document.querySelectorAll(".md-deco-branch-link")) {
-    if (span.closest("[data-timeline-slot][aria-hidden]")) continue;
-    const root = span.closest(".md, .text");
-    const decoration = decorationOf(span);
-    if (!root || !decoration) continue;
-    const key = `${decoration.data?.id}\u0000${span.dataset.deco}`;
-    let entry = out.get(key);
-    if (!entry) {
-      const frame = span.closest("[data-key]");
-      const sid = decoration.data?.session_id ?? "";
-      // title: what a hover sets now; title_attr: what the last hover left on the span.
-      entry = { link_id: decoration.data?.id ?? "", session_id: sid, mid: decoration.data?.source_message_id ?? "", item: frame?.dataset.key ?? "", text: "", title: linkTitle(sid), title_attr: span.title, rects: [] };
-      out.set(key, entry);
-    }
-    entry.text += span.textContent;
-    entry.rects.push(...rectsOf(span));
+  const out = [];
+  for (const line of document.querySelectorAll("[data-branch-lines] [data-link-id]")) {
+    if (line.closest("[data-timeline-slot][aria-hidden]")) continue;
+    const link = links.byId[line.dataset.linkId];
+    const button = line.querySelector("button");
+    const sid = link?.session_id ?? "";
+    out.push({ link_id: line.dataset.linkId, session_id: sid, mid: link?.source_message_id ?? "", item: line.closest("[data-key]")?.dataset.key ?? "", text: link?.highlight_text ?? "", label: button?.textContent.trim() ?? "", title: linkTitle(sid), title_attr: button?.title ?? "", rects: rectsOf(button ?? line) });
   }
-  return [...out.values()];
+  return out;
 }
 
 probeSection(

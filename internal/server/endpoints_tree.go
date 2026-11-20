@@ -155,7 +155,6 @@ func treeErrors() []apiError {
 		{Match: is(agent.ErrTreeBusy), Status: http.StatusConflict, Code: "tree_busy"},
 		{Match: is(message.ErrBadCut), Status: http.StatusBadRequest, Code: "bad_cut"},
 		{Match: is(message.ErrCutNotFinished), Status: http.StatusConflict, Code: "cut_not_finished"},
-		{Match: is(message.ErrHighlightOverlapsLink), Status: http.StatusConflict, Code: "highlight_overlaps_link"},
 		{Match: is(backend.ErrFilePlanExpired), Status: http.StatusConflict, Code: "plan_expired"},
 		{Match: is(backend.ErrTreeMessageNotFound), Status: http.StatusNotFound, Code: "not_found"},
 	}

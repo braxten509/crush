@@ -17,10 +17,7 @@
 //                            engine's unit (engine-design.md:2151, 2177)
 //   cutOfRange(range, items) the same for the timeline's selection, which may
 //                            touch two items, a tool row or nothing
-//   overlaps(links, start, end)
-//                            half-open [s, e): touching ranges are fine
-//                            (engine 5.11 step 4)
-//   canBranch(message, cut, links, {answered})
+//   canBranch(message, cut, {answered})
 //                            → {ok: true} | {reason}, the reasons of 3.1
 //   HINTS, branchErrorText   the menu's hint per reason, the notice per error
 import { quoteLines } from "./copy.js";
@@ -33,11 +30,11 @@ export const TITLE_MAX = 34;
 // The hint under a disabled "Branch from here" (4.2). "Wait for the reply to
 // finish" is the design's; the others are desktop texts: the demo's
 // "highlight text first" (core.js:313), the engine's own refusal of tool
-// output (message/branch.go, ErrBadCut) and the overlap notice of 3.2.
+// output (message/branch.go, ErrBadCut). The same words may open any number
+// of branches (owner, 2026-11-19), so there is no overlap hint.
 export const HINTS = {
   unfinished: "Wait for the reply to finish",
   tool_output: "Branch from message text, not tool output",
-  overlap: "These words already open a branch",
   empty: "Highlight text first",
   two_messages: "Highlight text in one message",
 };
@@ -45,7 +42,6 @@ export const HINTS = {
 // 3.2 step 3: the notice for a refused branch; the selection stays.
 const ERROR_TEXTS = {
   cut_not_finished: "This reply is still being written.",
-  highlight_overlaps_link: "These words already open a branch.",
   transport: "Branch not made: lost the connection to Crush.",
   engine_unavailable: "Branch not made: lost the connection to Crush.",
 };
@@ -168,10 +164,6 @@ export function cutOfRange(range, items = []) {
   return selectionToCut({ messageId: item.messageId, range }, map);
 }
 
-export function overlaps(links, start, end) {
-  return (links ?? []).some((link) => link.highlight_start < end && start < link.highlight_end);
-}
-
 const partsOf = (m, type) => (m?.parts ?? []).filter((p) => p?.type === type);
 
 // A reply can be cut once it has its finish part and every tool it called has
@@ -186,17 +178,15 @@ function settled(message, answered) {
 }
 
 // message: the stored message the cut is in (or the clicked one when the
-// selection names none); links: the links already on it. The order picks the
+// selection names none). The order picks the
 // hint that helps first: a reply still being written says so whatever is
 // selected (owner, 2026-10-20: a whole line selected said "Highlight text in
 // one message"), then where the words are, then the words.
-export function canBranch(message, cut, links = [], { answered = null } = {}) {
+export function canBranch(message, cut, { answered = null } = {}) {
   if (cut?.error === "unfinished" || (message && !settled(message, answered))) return { reason: "unfinished" };
   if (cut?.error === "two_messages") return { reason: "two_messages" };
   if (cut?.error === "tool_output") return { reason: "tool_output" };
   if (message && message.role !== "user" && message.role !== "assistant") return { reason: "tool_output" };
   if (!message || !cut || cut.error || !(cut.end > cut.start) || String(cut.text ?? "").trim() === "") return { reason: "empty" };
-  const own = (links ?? []).filter((link) => link.source_message_id === message.id);
-  if (overlaps(own, cut.start, cut.end)) return { reason: "overlap" };
   return { ok: true };
 }

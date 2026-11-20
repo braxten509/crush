@@ -166,7 +166,9 @@ func catalogProject(ctx context.Context, directory, data, selected string, shown
 	}
 	// A locked chat has no messages here (they are in the vault) and is
 	// listed all the same, with its lock (owner, 2026-11-03).
-	rows, err := conn.QueryContext(ctx, `SELECT s.id, s.title, s.message_count, s.created_at, s.updated_at, s.lock_state
+	// BranchOf: the chat a branch was made from (its origin link).
+	rows, err := conn.QueryContext(ctx, `SELECT s.id, s.title, s.message_count, s.created_at, s.updated_at, s.lock_state,
+ coalesce((SELECT b.parent_session_id FROM chat_branches b WHERE b.session_id=s.id AND coalesce(b.copied_from,'')='' LIMIT 1),'')
  FROM sessions s WHERE s.parent_session_id IS NULL
  AND (s.lock_state != '' OR EXISTS (SELECT 1 FROM messages m WHERE m.session_id=s.id AND m.role='user'))
  ORDER BY s.updated_at DESC`)
@@ -177,7 +179,7 @@ func catalogProject(ctx context.Context, directory, data, selected string, shown
 	result := []session.Session{}
 	for rows.Next() {
 		s := session.Session{Directory: directory, DataDirectory: data}
-		if err := rows.Scan(&s.ID, &s.Title, &s.MessageCount, &s.CreatedAt, &s.UpdatedAt, &s.LockState); err != nil {
+		if err := rows.Scan(&s.ID, &s.Title, &s.MessageCount, &s.CreatedAt, &s.UpdatedAt, &s.LockState, &s.BranchOf); err != nil {
 			return nil, err
 		}
 		result = append(result, s)

@@ -96,7 +96,7 @@ Order: 0 first. Then 1 and 2 run side by side. 3 starts once the engine has the 
 ## 6. Branching design
 
 - It builds on the existing fork and clone code (`CopyTree`), as your brief asked.
-- Right-clicking in a chat shows only our menu: Branch from here, Copy, Quote in reply, Copy whole message. As in the demo, you can branch from message text (yours or the AI's), not from tool output. A highlight that overlaps an existing link is refused. On a message still being written, "Branch from here" is greyed out with a hint.
+- Right-clicking in a chat shows only our menu: Branch from here, Copy, Quote in reply, Copy whole message. As in the demo, you can branch from message text (yours or the AI's), not from tool output. The same words may open any number of branches (owner, 2026-11-19); each shows as its own line under the message. On a message still being written, "Branch from here" is greyed out with a hint.
 - **The cut.** The branch copies the chat through the end of the message holding the highlight. If that message is an AI reply that ran tools, the tool results come too, because the AI tools' own memory can only be cut there. If it's your own message, the branch ends with it, and the AI sees it, unanswered, before your next message.
 - **Opening.** It opens at once with the highlighted words quoted in the typing box. Its title is the highlighted words, shortened as in the demo, and auto-titling never replaces it.
 - **The left list.** Branches nest under their parent like folders; branches of branches nest deeper. The terminal app lists branches as normal chats.

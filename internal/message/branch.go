@@ -39,8 +39,6 @@ type BranchService interface {
 var (
 	ErrBadCut         = errors.New("bad cut")
 	ErrCutNotFinished = errors.New("cut not finished")
-	// The copy checks it in its own transaction (db.CopyBranch).
-	ErrHighlightOverlapsLink = db.ErrHighlightOverlapsLink
 )
 
 // BranchOrigins reports whether a chat is a branch. The message service

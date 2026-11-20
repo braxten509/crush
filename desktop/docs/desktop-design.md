@@ -1489,21 +1489,20 @@ export function quoteDraft(text) {}          // the branch's typing box: "> " + 
 export function quoteInReply(text) {}        // menu "Quote in reply": "> " before every line, then a blank line (decision D14)
 /** The selection inside one message's text, in UTF-16 code units of M.Content().Text. */
 export function selectionToCut(selection, sourceMap) {} // → {message_id, start, end, text} | {error}
-export function overlaps(links, start, end) {}          // half-open [s, e): touching ranges are fine (engine 5.11 step 4)
-export function canBranch(message, cut, links) {}       // → {ok} | {reason: "unfinished" | "tool_output" | "overlap" | "empty" | "two_messages"}
+export function canBranch(message, cut) {}       // → {ok} | {reason: "unfinished" | "tool_output" | "overlap" | "empty" | "two_messages"}
 ```
 
 - **Where a cut can start.** Only inside one message's own text: a user message's text or a reply's Markdown text (PLAN.md:99). A selection that touches a tool row, a shell item, a notice, a footer, or two messages gives `two_messages` or `tool_output`, and "Branch from here" is disabled with that hint.
 - **Offsets.** A user message maps through `render/usertext.js` (CHAT-004's offset map). A reply maps through the renderer's source map (CHAT-088), so the cut is a range of `M.Content().Text`, the stored Markdown, and `text` is exactly `t[start:end]` as the engine requires (`engine-design.md:2177`). JS string indexes are UTF-16 code units, the engine's unit (`engine-design.md:2151`), so no conversion is needed.
 - **Selections that end inside markup.** When a selection covers only part of a link label, an emphasis or a code span, the cut is the source range of the selected characters only (no marks); when it covers a whole span, the cut takes the span's marks too, so the link still matches the visible words (the same rule as CHAT-088).
-- **Overlap** is checked before the menu opens, against the links already on that message, and again by the engine (409 `highlight_overlaps_link`).
+- **No overlap rule.** The same words may open any number of branches (owner, 2026-11-19).
 - **Unfinished replies.** A reply without a `finish` part, or with tool calls still lacking results, disables "Branch from here" with the hint "Wait for the reply to finish" (desktop text). The engine also refuses with 409 `cut_not_finished`.
 
 ### 3.2 Making a branch
 
 1. The right-click menu's "Branch from here" (order 10, registered through `lib/menu.js`) calls `api.createBranch(sid, {message_id, highlight_text, highlight_start, highlight_end, title: branchTitle(text)})`.
 2. On success (`proto.Branch`), the sessions store adds `branch.session`; the links store adds `branch.link`; the window opens the new chat at once (`openChat`) and puts `quoteDraft(text)` into the field with the caret at its end (PLAN.md:101): the highlighted words in full on one line, quoted. Only the chat's title is shortened (`branchTitle`), as in the demo (`core.js:259-270`) and as the coordinator decided (PLAN.md:313). Auto-titling never replaces the title (engine 5.11).
-3. Errors show as notices with these desktop texts: `bad_cut` → the engine's message; `cut_not_finished` → "This reply is still being written."; `highlight_overlaps_link` → "These words already open a branch."; `transport` or `engine_unavailable` → "Branch not made: lost the connection to Crush." The selection stays.
+3. Errors show as notices with these desktop texts: `bad_cut` → the engine's message; `cut_not_finished` → "This reply is still being written."; `transport` or `engine_unavailable` → "Branch not made: lost the connection to Crush." The selection stays.
 4. The other app learns about the branch from `session` created and `chat_link` created events; the terminal app lists it as a normal chat (PLAN.md:102).
 
 ### 3.3 Links, nesting, closing (P4.1)
@@ -1534,7 +1533,7 @@ export function markStale(sid, revision);      // a tree_changed whose revision 
 export function expectedRevision(sid);         // what the next action sends as expected_revision
 ```
 
-**How a link looks and acts.** The renderer draws each `branch-link` decoration over its source range as a link (`--link`, 1px underline at `calc(4 * var(--px))` offset, as `Conversation.svelte:181-186`), and the message gets one vermilion key on the rail (section 4.8). A click with a collapsed selection opens the branch (demo `core.js:346-352`): if the branch is closed it is reopened first (`reopen`, demo `core.js:52-60`). A click that ends a drag-selection does not open it. Links copied into a branch come along (engine 5.11), so sibling branches stay reachable from inside a branch (PLAN.md:104).
+**How a link looks and acts** (owner's pick B, 2026-11-19). The words stay plain. Under the message, `BranchLines.svelte` draws one line per branch: ↳ “the words, cut to 40 characters” → the branch's title as a link (`--link`, 1px underline at `calc(4 * var(--px))` offset), and the message gets one vermilion key on the rail (section 4.8). A click on the title opens the branch: if the branch is closed it is reopened first (`reopen`, demo `core.js:52-60`). Links copied into a branch come along (engine 5.11), so sibling branches stay reachable from inside a branch (PLAN.md:104).
 
 **Links hidden by the tree.** A link shows only when its `source_message_id` is on the shown chat's current path (the loaded messages). After `tree_changed` reloads the chat, links on messages no longer on the path disappear, and show again when the path comes back (PLAN.md:104). No tree read is needed for this, because the loaded messages are the current path.
 
@@ -1645,7 +1644,7 @@ All with the real mouse: the driver selects words by pressing on the first word'
 | B3 | Branch from your own message's words: the branch ends with that message; the next send's AI request (fake AI log) holds it unanswered before the new prompt | W · fails when the request lacks it or has an answer after it |
 | B4 | The cut of a reply that ran tools includes their results | W script `tools` · fails when the branch's messages differ from the source's path through the cut |
 | B5 | Tool output cannot be a cut: the item is disabled with the hint | W select in a tool body · fails when "Branch from here" is enabled |
-| B6 | An overlapping highlight is refused before the call; touching ranges work | W · fails when an overlap is sent or a touching one refused |
+| B6 | The same words branch a second time; the message shows one line per branch | W · fails when the second branch is refused or its line is missing |
 | B7 | Mid-reply: a still-streaming reply's item is greyed with "Wait for the reply to finish"; branching from an earlier finished message works while the source streams, and the source reply finishes undisturbed | script `stream2m` (no window check of its own) · fails when the source stream stops or the branch holds unfinished messages |
 | B8 | Sending in the branch at once (mid-reply source) works | same · fails when the send waits for the source |
 | B9 | Closing: × on a branch hides it, its children move up, the footer says "1 closed · links reopen them". The × shows in the row's reserved slot (4.8) | W hover a row, then select it · fails when a child disappears with it, or when the title's, the time's or the chevron's rect moves by more than 1 real px between the plain, hovered and selected row |

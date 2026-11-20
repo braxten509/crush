@@ -5,12 +5,12 @@
 //
 // A chat of the window's folder is drawn from the sessions store, with what
 // it is doing; its open branches hang under it, or under the nearest open
-// chat above a closed one (listmodel.buildRows). A chat
-// of another folder carries its folder ({dir}) so a pick switches the window
-// there first; its title and time come from the all-folder catalog when it
-// has them, else from the list.
+// chat above a closed one (listmodel.buildRows). A chat of another folder
+// carries its folder ({dir}) so a pick switches the window there first; its
+// title, time and branch parent come from the all-folder catalog when it has
+// them, else from the list, and it nests the same way.
 
-import { buildRows, rowState, rowTime } from "../listmodel.js";
+import { buildRows, rowTime } from "../listmodel.js";
 
 /**
  * open: [{id, dir, title}] in the list's order. Options: byId (the sessions
@@ -35,15 +35,49 @@ export function listedRows(open, options = {}) {
   const chats = (Array.isArray(open) ? open : []).filter((c) => c?.id);
   const listed = new Set(chats.map((c) => c.id));
   const dirOf = new Map(chats.map((c) => [c.id, c.dir]));
-  // Every chat of the window's folder, unlisted ones closed: a closed chat
-  // gives its place to its open branches.
-  const built = buildRows(Object.values(byId), {
-    parentOf,
+  // A chat of another folder has no record in the store: it is drawn from the
+  // all-folder catalog and what its engine says it is doing, and its branch
+  // parent comes from the catalog (BranchOf), so it nests as it would in its
+  // own folder (owner, 2026-11-19: branches lost their place on a switch).
+  const others = new Set();
+  const records = Object.values(byId);
+  for (const c of chats) {
+    if (byId[c.id]) continue;
+    others.add(c.id);
+    const saved = catalog[c.id];
+    const state = states[c.id] ?? {};
+    const lock = state.lock_state || saved?.LockState || "";
+    records.push({
+      ...state,
+      id: c.id,
+      title: saved?.Title || c.title || "New Session",
+      created_at: saved?.CreatedAt ?? 0,
+      updated_at: saved?.UpdatedAt ?? 0,
+      lock_state: lock,
+    });
+  }
+  // A closed chat between an open branch and its open ancestor is added
+  // closed, so the branch moves up under that ancestor, not to the top.
+  for (const id of [...others]) {
+    const seen = new Set([id]);
+    for (let up = catalog[id]?.BranchOf; up && !seen.has(up) && !byId[up] && catalog[up]; up = catalog[up].BranchOf) {
+      seen.add(up);
+      if (others.has(up)) break;
+      others.add(up);
+      records.push({ id: up, title: catalog[up].Title || "New Session", created_at: catalog[up].CreatedAt ?? 0, updated_at: catalog[up].UpdatedAt ?? 0 });
+    }
+  }
+  // Every chat, unlisted ones closed: a closed chat gives its place to its
+  // open branches. Another folder has no selected chat to unfold a family,
+  // so its branches always show (a pick there switches folders first).
+  const built = buildRows(records, {
+    parentOf: (id) => (others.has(id) ? catalog[id]?.BranchOf || null : parentOf(id)),
     isClosed: (id) => !listed.has(id),
+    expanded: [...others],
     selectedId,
-    busy,
+    busy: (id) => (others.has(id) ? Boolean(states[id]?.is_busy) : busy(id)),
     now,
-    timeOf,
+    timeOf: (s) => (others.has(s.id) ? (s.updated_at ?? 0) : timeOf(s)),
     agentOf: (s) => folderOf(dirOf.get(s.id) ?? ""),
   });
   // Each top-level chat with the branches drawn under it.
@@ -56,38 +90,13 @@ export function listedRows(open, options = {}) {
     }
     families.get(top)?.push(row);
   }
+  // A chat that is no family's head is drawn under its parent, or folded away.
   const rows = [];
   for (const c of chats) {
-    if (families.has(c.id)) {
-      rows.push(...families.get(c.id).map((row) => {
-        const dir = dirOf.get(row.id) ?? c.dir;
-        return { ...row, dir, folder: here(dir) ? null : { dir } };
-      }));
-      continue;
+    for (const row of families.get(c.id) ?? []) {
+      const dir = dirOf.get(row.id) ?? c.dir;
+      rows.push({ ...row, dir, folder: here(dir) ? null : { dir } });
     }
-    if (byId[c.id]) continue; // a cached branch, already drawn under its chat
-    const saved = catalog[c.id];
-    const at = saved?.UpdatedAt ?? 0;
-    const doing = states[c.id] ? rowState(states[c.id], states[c.id].is_busy) : null;
-    const lock = states[c.id]?.lock_state || saved?.LockState || "";
-    rows.push({
-      ...(lock ? { lock } : {}),
-      kind: "chat",
-      id: c.id,
-      title: saved?.Title || c.title || "New Session",
-      agent: folderOf(c.dir),
-      time: rowTime(at, now),
-      at,
-      depth: 0,
-      selected: c.id === selectedId,
-      closed: false,
-      state: doing?.text ?? "",
-      stateKind: doing?.kind ?? "",
-      branches: 0,
-      expanded: false,
-      folder: here(c.dir) ? null : { dir: c.dir },
-      dir: c.dir,
-    });
   }
   return rows;
 }

@@ -82,7 +82,6 @@ New codes, each owned by one piece. Each piece lists its errors in its own `serv
 | `agent.ErrTreeBusy` | `agent/tree.go` | 409 | `tree_busy` | C |
 | `message.ErrBadCut` | `message/branch.go` | 400 | `bad_cut` | C |
 | `message.ErrCutNotFinished` | `message/branch.go` | 409 | `cut_not_finished` | C |
-| `message.ErrHighlightOverlapsLink` | `message/branch.go` | 409 | `highlight_overlaps_link` | C |
 | `backend.ErrFilePlanExpired` | `backend/tree.go` | 409 | `plan_expired` | C |
 | `backend.ErrNotShareOwner` | `backend/share.go` | 403 | `not_owner` | D |
 | `backend.ErrShareOff` | `backend/share.go` | 404 | `share_off` | D |
@@ -2176,7 +2175,7 @@ var (
    - M must be a user or assistant message. Otherwise fail with `ErrBadCut`: `branch from message text, not tool output`.
    - Let `t` be `M.Content().Text`, measured in UTF-16 code units. The highlight needs `0 <= start < end <= len(t)` and `t[start:end] == HighlightText`. Otherwise fail with `ErrBadCut`: `the highlight doesn't match the message`.
 3. **M must be finished.** An assistant M must have finished: `M.IsFinished()`, true once M has a `Finish` part (`message/content.go:301-308`). Otherwise fail with `ErrCutNotFinished`: `this reply is still being written`. This matches the greyed-out "Branch from here".
-4. **No overlap.** A link on M whose `[s, e)` overlaps `[start, end)` fails with `ErrHighlightOverlapsLink`.
+4. **Overlap allowed.** The same words may open any number of branches (owner, 2026-11-19).
 5. **Path.** Collect M's ancestry from `tree_nodes`, with the same recursive query as `db/tree.go:205-208`.
 6. **Tool results.** If M ran tools, add the tool messages under M whose results answer M's tool calls.
    - When M has more than one such child, take the newest.
@@ -2339,7 +2338,7 @@ func (b *Backend) ChatLinks(ctx context.Context, workspaceID string) ([]proto.Ch
 | `TestChatBranchesMigrationUpDown` (db) | goose up, down, up | DDL error |
 | `TestBranchRefusesToolOutputAndBadHighlight` (message) | `ErrBadCut` cases, including a highlight after an emoji (UTF-16 offsets) | offsets measured in bytes, so a highlight after a non-ASCII character is refused or misplaced |
 | `TestBranchRefusesUnfinished` (message) | a reply in progress or pending tool results → `ErrCutNotFinished` | partial copy |
-| `TestHighlightOverlapRefused` (message) | 409 `highlight_overlaps_link` over HTTP; touching ranges `[0,5)` and `[5,9)` are allowed | the overlap test uses closed ranges, or the error maps to 500 |
+| `TestSameWordsBranchMoreThanOnce` (message) | the same and overlapping ranges all branch | an overlap refusal comes back |
 | `TestBranchWhileReplying` (backend, fake streaming agent; a 10-message chat) | a branch made mid-reply holds only finished messages; the reply finishes in the source; the call returns while the reply streams; the branch's first send is answered | busy guard or lock reused |
 | `TestBranchTitleNeverAutoReplaced` (agent) | the first send in a branch keeps the title, even when title generation fails | fallback rename |
 | `TestBranchParentSessionIDEmpty` (server) | the new session has `parent_session_id` "" and a `chat_link` origin | the copy fills the helper-chat column, so chat lists hide the branch |

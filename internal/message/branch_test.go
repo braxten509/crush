@@ -1,20 +1,13 @@
 package message_test
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 	"unicode/utf16"
 
 	"github.com/charmbracelet/crush/internal/db"
 	"github.com/charmbracelet/crush/internal/message"
-	"github.com/charmbracelet/crush/internal/proto"
-	"github.com/charmbracelet/crush/internal/proto/prototest"
-	"github.com/charmbracelet/crush/internal/server"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -167,7 +160,9 @@ func TestBranchRefusesUnfinished(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestHighlightOverlapRefused(t *testing.T) {
+// The same words, or words inside them, may open any number of branches
+// (owner, 2026-11-19).
+func TestSameWordsBranchMoreThanOnce(t *testing.T) {
 	c := newBranchChats(t)
 	ctx := t.Context()
 	c.chat(t, "src")
@@ -177,79 +172,8 @@ func TestHighlightOverlapRefused(t *testing.T) {
 		text := utf16.Encode([]rune(reply.Content().Text))
 		return message.BranchRequest{SessionID: "src", MessageID: reply.ID, HighlightText: string(utf16.Decode(text[start:end])), HighlightStart: start, HighlightEnd: end, Title: "colors"}
 	}
-	_, err := c.branch(ctx, at(0, 5))
-	require.NoError(t, err)
-	// Ranges are half-open: [0,5) and [5,9) only touch.
-	_, err = c.branch(ctx, at(5, 9))
-	require.NoError(t, err)
-	for _, r := range [][2]int{{4, 6}, {0, 5}, {2, 3}, {8, 13}, {0, 13}} {
-		_, err = c.branch(ctx, at(r[0], r[1]))
-		require.ErrorIs(t, err, message.ErrHighlightOverlapsLink, "[%d,%d)", r[0], r[1])
+	for _, r := range [][2]int{{0, 5}, {0, 5}, {2, 3}, {0, 13}} {
+		_, err := c.branch(ctx, at(r[0], r[1]))
+		require.NoError(t, err, "[%d,%d)", r[0], r[1])
 	}
-	_, err = c.branch(ctx, at(9, 13))
-	require.NoError(t, err)
-
-	// Over HTTP the refusal is 409 highlight_overlaps_link.
-	t.Run("http", func(t *testing.T) { highlightOverlapOverHTTP(t) })
-}
-
-// highlightOverlapOverHTTP drives the branch route of a real engine.
-func highlightOverlapOverHTTP(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("XDG_CACHE_HOME", t.TempDir())
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	t.Setenv("XDG_DATA_HOME", t.TempDir())
-	ctx := t.Context()
-	srv := server.NewServer(nil, "unix", "")
-	hs := httptest.NewServer(srv.Handler())
-	t.Cleanup(hs.Close)
-
-	clientID := uuid.NewString()
-	post := func(path string, body any) *http.Response {
-		t.Helper()
-		data, err := json.Marshal(body)
-		require.NoError(t, err)
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, hs.URL+path+"?client_id="+clientID, bytes.NewReader(data))
-		require.NoError(t, err)
-		req.Header.Set("Content-Type", "application/json")
-		resp, err := hs.Client().Do(req)
-		require.NoError(t, err)
-		t.Cleanup(func() { _ = resp.Body.Close() })
-		return resp
-	}
-	resp := post("/v1/workspaces", prototest.CreateRequest(proto.Workspace{Path: t.TempDir(), DataDir: t.TempDir(), ClientID: clientID}))
-	require.Equal(t, http.StatusOK, resp.StatusCode)
-	var created proto.Workspace
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&created))
-	t.Cleanup(func() {
-		req, err := http.NewRequestWithContext(context.Background(), http.MethodDelete, hs.URL+"/v1/workspaces/"+created.ID+"?client_id="+clientID, nil)
-		if err == nil {
-			if resp, err := hs.Client().Do(req); err == nil {
-				_ = resp.Body.Close()
-			}
-		}
-	})
-	ws, err := srv.Backend().GetWorkspace(created.ID)
-	require.NoError(t, err)
-	chat, err := ws.Sessions.Create(ctx, "Colors")
-	require.NoError(t, err)
-	_, err = ws.Messages.Create(ctx, chat.ID, message.CreateMessageParams{Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "Name two colors"}}})
-	require.NoError(t, err)
-	reply, err := ws.Messages.Create(ctx, chat.ID, message.CreateMessageParams{Role: message.Assistant, Parts: []message.ContentPart{
-		message.TextContent{Text: "amber, cobalt"}, message.Finish{Reason: message.FinishReasonEndTurn},
-	}})
-	require.NoError(t, err)
-
-	branch := func(start, end int, word string) *http.Response {
-		return post("/v1/workspaces/"+created.ID+"/sessions/"+chat.ID+"/branches", proto.BranchRequest{
-			MessageID: reply.ID, HighlightText: word, HighlightStart: start, HighlightEnd: end, Title: word,
-		})
-	}
-	require.Equal(t, http.StatusOK, branch(0, 5, "amber").StatusCode)
-	require.Equal(t, http.StatusOK, branch(5, 9, ", co").StatusCode, "touching ranges are allowed")
-	resp = branch(3, 7, "er, ")
-	require.Equal(t, http.StatusConflict, resp.StatusCode)
-	var body proto.Error
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
-	require.Equal(t, "highlight_overlaps_link", body.Code)
 }

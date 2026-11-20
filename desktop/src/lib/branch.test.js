@@ -2,13 +2,12 @@
 // Branch rules (desktop-design 3.1, 3.2): the title and the draft of a new
 // branch, cuts as UTF-16 ranges of the stored text through the real
 // renderers' source maps, selections that end inside markup, where a cut can
-// start, overlaps (touching ranges are fine) and the reasons a selection
-// cannot branch.
+// start and the reasons a selection cannot branch.
 import { describe, expect, test, vi } from "vitest";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 
-const { TITLE_MAX, branchErrorText, branchTitle, canBranch, cutOfRange, overlaps, quoteDraft, quoteInReply, selectionToCut } = await import("./branch.js");
+const { TITLE_MAX, branchErrorText, branchTitle, canBranch, cutOfRange, quoteDraft, quoteInReply, selectionToCut } = await import("./branch.js");
 const { quoteLines } = await import("./copy.js");
 const { renderMarkdown } = await import("./render/markdown.js");
 const { sourceMapOf } = await import("./render/sourcemap.js");
@@ -214,21 +213,6 @@ describe("where a cut can start (3.1)", () => {
   });
 });
 
-describe("overlaps: half-open ranges (engine 5.11 step 4)", () => {
-  const links = [{ highlight_start: 10, highlight_end: 20 }];
-  test.each([
-    [0, 10, false, "touching before"],
-    [20, 30, false, "touching after"],
-    [9, 11, true, "over the start"],
-    [19, 25, true, "over the end"],
-    [12, 15, true, "inside"],
-    [5, 25, true, "around"],
-    [10, 20, true, "the same words"],
-  ])("[%i, %i) → %s (%s)", (start, end, want) => {
-    expect(overlaps(links, start, end)).toBe(want);
-  });
-});
-
 describe("canBranch: the reasons of 3.1", () => {
   const text = (t) => ({ type: "text", data: { text: t } });
   const finish = { type: "finish", data: { reason: "end_turn", time: 1 } };
@@ -236,38 +220,32 @@ describe("canBranch: the reasons of 3.1", () => {
   const cut = { message_id: "a1", start: 4, end: 9, text: "login" };
 
   test("a finished reply with a clean cut can branch", () => {
-    expect(canBranch(reply(finish), cut, [])).toEqual({ ok: true });
-    expect(canBranch({ id: "u1", role: "user", parts: [text("Please look")] }, { ...cut, message_id: "u1" }, [])).toEqual({ ok: true });
+    expect(canBranch(reply(finish), cut)).toEqual({ ok: true });
+    expect(canBranch({ id: "u1", role: "user", parts: [text("Please look")] }, { ...cut, message_id: "u1" })).toEqual({ ok: true });
   });
 
   test("where the words are comes first: two messages, then tool output", () => {
-    expect(canBranch(reply(finish), { error: "two_messages" }, [])).toEqual({ reason: "two_messages" });
-    expect(canBranch(reply(finish), { error: "tool_output" }, [])).toEqual({ reason: "tool_output" });
-    expect(canBranch({ id: "t1", role: "tool", parts: [] }, cut, [])).toEqual({ reason: "tool_output" });
+    expect(canBranch(reply(finish), { error: "two_messages" })).toEqual({ reason: "two_messages" });
+    expect(canBranch(reply(finish), { error: "tool_output" })).toEqual({ reason: "tool_output" });
+    expect(canBranch({ id: "t1", role: "tool", parts: [] }, cut)).toEqual({ reason: "tool_output" });
   });
 
   test("a reply without its finish, or with a tool still unanswered, is unfinished", () => {
-    expect(canBranch(reply(), cut, [])).toEqual({ reason: "unfinished" });
+    expect(canBranch(reply(), cut)).toEqual({ reason: "unfinished" });
     const call = { type: "tool_call", data: { id: "c1", name: "view", input: "{}" } };
-    expect(canBranch(reply(call, finish), cut, [], { answered: new Set() })).toEqual({ reason: "unfinished" });
-    expect(canBranch(reply(call, finish), cut, [], { answered: new Set(["c1"]) })).toEqual({ ok: true });
-    expect(canBranch(reply(), { error: "unfinished" }, [])).toEqual({ reason: "unfinished" });
+    expect(canBranch(reply(call, finish), cut, { answered: new Set() })).toEqual({ reason: "unfinished" });
+    expect(canBranch(reply(call, finish), cut, { answered: new Set(["c1"]) })).toEqual({ ok: true });
+    expect(canBranch(reply(), { error: "unfinished" })).toEqual({ reason: "unfinished" });
     // A reply still being written says so whatever the selection (a whole line spills into the next item).
-    expect(canBranch(reply(), { error: "two_messages" }, [])).toEqual({ reason: "unfinished" });
+    expect(canBranch(reply(), { error: "two_messages" })).toEqual({ reason: "unfinished" });
   });
 
   test("no words is empty", () => {
-    expect(canBranch(reply(finish), { error: "empty" }, [])).toEqual({ reason: "empty" });
-    expect(canBranch(reply(finish), null, [])).toEqual({ reason: "empty" });
-    expect(canBranch(null, null, [])).toEqual({ reason: "empty" });
+    expect(canBranch(reply(finish), { error: "empty" })).toEqual({ reason: "empty" });
+    expect(canBranch(reply(finish), null)).toEqual({ reason: "empty" });
+    expect(canBranch(null, null)).toEqual({ reason: "empty" });
   });
 
-  test("words already under a link on this message overlap; touching words and other messages' links do not", () => {
-    const link = { id: "l1", source_message_id: "a1", highlight_start: 0, highlight_end: 4 };
-    expect(canBranch(reply(finish), cut, [{ ...link, highlight_end: 5 }])).toEqual({ reason: "overlap" });
-    expect(canBranch(reply(finish), cut, [link])).toEqual({ ok: true });
-    expect(canBranch(reply(finish), cut, [{ ...link, source_message_id: "u1", highlight_end: 9 }])).toEqual({ ok: true });
-  });
 });
 
 test("a refused branch's notice: the desktop texts of 3.2 step 3, else the engine's message", () => {
@@ -278,7 +256,7 @@ test("a refused branch's notice: the desktop texts of 3.2 step 3, else the engin
   ];
   for (const error of passed) expect(branchErrorText(error), error.code).toBe(error.message);
   // Known codes get the desktop's own words, never the raw message.
-  for (const code of ["cut_not_finished", "highlight_overlaps_link", "transport", "engine_unavailable"]) {
+  for (const code of ["cut_not_finished", "transport", "engine_unavailable"]) {
     const text = branchErrorText({ code, message: "x" });
     expect(text, code).not.toBe("x");
     expect(text, code).not.toBe("");

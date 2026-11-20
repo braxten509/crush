@@ -11,6 +11,7 @@
   // Placed by Timeline.
   import MarkdownView from "../render/MarkdownView.svelte";
   import { clockTime } from "../../lib/timefmt.js";
+  import BranchLines from "./BranchLines.svelte";
   import Byline from "./Byline.svelte";
 
   let { item } = $props();
@@ -27,6 +28,7 @@
     {/if}
     <MarkdownView text={item.text} messageId={item.messageId} sessionId={item.sessionId} finished={item.finished} plan={item.plan} />
   </div>
+  <BranchLines messageId={item.messageId} />
 </div>
 
 <style>

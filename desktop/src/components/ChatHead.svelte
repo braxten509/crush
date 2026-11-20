@@ -13,10 +13,6 @@
   // "Charm™ · v<version>" (START-003, START-004), in the landing block's
   // column. Nothing while the window is still deciding what to show, so no
   // wordmark flashes before a -s chat.
-  //
-  // The branch links over a message's words are drawn by the renderer as
-  // span.md-deco-branch-link (lib/render/sourcemap.js); their look (4.8) is
-  // set here, the one branching component every chat shows.
   import { coderModel } from "../lib/models/store.svelte.js";
   import { conn } from "../lib/stores/connection.svelte.js";
   import { parentOf } from "../lib/stores/links.svelte.js";
@@ -70,18 +66,6 @@
     flex: none;
     min-width: 0;
   }
-  /* A branch link over a message's words (4.8; as built, Conversation.svelte:181-186). */
-  :global(.md-deco-branch-link) {
-    color: var(--link);
-    text-decoration: underline;
-    text-decoration-thickness: 1px;
-    text-underline-offset: calc(4 * var(--px));
-    cursor: pointer;
-  }
-  :global(.md-deco-branch-link:hover) {
-    text-decoration-thickness: max(1px, calc(1.5 * var(--px)));
-  }
-
   /* The wordmark shares the landing block's left edge (Landing.svelte: at
      most 720 wide and centred, at least 60 from the column's edges). */
   .head.brand {

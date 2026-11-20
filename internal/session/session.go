@@ -53,11 +53,15 @@ func HasIncompleteTodos(todos []Todo) bool {
 
 type Session struct {
 	// Directory and DataDirectory identify a saved chat in the all-project catalog.
-	Directory        string `json:",omitempty"`
-	DataDirectory    string `json:",omitempty"`
-	ContextBudget    ContextBudget
-	ID               string
-	ParentSessionID  string
+	Directory       string `json:",omitempty"`
+	DataDirectory   string `json:",omitempty"`
+	ContextBudget   ContextBudget
+	ID              string
+	ParentSessionID string
+	// BranchOf is, in the all-project catalog only, the chat this branch
+	// was made from (its origin link's parent), so the desktop nests other
+	// folders' branches under their chats.
+	BranchOf         string `json:",omitempty"`
 	Title            string
 	MessageCount     int64
 	PromptTokens     int64

@@ -44,7 +44,14 @@ func localReasoning(model localmodel.Model) catwalk.Reasoning {
 	info, _ := localmodel.ModelInfo(model.Path)
 	switch info.Reasoning {
 	case "effort":
-		return catwalk.Reasoning{Thinking: catwalk.ThinkingToggleable, EffortLevels: catwalk.NewEffortLevels("low", "medium", "high"), DefaultEffortLevel: "medium"}
+		levels, fallback := info.Efforts, info.DefaultEffort
+		if len(levels) == 0 {
+			levels = []string{"low", "medium", "high"}
+		}
+		if fallback == "" {
+			fallback = levels[len(levels)/2]
+		}
+		return catwalk.Reasoning{Thinking: catwalk.ThinkingToggleable, EffortLevels: catwalk.NewEffortLevels(levels...), DefaultEffortLevel: fallback}
 	case "thinking":
 		return catwalk.Reasoning{Thinking: catwalk.ThinkingToggleable, EffortLevels: catwalk.NewEffortLevels("off", "on"), DefaultEffortLevel: "on"}
 	}

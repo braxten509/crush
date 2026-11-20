@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -25,6 +27,11 @@ type Info struct {
 	// Reasoning is "effort" when the template reads reasoning_effort,
 	// "thinking" when it reads enable_thinking, and "" otherwise.
 	Reasoning string
+	// Efforts are the reasoning_effort values the template accepts, in
+	// rising order, and DefaultEffort the one it uses when none is sent.
+	// Both are empty when the template doesn't name them.
+	Efforts       []string
+	DefaultEffort string
 }
 
 type infoKey struct {
@@ -281,5 +288,65 @@ func infoFrom(values map[string]any) Info {
 		reasoning = "thinking"
 	}
 	info.Reasoning = reasoning
+	if reasoning == "effort" {
+		info.Efforts, info.DefaultEffort = templateEfforts(template)
+	}
 	return info
+}
+
+var (
+	effortQuoted = regexp.MustCompile(`'([a-z]+)'|"([a-z]+)"`)
+	effortAlias  = regexp.MustCompile(`set\s+(\w+)\s*=.*\breasoning_effort\b`)
+	// effortBranch is an == test on any effort variable: the levels the
+	// template actually behaves differently for.
+	effortBranch = regexp.MustCompile(`[\w.]*effort[\w.]*\s*==\s*['"]([a-z]+)['"]`)
+	// effortDefault is the level used when none is sent.
+	effortDefault = regexp.MustCompile(`reasoning_effort\s*\|\s*default\(\s*['"]([a-z]+)['"]|set\s+\w*default\w*effort\w*\s*=\s*['"]([a-z]+)['"]`)
+	effortOrder   = []string{"none", "minimal", "low", "medium", "high", "xhigh", "max"}
+)
+
+// templateEfforts reads the reasoning_effort values a chat template accepts,
+// so a model whose template takes low/medium/xhigh gets exactly those. A
+// template that rejects other values ("not in (...)") is taken at its word;
+// one that accepts anything gets the levels it branches on plus its default,
+// which leaves out synonyms it folds into the same level.
+func templateEfforts(template string) ([]string, string) {
+	names := []string{"reasoning_effort"}
+	for _, m := range effortAlias.FindAllStringSubmatch(template, -1) {
+		names = append(names, regexp.QuoteMeta(m[1]))
+	}
+	strict := regexp.MustCompile(`\b(?:` + strings.Join(names, "|") + `)\b\s*not\s+in\s*[\(\[]([^\)\]]*)[\)\]]`)
+	var levels []string
+	add := func(level string) {
+		if level != "" && !slices.Contains(levels, level) {
+			levels = append(levels, level)
+		}
+	}
+	if m := strict.FindStringSubmatch(template); m != nil {
+		for _, q := range effortQuoted.FindAllStringSubmatch(m[1], -1) {
+			add(q[1] + q[2])
+		}
+	} else {
+		for _, m := range effortBranch.FindAllStringSubmatch(template, -1) {
+			add(m[1])
+		}
+	}
+	fallback := ""
+	if m := effortDefault.FindStringSubmatch(template); m != nil {
+		fallback = m[1] + m[2]
+		if len(levels) > 0 {
+			add(fallback)
+		}
+	}
+	if !slices.Contains(levels, fallback) {
+		fallback = ""
+	}
+	rank := func(level string) int {
+		if i := slices.Index(effortOrder, level); i >= 0 {
+			return i
+		}
+		return len(effortOrder)
+	}
+	slices.SortStableFunc(levels, func(a, b string) int { return rank(a) - rank(b) })
+	return levels, fallback
 }

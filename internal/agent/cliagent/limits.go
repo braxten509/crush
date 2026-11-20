@@ -748,6 +748,13 @@ func fetchAGYLimits(ctx context.Context) ([]Limit, error) {
 // agyWindows names a usage part's window as the other tools' are named.
 var agyWindows = map[string]string{"5h": "5h", "weekly": "Weekly"}
 
+// agyBucket is one window of a usage group in AGY's usage report.
+type agyBucket struct {
+	Window    string   `json:"window"`
+	Remaining *float64 `json:"remaining_fraction"`
+	ResetTime string   `json:"reset_time"`
+}
+
 // agyUsage reads the usage report's answer into limits, each tied to the
 // model families of its group, and the model turns the answer took (none,
 // unless agy took /usage for a prompt).
@@ -759,11 +766,7 @@ func agyUsage(out []byte) (limits []Limit, turns int, err error) {
 				Groups []struct {
 					Name        string `json:"name"`
 					Description string `json:"description"`
-					Buckets     []struct {
-						Window    string   `json:"window"`
-						Remaining *float64 `json:"remaining_fraction"`
-						ResetTime string   `json:"reset_time"`
-					} `json:"buckets"`
+					Buckets     []agyBucket `json:"buckets"`
 				} `json:"groups"`
 			} `json:"data"`
 		} `json:"command"`
@@ -773,6 +776,17 @@ func agyUsage(out []byte) (limits []Limit, turns int, err error) {
 	}
 	for _, g := range res.Command.Data.Groups {
 		families := agyFamilies(g.Name, g.Description)
+		// The five-hour part always comes before the weekly one (owner,
+		// 2026-11-20); AGY may report them either way round.
+		slices.SortStableFunc(g.Buckets, func(a, b agyBucket) int {
+			weekly := func(w string) int {
+				if w == "weekly" {
+					return 1
+				}
+				return 0
+			}
+			return cmp.Compare(weekly(a.Window), weekly(b.Window))
+		})
 		for _, b := range g.Buckets {
 			if b.Remaining == nil {
 				continue

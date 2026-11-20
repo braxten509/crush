@@ -3,7 +3,9 @@ package tools
 import (
 	"context"
 	"fmt"
+	"maps"
 	"slices"
+	"strings"
 
 	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/agent/tools/mcp"
@@ -73,7 +75,7 @@ func (m *Tool) Info() fantasy.ToolInfo {
 
 	if input, ok := m.tool.InputSchema.(map[string]any); ok {
 		if props, ok := input["properties"].(map[string]any); ok {
-			parameters = props
+			parameters = inlineSchemaRefs(props, input)
 		}
 		if req, ok := input["required"].([]any); ok {
 			// Convert []any -> []string when elements are strings
@@ -94,6 +96,70 @@ func (m *Tool) Info() fantasy.ToolInfo {
 		Parameters:  parameters,
 		Required:    required,
 	}
+}
+
+// inlineSchemaRefs replaces local $ref links (#/$defs/... and #/definitions/...)
+// with their definitions from the root schema, because ToolInfo only carries
+// properties and drops top-level $defs.
+func inlineSchemaRefs(props, root map[string]any) map[string]any {
+	defs, _ := root["$defs"].(map[string]any)
+	legacyDefs, _ := root["definitions"].(map[string]any)
+	if len(defs) == 0 && len(legacyDefs) == 0 {
+		return props
+	}
+	resolved, _ := resolveSchemaNode(props, defs, legacyDefs, map[string]bool{}).(map[string]any)
+	if resolved == nil {
+		return props
+	}
+	return resolved
+}
+
+func resolveSchemaNode(node any, defs, legacyDefs map[string]any, visited map[string]bool) any {
+	switch v := node.(type) {
+	case map[string]any:
+		if ref, ok := v["$ref"].(string); ok {
+			if target, found := lookupSchemaRef(ref, defs, legacyDefs); found && !visited[ref] {
+				visited[ref] = true
+				resolved := resolveSchemaNode(target, defs, legacyDefs, visited)
+				delete(visited, ref)
+				if resolvedMap, ok := resolved.(map[string]any); ok {
+					merged := maps.Clone(resolvedMap)
+					for k, val := range v {
+						if k != "$ref" {
+							merged[k] = resolveSchemaNode(val, defs, legacyDefs, visited)
+						}
+					}
+					return merged
+				}
+				return resolved
+			}
+		}
+		out := make(map[string]any, len(v))
+		for k, val := range v {
+			out[k] = resolveSchemaNode(val, defs, legacyDefs, visited)
+		}
+		return out
+	case []any:
+		out := make([]any, len(v))
+		for i, item := range v {
+			out[i] = resolveSchemaNode(item, defs, legacyDefs, visited)
+		}
+		return out
+	default:
+		return node
+	}
+}
+
+func lookupSchemaRef(ref string, defs, legacyDefs map[string]any) (any, bool) {
+	if name, ok := strings.CutPrefix(ref, "#/$defs/"); ok {
+		val, found := defs[name]
+		return val, found
+	}
+	if name, ok := strings.CutPrefix(ref, "#/definitions/"); ok {
+		val, found := legacyDefs[name]
+		return val, found
+	}
+	return nil, false
 }
 
 func (m *Tool) Run(ctx context.Context, params fantasy.ToolCall) (fantasy.ToolResponse, error) {

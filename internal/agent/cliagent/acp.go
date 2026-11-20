@@ -147,6 +147,10 @@ type acpRun struct {
 	bgMu      sync.Mutex
 	running   map[string][2]string
 	moved     map[string]bool
+	// quiet fires when AGY goes silent after its text mid-turn (see
+	// [agyWritingQuiet]); quietGen, under handleMu, drops a stale firing.
+	quiet    *time.Timer
+	quietGen int
 
 	// steerURL and steerPassword reach OpenCode's own server. ACP refuses a
 	// second session/prompt while one runs; the server's delivery:"steer"
@@ -227,6 +231,11 @@ func runACPWith(ctx context.Context, m *Model, t Turn, name, bin string, args []
 	}
 	// AGY restarts steering while its turn goes on; stop the last one.
 	defer func() { r.stopSteer() }()
+	defer func() {
+		r.handleMu.Lock()
+		r.stopQuiet()
+		r.handleMu.Unlock()
+	}()
 	for p.lines.Scan() {
 		var msg rpcMessage
 		if json.Unmarshal(p.lines.Bytes(), &msg) != nil {
@@ -685,6 +694,7 @@ func (r *acpRun) handleUpdate(msg rpcMessage) error {
 		}
 	}
 	if r.name == "agy" {
+		r.noteQuiet(params.Update.SessionUpdate)
 		return r.agyToolUpdate(params.Update)
 	}
 	if err := acpHandleUpdate(params.Update, r.calls, r.t.Emit); err != nil {
@@ -976,6 +986,46 @@ func (r *acpRun) agyToolUpdate(u acpUpdate) error {
 	}
 	r.toolRunning.Store(len(r.calls) > 0)
 	return nil
+}
+
+// agyWritingQuiet is how long AGY stays silent after its text, mid-turn,
+// before Crush says the model is writing. AGY sends a tool call only once
+// it is whole, so a long edit is silence until then. Its text comes in
+// quick chunks, and the chat says "Responding" for 5 s after the last one.
+var agyWritingQuiet = 5 * time.Second
+
+// noteQuiet starts the writing timer after AGY's text and stops it once
+// the model visibly moves on. Other updates leave it as it is. Call it
+// with handleMu held.
+func (r *acpRun) noteQuiet(kind string) {
+	switch kind {
+	case "agent_message_chunk":
+	case "agent_thought_chunk", "tool_call", "tool_call_update":
+		r.stopQuiet()
+		return
+	default:
+		return
+	}
+	r.stopQuiet()
+	gen := r.quietGen
+	r.quiet = time.AfterFunc(agyWritingQuiet, func() {
+		r.handleMu.Lock()
+		defer r.handleMu.Unlock()
+		if gen != r.quietGen || r.toolRunning.Load() {
+			return
+		}
+		r.quietGen++
+		slog.Debug("AGY quiet after its text; showing it as writing")
+		_ = r.t.Emit(Event{Type: EventActivity, Activity: ActivityWriting})
+	})
+}
+
+// stopQuiet stops the writing timer. Call it with handleMu held.
+func (r *acpRun) stopQuiet() {
+	r.quietGen++
+	if r.quiet != nil {
+		r.quiet.Stop()
+	}
 }
 
 // toBackground shows AGY's running shell calls as moved to the background,

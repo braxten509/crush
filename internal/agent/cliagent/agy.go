@@ -9,23 +9,14 @@ import (
 	"os/exec"
 	"path/filepath"
 
+	"github.com/charmbracelet/crush/internal/accounts"
 	"github.com/charmbracelet/crush/internal/agent/tools"
 )
 
 // agyBin finds the real agy binary; shells often wrap it in a function
 // that adds flags we don't want.
 func agyBin() string {
-	if home, err := os.UserHomeDir(); err == nil {
-		if bin := filepath.Join(home, ".local", "bin", "agy"); isExec(bin) {
-			return bin
-		}
-	}
-	return "agy"
-}
-
-func isExec(path string) bool {
-	fi, err := os.Stat(path)
-	return err == nil && !fi.IsDir() && fi.Mode()&0o111 != 0
+	return accounts.AGYBin()
 }
 
 // runAGY drives AGY through its ACP server ("agy acp"). Its print mode

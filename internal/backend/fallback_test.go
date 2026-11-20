@@ -49,7 +49,7 @@ func TestAddProviderAccountCopiesTheProviderWithoutItsKey(t *testing.T) {
 	require.Equal(t, original.Models, copied.Models)
 
 	// A CLI whose login is a single one cannot be copied.
-	_, err = b.AddAccount(ws.ID, "agy-cli")
+	_, err = b.AddAccount(ws.ID, "opencode-cli")
 	require.Error(t, err)
 }
 

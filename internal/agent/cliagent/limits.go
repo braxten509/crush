@@ -23,6 +23,7 @@ import (
 	"unicode"
 
 	"charm.land/catwalk/v3/pkg/catwalk"
+	"github.com/charmbracelet/crush/internal/accounts"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/google/uuid"
 )
@@ -723,7 +724,12 @@ func fetchAGYLimits(ctx context.Context) ([]Limit, error) {
 	}
 	ctx, cancel := context.WithTimeout(ctx, agyUsageTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, agyBin(), "-p", "/usage", "--output-format", "json", "--log-file", os.DevNull)
+	name, args, err := accounts.AGYCommand(LimitAccount(ctx), agyBin(),
+		[]string{"-p", "/usage", "--output-format", "json", "--log-file", os.DevNull}, false)
+	if err != nil {
+		return nil, err
+	}
+	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Dir = os.TempDir()
 	ownGroup(cmd)
 	cmd.Cancel = func() error {

@@ -87,7 +87,7 @@ type FallbackList struct {
 }
 
 // AccountKinds are the tools that can have more than one account.
-var AccountKinds = []catwalk.Type{TypeClaudeCode, TypeCodexCLI, TypeGrokCLI}
+var AccountKinds = []catwalk.Type{TypeClaudeCode, TypeCodexCLI, TypeGrokCLI, TypeAGYCLI}
 
 // HasAccounts reports whether kind can have more than one account.
 func HasAccounts(kind catwalk.Type) bool { return slices.Contains(AccountKinds, kind) }
@@ -131,6 +131,8 @@ func AccountKindName(kind catwalk.Type) string {
 		return "Codex"
 	case TypeGrokCLI:
 		return "Grok"
+	case TypeAGYCLI:
+		return "AGY"
 	}
 	return string(kind)
 }

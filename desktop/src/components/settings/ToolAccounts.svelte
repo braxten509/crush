@@ -16,7 +16,9 @@
   import { addAccount, fallback, loadFallback, removeAccount, renameAccount, saveAccountOrder, signInAccount } from "../../lib/fallback/store.svelte.js";
   import { MOTION_MS, reducedMotion } from "../../lib/motion.js";
   import { sign_in_run } from "../../lib/engine/commands.js";
+  import { projectDir } from "../../lib/stores/composer.svelte.js";
   import { notify } from "../../lib/stores/ui.svelte.js";
+  import { openTerminal } from "../../lib/terminal/tabs.svelte.js";
 
   let { kind, name, ownLogin = null, ownSignedIn = null } = $props();
 
@@ -149,12 +151,19 @@
     if (draft.trim() !== a.name) renameAccount(a.id || a.kind, draft.trim());
   }
 
-  // Account 1 signs in with the tool itself; the app runs that command with
-  // no terminal, as it does for an added account (sign_in_run).
+  function openSignInTerminal(argv, name) {
+    return openTerminal({ cwd: projectDir(), argv, title: `Sign in to ${name}` }).exited;
+  }
+
+  // Antigravity signs in from a terminal. Grok opens the browser directly.
   async function signInOwn() {
     if (busy || !ownLogin?.length) return;
     busy = true;
     try {
+      if (kind === "agy-cli") {
+        await openSignInTerminal(ownLogin, name);
+        return;
+      }
       const ok = await sign_in_run(ownLogin);
       if (ok) notify("info", `Signed in to ${name}.`);
       else notify("error", `Signing in to ${name} didn't finish.`);
@@ -187,7 +196,7 @@
       <button type="button" class="act" onclick={() => (removing = "")}>No</button>
     {:else}
       {#if a.id}
-        <button type="button" class="act" onclick={() => signInAccount(a.id)}>{a.signed_in ? "Sign in again" : "Sign in"}</button>
+        <button type="button" class="act" onclick={() => signInAccount(a.id, openSignInTerminal)}>{a.signed_in ? "Sign in again" : "Sign in"}</button>
         <button type="button" class="act" onclick={() => (removing = a.id)}>Remove</button>
       {:else if ownLogin}
         <button type="button" class="act" disabled={busy} onclick={signInOwn}>{signedIn(a) ? "Sign in again" : "Sign in"}</button>
@@ -200,7 +209,7 @@
 </div>
 <div class="row">
   <span class="name quiet-name">Another {name} account</span>
-  <button type="button" class="act" onclick={() => addAccount(kind)}>Add…</button>
+  <button type="button" class="act" onclick={() => addAccount(kind, openSignInTerminal)}>Add…</button>
 </div>
 
 <style>

@@ -142,7 +142,7 @@
           <ToolAccounts
             kind={current.id}
             name={current.name}
-            ownLogin={current.id === "grok-cli" ? current.cli.login : null}
+            ownLogin={["grok-cli", "agy-cli"].includes(current.id) ? current.cli.login : null}
             ownSignedIn={current.id === "grok-cli" ? cliSignedIn(current) : null}
           />
         {:else}

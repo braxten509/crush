@@ -81,6 +81,9 @@ func Prepare(kind catwalk.Type, id string) (string, error) {
 	if dir == "" {
 		return "", errors.New("account 1 is the tool's own folder")
 	}
+	if kind == config.TypeAGYCLI {
+		return dir, prepareAGY(dir)
+	}
 	src, err := home(kind)
 	if err != nil {
 		return "", err
@@ -204,6 +207,10 @@ func syncClaudeSettings(dir string) error {
 
 // LoginArgv is the command that signs an account in, in a terminal.
 func LoginArgv(kind catwalk.Type, id string) ([]string, error) {
+	if kind == config.TypeAGYCLI && id != "" {
+		bin, args, err := AGYCommand(id, AGYBin(), []string{"models"}, true)
+		return append([]string{bin}, args...), err
+	}
 	env := config.AccountEnv(kind, id)
 	if len(env) == 0 {
 		return nil, errors.New("account 1 signs in with the tool itself")
@@ -226,6 +233,19 @@ func LoginArgv(kind catwalk.Type, id string) ([]string, error) {
 // of auth.json (the token's email claim).
 func Email(kind catwalk.Type, id string) string {
 	switch kind {
+	case config.TypeAGYCLI:
+		if id != "" {
+			return ""
+		}
+		h, err := os.UserHomeDir()
+		if err != nil {
+			return ""
+		}
+		data, err := os.ReadFile(filepath.Join(h, ".gemini", "google_accounts.json"))
+		if err != nil {
+			return ""
+		}
+		return strings.TrimSpace(gjson.GetBytes(data, "active").String())
 	case config.TypeClaudeCode:
 		path, err := claudeSettingsFile(id)
 		if err != nil {
@@ -375,6 +395,9 @@ func Label(cfg *config.Config, kind catwalk.Type, id string) string {
 
 // SignedIn reports whether an account folder holds a login.
 func SignedIn(kind catwalk.Type, id string) bool {
+	if kind == config.TypeAGYCLI {
+		return agySignedIn(id)
+	}
 	dir := config.AccountDir(id)
 	if dir == "" {
 		return true
@@ -406,6 +429,9 @@ func Remove(id string) error {
 	dir := config.AccountDir(id)
 	if dir == "" || filepath.Dir(dir) != config.AccountsDir() {
 		return errors.New("not an account folder")
+	}
+	if err := removeAGYLogin(dir); err != nil {
+		return err
 	}
 	return os.RemoveAll(dir) // RemoveAll removes links, never what they point at
 }

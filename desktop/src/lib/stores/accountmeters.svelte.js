@@ -15,7 +15,7 @@
 // chat uses is asked that way every minute, so its meter follows its turns
 // in any folder without asking Anthropic more often.
 import { api } from "../engine/api.js";
-import { ACCOUNT_KINDS, CLAUDE, CODEX } from "../fallback/blocks.js";
+import { AGY, CLAUDE, CODEX } from "../fallback/blocks.js";
 import { fallback, loadFallback } from "../fallback/store.svelte.js";
 import { meterLevel, nameWords } from "../footer.js";
 import { leftPercent, limits, limitsKey, readTime } from "./limits.svelte.js";
@@ -34,8 +34,8 @@ export const accountMeters = $state({ on: readOn() });
 
 // The tools with sign-ins (config.AccountKinds), then those without.
 const GROK = "grok-cli";
-const SIGN_IN_KINDS = [...ACCOUNT_KINDS, GROK];
-const LOGINLESS_KINDS = ["agy-cli", "opencode-cli", "kimi-coding"];
+const SIGN_IN_KINDS = [CLAUDE, CODEX, GROK, AGY];
+const LOGINLESS_KINDS = ["opencode-cli", "kimi-coding"];
 const LIST_KINDS = [...SIGN_IN_KINDS, ...LOGINLESS_KINDS];
 
 const TEN_MINUTES = 10 * 60_000;
@@ -80,9 +80,12 @@ export function setAccountMeters(on) {
 // The listed tools, in LIST_KINDS order: those with a sign-in, and those
 // without sign-ins that have a reading (one never set up stays hidden).
 export function listedKinds(accounts, byKind = {}) {
-  return LIST_KINDS.filter((kind) =>
-    SIGN_IN_KINDS.includes(kind) ? (accounts ?? []).some((a) => a.kind === kind) : Boolean(readTime(byKind[kind]?.read_at)),
-  );
+  return LIST_KINDS.filter((kind) => {
+    if (kind === AGY) {
+      return (accounts ?? []).some((a) => a.kind === kind && (a.id || a.signed_in)) || Boolean(readTime(byKind[kind]?.read_at));
+    }
+    return SIGN_IN_KINDS.includes(kind) ? (accounts ?? []).some((a) => a.kind === kind) : Boolean(readTime(byKind[kind]?.read_at));
+  });
 }
 
 // The listed tools with a signed-in account that has no reading yet: their
@@ -172,9 +175,8 @@ function partOf(windows, name, now) {
 // "signed-out".
 export function accountGroups({ accounts = [], byKind = {}, inUse = { kind: "", account: "" }, now = Date.now() } = {}) {
   return listedKinds(accounts, byKind).map((kind) => {
-    const logins = SIGN_IN_KINDS.includes(kind)
-      ? accounts.filter((a) => a.kind === kind)
-      : [{ id: "", kind, name: TOOL_NAMES[kind], signed_in: true }];
+    const known = accounts.filter((a) => a.kind === kind);
+    const logins = known.length ? known : [{ id: "", kind, name: TOOL_NAMES[kind], signed_in: true }];
     const tool = TOOL_NAMES[kind] ?? kind;
     return {
       kind,

@@ -8,7 +8,8 @@
 
 export const CLAUDE = "claude-code";
 export const CODEX = "codex-cli";
-export const ACCOUNT_KINDS = [CLAUDE, CODEX];
+export const AGY = "agy-cli";
+export const ACCOUNT_KINDS = [CLAUDE, CODEX, AGY];
 
 // The providers a use block may pick: the configured ones (readModelConfig's
 // Map), as the engine checks a block against cfg.Providers. The catalog has

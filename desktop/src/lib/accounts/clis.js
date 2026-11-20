@@ -1,8 +1,6 @@
 // The agent CLIs Settings → Accounts lists, in the sidebar's order (owner,
 // 2026-10-24): the command that signs one in, and whether the tool can keep
-// more than one login. Claude Code, Codex and Grok keep accounts in folders
-// of their own (internal/config/accounts.go, AccountKinds); Antigravity and
-// OpenCode sign in once, through their own CLI.
+// more than one login (internal/config/accounts.go, AccountKinds).
 export const AGENT_CLIS = [
   { kind: "claude-code", name: "Claude Code", login: ["claude", "auth", "login"], accounts: true },
   { kind: "codex-cli", name: "Codex", login: ["codex", "login"], accounts: true },
@@ -12,7 +10,7 @@ export const AGENT_CLIS = [
   // AGY has no login subcommand; `agy models` is what fetches a token when
   // none is stored. OpenCode's `auth login` asks its questions in a terminal,
   // so both run in a tab.
-  { kind: "agy-cli", name: "Antigravity", login: ["agy", "models"], accounts: false, terminal: true },
+  { kind: "agy-cli", name: "Antigravity", login: ["agy", "models"], accounts: true, terminal: true },
   { kind: "opencode-cli", name: "OpenCode Go", login: ["opencode", "auth", "login"], accounts: false, terminal: true },
   { kind: "opencode-zen-cli", name: "OpenCode Zen", login: ["opencode", "auth", "login"], accounts: false, terminal: true },
 ];

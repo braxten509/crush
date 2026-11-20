@@ -90,9 +90,14 @@ export function saveOrder(order) {
 
 // Runs the sign-in command with no terminal: the tool opens the default
 // browser, and the list shows the account signed in once it finishes.
-async function signIn(login) {
+async function signIn(login, openSignInTerminal) {
   if (!login?.login_argv?.length) return;
   const name = login.account?.name ?? "the account";
+  if (login.account?.kind === "agy-cli") {
+    await openSignInTerminal(login.login_argv, name);
+    await loadFallback();
+    return;
+  }
   notify("info", `Finish signing in to ${name} in your browser.`, 0);
   let signedIn = false;
   try {
@@ -109,19 +114,19 @@ async function signIn(login) {
   }
 }
 
-export async function addAccount(kind) {
+export async function addAccount(kind, openSignInTerminal) {
   try {
     const login = await api.addAccount(kind);
     await loadFallback();
-    await signIn(login);
+    await signIn(login, openSignInTerminal);
   } catch (error) {
     notify("error", `Couldn't add the account: ${errorText(error)}`);
   }
 }
 
-export async function signInAccount(id) {
+export async function signInAccount(id, openSignInTerminal) {
   try {
-    await signIn(await api.signInAccount(id));
+    await signIn(await api.signInAccount(id), openSignInTerminal);
   } catch (error) {
     notify("error", `Couldn't start the sign-in: ${errorText(error)}`);
   }

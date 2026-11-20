@@ -2,16 +2,12 @@ package cliagent
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
-	"testing"
-	"time"
 
 	"charm.land/catwalk/v3/pkg/catwalk"
+	"github.com/charmbracelet/crush/internal/accounts"
 	"github.com/charmbracelet/crush/internal/config"
 )
 
@@ -29,7 +25,7 @@ func SignedIn(kind catwalk.Type) bool {
 	case config.TypeOpenCodeZenCLI:
 		return openCodeAuthHas("opencode")
 	case config.TypeAGYCLI:
-		return agySignedIn()
+		return accounts.SignedIn(kind, "")
 	}
 	return false
 }
@@ -75,19 +71,6 @@ func openCodeAuthHas(key string) bool {
 	return ok && len(bytes.TrimSpace(raw)) > 0 && string(bytes.TrimSpace(raw)) != "null"
 }
 
-// agySignedIn reports whether AGY's login is in the Secret Service keyring,
-// where it keeps it. A test never asks the real keyring, which
-// may prompt to be unlocked.
-func agySignedIn() bool {
-	if testing.Testing() {
-		return false
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	out, err := exec.CommandContext(ctx, "secret-tool", "lookup", "service", "gemini", "username", "antigravity").Output()
-	return err == nil && len(bytes.TrimSpace(out)) > 0
-}
-
 // LoginEmail is the email kind's own login signed in with, where the CLI
 // keeps one apart from its credential: Antigravity's active account in
 // ~/.gemini/google_accounts.json. OpenCode keeps only a key and every other
@@ -96,21 +79,7 @@ func LoginEmail(kind catwalk.Type) string {
 	if kind != config.TypeAGYCLI {
 		return ""
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	data, err := os.ReadFile(filepath.Join(home, ".gemini", "google_accounts.json"))
-	if err != nil {
-		return ""
-	}
-	var accounts struct {
-		Active string `json:"active"`
-	}
-	if json.Unmarshal(data, &accounts) != nil {
-		return ""
-	}
-	return strings.TrimSpace(accounts.Active)
+	return accounts.LoginEmail(kind, "")
 }
 
 func fileHasBytes(path string) bool {

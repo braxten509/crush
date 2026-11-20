@@ -6,6 +6,7 @@ import (
 
 	"charm.land/catwalk/v3/pkg/catwalk"
 
+	"github.com/charmbracelet/crush/internal/accounts"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/sandbox"
 )
@@ -28,15 +29,23 @@ var readOnlyStateDirs = map[catwalk.Type][]string{
 // startTurnProc starts the CLI for a turn: read-only when the model is,
 // and otherwise with its file changes recorded for review.
 func (m *Model) startTurnProc(noTools bool, env []string, name string, args ...string) (*proc, error) {
-	if !m.ReadOnly || noTools {
-		return startReviewProc(m.Dir, env, !noTools, name, args...)
+	dir, review := m.Dir, !noTools
+	if m.ReadOnly && !noTools {
+		var err error
+		dir, name, args, err = m.readOnlyCommand(name, args)
+		if err != nil {
+			return nil, err
+		}
+		review = false
 	}
-	dir, name, args, err := m.readOnlyCommand(name, args)
-	if err != nil {
-		return nil, err
+	if m.Kind == config.TypeAGYCLI && m.Account != "" {
+		var err error
+		name, args, err = accounts.AGYCommand(m.Account, name, args, false)
+		if err != nil {
+			return nil, err
+		}
 	}
-	// Nothing in the project can change, so there is nothing to review.
-	return startReviewProc(dir, env, false, name, args...)
+	return startReviewProc(dir, env, review, name, args...)
 }
 
 // readOnlyCommand wraps a CLI command so it runs read-only, with its own

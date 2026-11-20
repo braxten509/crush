@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"html"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -105,22 +106,49 @@ func (ring *agyKeyring) delete(ctx context.Context, path dbus.ObjectPath) error 
 	return err
 }
 
-func (ring *agyKeyring) startBus(ctx context.Context, fail context.CancelCauseFunc) (string, func(), error) {
-	dir, err := os.MkdirTemp("", "crush-agy-")
+// agyBusConfig is a bus with no service files: it holds only the keyring
+// stand-in, so nothing AGY asks for starts a second copy of a desktop
+// service (portals, KWallet, Flatpak) on it.
+const agyBusConfig = `<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-Bus Bus Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
+<busconfig>
+  <type>session</type>
+  <listen>%s</listen>
+  <auth>EXTERNAL</auth>
+  <policy context="default">
+    <allow send_destination="*" eavesdrop="true"/>
+    <allow eavesdrop="true"/>
+    <allow own="*"/>
+  </policy>
+</busconfig>
+`
+
+// startBus returns the private bus's address and its folder, which also
+// holds the sandbox's xdg-open (agyOpener).
+func (ring *agyKeyring) startBus(ctx context.Context, fail context.CancelCauseFunc) (string, string, func(), error) {
+	// The user's runtime folder, not /tmp: temp cleaners leave it alone.
+	dir, err := os.MkdirTemp(os.Getenv("XDG_RUNTIME_DIR"), "crush-agy-")
 	if err != nil {
-		return "", nil, err
+		return "", "", nil, err
 	}
 	address := "unix:path=" + filepath.Join(dir, "bus")
+	config := filepath.Join(dir, "bus.conf")
+	err = os.WriteFile(config, []byte(fmt.Sprintf(agyBusConfig, html.EscapeString(address))), 0o600)
+	if err != nil {
+		_ = os.RemoveAll(dir)
+		return "", "", nil, err
+	}
 	cmd := exec.CommandContext(ctx, "bwrap", "--die-with-parent", "--bind", "/", "/", "--dev-bind", "/dev", "/dev", "--",
-		"dbus-daemon", "--session", "--nofork", "--address="+address, "--print-address=1")
-	cmd.Stderr = os.Stderr
+		"dbus-daemon", "--config-file="+config, "--nofork", "--print-address=1")
+	// The bus's log stays out of the sign-in terminal.
+	cmd.Stderr = nil
 	out, err := cmd.StdoutPipe()
 	if err == nil {
 		err = cmd.Start()
 	}
 	if err != nil {
 		_ = os.RemoveAll(dir)
-		return "", nil, err
+		return "", "", nil, err
 	}
 	stop := func() {
 		_ = cmd.Process.Kill()
@@ -135,19 +163,19 @@ func (ring *agyKeyring) startBus(ctx context.Context, fail context.CancelCauseFu
 	case ok := <-ready:
 		if !ok {
 			stop()
-			return "", nil, errors.New("could not start AGY's private keyring bus")
+			return "", "", nil, errors.New("could not start AGY's private keyring bus")
 		}
 	case <-ctx.Done():
 		stop()
-		return "", nil, ctx.Err()
+		return "", "", nil, ctx.Err()
 	case <-timer.C:
 		stop()
-		return "", nil, errors.New("AGY's private keyring bus did not start")
+		return "", "", nil, errors.New("AGY's private keyring bus did not start")
 	}
 	client, err := dbus.Connect(address)
 	if err != nil {
 		stop()
-		return "", nil, err
+		return "", "", nil, err
 	}
 	closeBus := func() {
 		_ = client.Close()
@@ -156,9 +184,31 @@ func (ring *agyKeyring) startBus(ctx context.Context, fail context.CancelCauseFu
 	bridge := agySecretService{ring: ring, bus: client, ctx: ctx, fail: fail}
 	if err := bridge.export(); err != nil {
 		closeBus()
-		return "", nil, err
+		return "", "", nil, err
 	}
-	return address, closeBus, nil
+	return address, dir, closeBus, nil
+}
+
+// agyOpener puts an xdg-open in dir that opens links over the desktop's
+// own bus, not the private one, and returns the sandbox's PATH and
+// settings for it. AGY opens its sign-in page with xdg-open; on the
+// private bus the browser could not be reached.
+func agyOpener(dir string) []string {
+	open, err := exec.LookPath("xdg-open")
+	if err != nil {
+		return nil
+	}
+	desktop := os.Getenv("DBUS_SESSION_BUS_ADDRESS")
+	if desktop == "" {
+		desktop = "unix:path=" + filepath.Join(os.Getenv("XDG_RUNTIME_DIR"), "bus")
+	}
+	bin := filepath.Join(dir, "bin")
+	script := "#!/bin/sh\nDBUS_SESSION_BUS_ADDRESS=\"$CRUSH_AGY_DESKTOP_BUS\" exec \"$CRUSH_AGY_XDG_OPEN\" \"$@\"\n"
+	if os.Mkdir(bin, 0o700) != nil || os.WriteFile(filepath.Join(bin, "xdg-open"), []byte(script), 0o700) != nil {
+		return nil
+	}
+	return []string{"--setenv", "PATH", bin + string(os.PathListSeparator) + os.Getenv("PATH"),
+		"--setenv", "CRUSH_AGY_DESKTOP_BUS", desktop, "--setenv", "CRUSH_AGY_XDG_OPEN", open}
 }
 
 type agySecret struct {

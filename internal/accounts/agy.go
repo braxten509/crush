@@ -157,7 +157,7 @@ func RunAGYProfile(ctx context.Context, id, name string, args []string, login bo
 	}
 	ctx, stop := context.WithCancelCause(ctx)
 	defer stop(nil)
-	address, closeBus, err := ring.startBus(ctx, stop)
+	address, busDir, closeBus, err := ring.startBus(ctx, stop)
 	if err != nil {
 		return err
 	}
@@ -172,6 +172,7 @@ func RunAGYProfile(ctx context.Context, id, name string, args []string, login bo
 	wrap := []string{"--die-with-parent", "--bind", "/", "/", "--dev-bind", "/dev", "/dev", "--tmpfs", gemini,
 		"--setenv", "DBUS_SESSION_BUS_ADDRESS", address,
 		"--unsetenv", "AGY_ADC_AUTH", "--unsetenv", "GEMINI_API_KEY", "--unsetenv", "GOOGLE_API_KEY"}
+	wrap = append(wrap, agyOpener(busDir)...)
 	// Share only known non-login state. Bind whole conversation directories
 	// so SQLite can open and rename its sidecar files normally.
 	for _, path := range []string{"conversations", "brain", "annotations", "mcp", "knowledge"} {

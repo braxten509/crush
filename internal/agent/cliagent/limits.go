@@ -764,8 +764,8 @@ func agyUsage(out []byte) (limits []Limit, turns int, err error) {
 		Command struct {
 			Data struct {
 				Groups []struct {
-					Name        string `json:"name"`
-					Description string `json:"description"`
+					Name        string      `json:"name"`
+					Description string      `json:"description"`
 					Buckets     []agyBucket `json:"buckets"`
 				} `json:"groups"`
 			} `json:"data"`

@@ -34,7 +34,6 @@ import (
 	"github.com/charmbracelet/crush/internal/openchats"
 	"github.com/charmbracelet/crush/internal/permission"
 	"github.com/charmbracelet/crush/internal/pinentry"
-	"github.com/charmbracelet/crush/internal/projects"
 	"github.com/charmbracelet/crush/internal/prompthistory"
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/crush/internal/question"
@@ -531,19 +530,6 @@ func (app *App) newLockedChats(conn *sql.DB, store *config.ConfigStore) *lockedc
 		Folder:   store.WorkingDir(),
 		Sessions: app.Sessions,
 		Vault:    lockedchats.NewVault(),
-		OtherAttachmentStores: func() ([]string, error) {
-			known, err := projects.List()
-			if err != nil {
-				return nil, err
-			}
-			var paths []string
-			for _, project := range known {
-				if project.DataDir != "" {
-					paths = append(paths, filepath.Join(project.DataDir, "crush.db"))
-				}
-			}
-			return paths, nil
-		},
 		StopWork: func(ctx context.Context, ids []string) error {
 			if drain, ok := app.AgentCoordinator.(agent.LockShutdownGate); ok {
 				if err := drain.StopForLock(ctx, ids); err != nil {

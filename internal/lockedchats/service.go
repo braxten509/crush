@@ -53,9 +53,6 @@ type Service struct {
 	PromptHistory string
 	// CacheDir is Crush's cache (~/.cache/crush): attachments and uploads.
 	CacheDir string
-	// OtherAttachmentStores lists other registered folders' database files.
-	// Nil is appropriate for an isolated store (including test fixtures).
-	OtherAttachmentStores func() ([]string, error)
 	// StopWork cancels and drains turns and flushes messages before shutdown locks.
 	StopWork func(context.Context, []string) error
 
@@ -662,10 +659,8 @@ var pathPattern = regexp.MustCompile(`/[^\s"'\\<>|*?]+`)
 // shared files. A CLI store in an unknown format fails the lock.
 func (s *Service) collect(ctx context.Context, ids []string, digests, exclusive []string) (lockPlan, error) {
 	var plan lockPlan
-	sharedAttachments, err := s.outsideAttachments(ctx, ids)
-	if err != nil {
-		return plan, err
-	}
+	// Read only when the chat has a picture: most chats have none.
+	var sharedAttachments map[string]bool
 	seen := map[string]bool{}
 	add := func(path string, dir, wipe bool) {
 		if path == "" || seen[path] {
@@ -712,6 +707,12 @@ func (s *Service) collect(ctx context.Context, ids []string, digests, exclusive 
 			for _, data := range binaryParts(text) {
 				if s.CacheDir == "" {
 					break
+				}
+				if sharedAttachments == nil {
+					var err error
+					if sharedAttachments, err = s.outsideAttachments(ctx, ids); err != nil {
+						return plan, err
+					}
 				}
 				for _, path := range glob(filepath.Join(s.CacheDir, "attachments", sha256Hex(data)+".*")) {
 					add(path, false, !sharedAttachments[sha256Hex(data)])
@@ -768,57 +769,32 @@ func (s *Service) collect(ctx context.Context, ids []string, digests, exclusive 
 	return plan, nil
 }
 
-// outsideAttachments includes binary references that do not contain a cache
-// path at all. Other folders share the same content-addressed cache.
+// outsideAttachments lists the cached pictures other chats in this folder
+// still use, by sha256: as binary parts or by cache path. Other folders are
+// never read (owner, 2026-11-20: locking read all 11 GB of every folder and
+// took minutes), so a picture only another folder shares is still wiped.
+// SQLite skips messages without pictures before Go reads them.
 func (s *Service) outsideAttachments(ctx context.Context, ids []string) (map[string]bool, error) {
 	shared := map[string]bool{}
-	read := func(conn *sql.DB, query string, args ...any) error {
-		texts, err := queryStrings(ctx, conn, query, args...)
-		if err != nil {
-			return err
-		}
-		for _, text := range texts {
-			for _, data := range binaryParts(text) {
-				shared[sha256Hex(data)] = true
-			}
-			for _, path := range pathPattern.FindAllString(text, -1) {
-				if filepath.Dir(path) == filepath.Join(s.CacheDir, "attachments") {
-					shared[strings.SplitN(filepath.Base(path), ".", 2)[0]] = true
-				}
-			}
-		}
-		return nil
-	}
-	query := `SELECT parts FROM messages`
+	attachments := filepath.Join(s.CacheDir, "attachments")
+	query := `SELECT parts FROM messages WHERE (instr(parts, '"type":"binary"') > 0 OR instr(parts, ?) > 0)`
+	args := []any{attachments + string(filepath.Separator)}
 	if len(ids) > 0 {
-		query += ` WHERE session_id NOT IN (` + placeholders(len(ids)) + `)`
+		query += ` AND session_id NOT IN (` + placeholders(len(ids)) + `)`
+		args = append(args, anySlice(ids)...)
 	}
-	if err := read(s.DB, query, anySlice(ids)...); err != nil {
+	texts, err := queryStrings(ctx, s.DB, query, args...)
+	if err != nil {
 		return nil, err
 	}
-	if s.OtherAttachmentStores != nil {
-		paths, err := s.OtherAttachmentStores()
-		if err != nil {
-			return nil, err
+	for _, text := range texts {
+		for _, data := range binaryParts(text) {
+			shared[sha256Hex(data)] = true
 		}
-		for _, path := range paths {
-			if sameData(filepath.Dir(path), s.DataDir) {
-				continue
+		for _, path := range pathPattern.FindAllString(text, -1) {
+			if filepath.Dir(path) == attachments {
+				shared[strings.SplitN(filepath.Base(path), ".", 2)[0]] = true
 			}
-			if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
-				continue
-			} else if err != nil {
-				return nil, err
-			}
-			conn, err := db.OpenForeign(path)
-			if err != nil {
-				return nil, err
-			}
-			err = read(conn, `SELECT parts FROM messages`)
-			conn.Close()
-			if err != nil {
-				return nil, err
-			} // uncertain references: never wipe
 		}
 	}
 	return shared, nil
@@ -1229,6 +1205,7 @@ func (s *Service) runWipes(ctx context.Context, root string) error {
 	}
 	rows.Close()
 	var failed error
+	var shared map[string]bool
 	for _, w := range wipes {
 		var err error
 		switch w.Kind {
@@ -1236,8 +1213,9 @@ func (s *Service) runWipes(ctx context.Context, root string) error {
 			if filepath.Dir(w.Target) == filepath.Join(s.CacheDir, "attachments") {
 				// Recheck at the actual wipe, including recovery after a crash:
 				// another chat may have acquired a reference after collection.
-				var shared map[string]bool
-				shared, err = s.outsideAttachments(ctx, nil)
+				if shared == nil {
+					shared, err = s.outsideAttachments(ctx, nil)
+				}
 				if err == nil && !shared[strings.SplitN(filepath.Base(w.Target), ".", 2)[0]] {
 					err = wipeFile(w.Target)
 				}

@@ -18,6 +18,7 @@ import (
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/secretguard"
 	"github.com/charmbracelet/crush/internal/session"
+	"github.com/google/uuid"
 )
 
 // cliPromptWithAttachments carries non-image binary files through native
@@ -167,6 +168,19 @@ func (a *sessionAgent) cliStream(m *cliagent.Model, call SessionAgentCall, histo
 			// is never resumed in place.
 			turn.Resume, turn.Fork = "", &fork.point
 		}
+		// The link is saved the moment the native session has a name, so a
+		// lock finds the CLI's copy even when the turn is stopped at once.
+		s.onNative = func(native string) {
+			a.saveCLILink(context.WithoutCancel(ctx), m, call.SessionID, native, a.tasks != nil, taskInstructionsHash)
+		}
+		nameNew := func() {
+			if turn.Fork == nil && turn.Resume == "" && cliagent.ChoosesSession(m.Kind) {
+				turn.NewSession = uuid.NewString()
+				s.native = turn.NewSession
+				s.onNative(turn.NewSession)
+			}
+		}
+		nameNew()
 		err = m.Run(ctx, turn)
 		if errors.Is(err, cliagent.ErrResume) || (turn.Fork != nil && errors.Is(err, cliagent.ErrNoFork)) {
 			// The native session is gone, or the fork failed; hand the
@@ -179,6 +193,7 @@ func (a *sessionAgent) cliStream(m *cliagent.Model, call SessionAgentCall, histo
 			turn.Fork = nil
 			turn.Prompt, turn.Resume = cliHandoffWithTranscript(history, cliagent.Link{}, prompt, a.transcriptDataDir(), call.SessionID)
 			turn.Prompt = wrap(turn.Prompt, cliagent.Link{}, turn.Resume)
+			nameNew()
 			err = m.Run(ctx, turn)
 		}
 

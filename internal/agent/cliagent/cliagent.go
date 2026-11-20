@@ -118,6 +118,11 @@ type Turn struct {
 	// (see [OnUnprompted]) instead of sending Prompt.
 	Continue bool
 	Resume   string // native session to continue; empty starts a new one
+	// NewSession names the new native session, for a CLI Crush may name
+	// it for ([ChoosesSession]), so the link is saved before the CLI
+	// starts: a turn stopped before the CLI's first reply still leaves a
+	// copy a lock must find (owner, 2026-11-20).
+	NewSession string
 	// Fork, set on a branch's first turn, makes the turn fork the tool's
 	// session at the cut instead of starting or resuming one (see
 	// [CanFork]); the source session is never resumed in place. A failed
@@ -452,6 +457,12 @@ func CanBackground(kind catwalk.Type) bool {
 // running turn at any step (OpenCode's own server takes it, Codex's
 // turn/steer cuts the reply it is writing short, AGY answers it once the
 // step it is on ends), not only while a tool runs.
+// ChoosesSession tells whether Crush names a new native session itself
+// ([Turn.NewSession]) instead of learning the name from the CLI.
+func ChoosesSession(kind catwalk.Type) bool {
+	return kind == config.TypeClaudeCode
+}
+
 func SteersAnyTime(kind catwalk.Type) bool {
 	return kind == config.TypeOpenCodeCLI || kind == config.TypeOpenCodeZenCLI || kind == config.TypeCodexCLI || kind == config.TypeAGYCLI
 }

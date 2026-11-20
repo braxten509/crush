@@ -31,13 +31,15 @@ type cliSteps struct {
 	call          SessionAgentCall
 	onQueuedInput func([]SessionAgentCall)
 
-	ctx             context.Context
-	sc              fantasy.AgentStreamCall
-	m               *cliagent.Model
-	a               *sessionAgent
-	sessionID       string
-	onCompacting    func(bool) error
-	onActivity      func(activity, detail string) error
+	ctx          context.Context
+	sc           fantasy.AgentStreamCall
+	m            *cliagent.Model
+	a            *sessionAgent
+	sessionID    string
+	onCompacting func(bool) error
+	onActivity   func(activity, detail string) error
+	// onNative saves the link as soon as the native session is known.
+	onNative        func(native string)
 	onToolInterrupt func() bool
 	compacting      bool
 	// File content before each pending edit, by tool call ID.
@@ -408,7 +410,12 @@ func (s *cliSteps) handleEvent(e cliagent.Event) error {
 	case cliagent.EventCompacting:
 		return s.handleCompacting(e)
 	case cliagent.EventSession:
-		s.native = e.Session
+		if e.Session != "" && e.Session != s.native {
+			s.native = e.Session
+			if s.onNative != nil {
+				s.onNative(e.Session)
+			}
+		}
 	case cliagent.EventUsage:
 		s.usage = e.Usage
 	case cliagent.EventContextBudget:

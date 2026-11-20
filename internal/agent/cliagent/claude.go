@@ -317,6 +317,8 @@ func startClaude(m *Model, t Turn, key claudeKey) (*claudeLive, error) {
 		args = append(args, claudeForkArgs(*t.Fork)...)
 	} else if t.Resume != "" {
 		args = append(args, "--resume", t.Resume)
+	} else if t.NewSession != "" {
+		args = append(args, "--session-id", t.NewSession)
 	}
 	if m.Guarded && !t.NoTools {
 		// Edits need no approval under Crush's YOLO rules either; commands

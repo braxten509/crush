@@ -33,7 +33,7 @@ func (c *Common) liveWork() workspace.LiveWork {
 func (c *Common) BackgroundJobs(ctx context.Context, sessionID string) []agent.Process {
 	lw := c.liveWork()
 	if lw == nil {
-		return agent.BackgroundProcesses()
+		return agent.RunningProcesses()
 	}
 	if sessionID == "" {
 		return nil

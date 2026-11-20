@@ -49,11 +49,12 @@ func taskFromHelper(h proto.Helper) agent.Task {
 // processFromJob turns a job from the engine back into the agent's process.
 func processFromJob(j proto.Job) agent.Process {
 	return agent.Process{
-		PID:     j.PID,
-		JobID:   j.JobID,
-		Command: j.Command,
-		Name:    j.Name,
-		Started: j.Started,
-		Session: j.SessionID,
+		PID:        j.PID,
+		JobID:      j.JobID,
+		Command:    j.Command,
+		Name:       j.Name,
+		Started:    j.Started,
+		Session:    j.SessionID,
+		Foreground: j.Foreground,
 	}
 }

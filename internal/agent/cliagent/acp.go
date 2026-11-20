@@ -194,6 +194,7 @@ func runACPWith(ctx context.Context, m *Model, t Turn, name, bin string, args []
 	var terms *acpTerminals
 	if offersTerminal(m, t, name) {
 		terms = newACPTerminals(m.Dir)
+		terms.env = t.Env
 		defer terms.closeAll()
 		t.Emit = terms.attach(t.Emit)
 	}

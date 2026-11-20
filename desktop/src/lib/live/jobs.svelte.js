@@ -34,6 +34,7 @@ export function jobKey(job) {
 
 // The Background Processes row's info (background.go:269-272).
 export function jobInfo(job, now = Date.now()) {
+  if (job.foreground) return `Running · ${since(job.started, now)}`;
   return job.job_id ? `job ${job.job_id} · ${since(job.started, now)}` : `pid ${job.pid} · ${since(job.started, now)}`;
 }
 
@@ -64,7 +65,7 @@ export function trayJobs() {
 // out). A job with no start time is shown.
 const SHOW_AFTER_MS = 4000;
 export function lastingJobs(list, now = Date.now()) {
-  return list.filter((job) => !(now - timeOf(job.started) <= SHOW_AFTER_MS));
+  return list.filter((job) => job.foreground || !(now - timeOf(job.started) <= SHOW_AFTER_MS));
 }
 
 // The server jobs left out of the tray (for the probe).

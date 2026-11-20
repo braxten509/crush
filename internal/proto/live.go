@@ -25,15 +25,16 @@ type Helper struct {
 	API            bool      `json:"api,omitempty"`        // an API chat's subagent; CLI is then its provider
 }
 
-// Job is a command running in the background for a chat.
+// Job is a command running for a chat.
 type Job struct {
-	PID       int       `json:"pid,omitempty"`    // 0 for managed jobs without a process of their own
-	JobID     string    `json:"job_id,omitempty"` // managed job (`crush bg`, a backgrounded bash call)
-	Command   string    `json:"command"`
-	Name      string    `json:"name,omitempty"`
-	Started   time.Time `json:"started"`
-	SessionID string    `json:"session_id"`
-	StartedBy string    `json:"started_by,omitempty"` // 5.5
+	Foreground bool      `json:"foreground,omitempty"`
+	PID        int       `json:"pid,omitempty"`    // 0 for managed jobs without a process of their own
+	JobID      string    `json:"job_id,omitempty"` // managed job (`crush bg`, a backgrounded bash call)
+	Command    string    `json:"command"`
+	Name       string    `json:"name,omitempty"`
+	Started    time.Time `json:"started"`
+	SessionID  string    `json:"session_id"`
+	StartedBy  string    `json:"started_by,omitempty"` // 5.5
 }
 
 // JobRef names one job to kill.

@@ -27,6 +27,7 @@ import (
 // acpTerminals are the commands one turn asked Crush to run.
 type acpTerminals struct {
 	dir   string
+	env   []string
 	mu    sync.Mutex
 	next  int
 	terms map[string]*acpTerminal
@@ -38,6 +39,9 @@ type acpTerminals struct {
 	open  []string
 	owner map[string]string
 }
+
+// ACPTerminalEnv marks commands started by Crush on behalf of a CLI.
+const ACPTerminalEnv = "CRUSH_ACP_TERMINAL"
 
 // acpTerminal is one command: its output, kept to the agent's limit, and
 // once it ends, its exit and the files it changed.
@@ -144,6 +148,8 @@ func (ts *acpTerminals) create(command string, args, env []string, dir string, l
 	}
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), env...)
+	cmd.Env = append(cmd.Env, ts.env...)
+	cmd.Env = append(cmd.Env, ACPTerminalEnv+"=1")
 	ownGroup(cmd)
 	term := &acpTerminal{cmd: cmd, limit: limit, done: make(chan struct{})}
 	cmd.Stdout, cmd.Stderr = term, term

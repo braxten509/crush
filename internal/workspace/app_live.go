@@ -20,11 +20,11 @@ func (w *AppWorkspace) StopHelper(_ context.Context, sessionID, id string) error
 }
 
 func (w *AppWorkspace) Jobs(_ context.Context, sessionID string) ([]agent.Process, error) {
-	return agent.SessionBackgroundProcesses(sessionID), nil
+	return agent.SessionRunningProcesses(sessionID), nil
 }
 
 func (w *AppWorkspace) KillJob(_ context.Context, sessionID string, p agent.Process) error {
-	for _, listed := range agent.SessionBackgroundProcesses(sessionID) {
+	for _, listed := range agent.SessionRunningProcesses(sessionID) {
 		if p.JobID != "" && listed.JobID == p.JobID || p.JobID == "" && p.PID != 0 && listed.PID == p.PID {
 			return agent.StopBackgroundProcess(listed)
 		}

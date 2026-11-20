@@ -32,6 +32,8 @@ type Process struct {
 	Started time.Time
 	// Session is the main session whose agent started the process.
 	Session string
+	// Foreground indicates that the agent is still waiting for the command.
+	Foreground bool
 	// marker is a managed job's environment marker, which its processes
 	// carry.
 	marker string
@@ -45,6 +47,7 @@ type proc struct {
 	started       time.Time
 	nativeShellID string
 	managedJobID  string
+	acpTerminal   bool
 	// session is the main session whose agent started the process; it is
 	// empty under a sub-agent, which has no session of its own to report to.
 	session string
@@ -92,6 +95,9 @@ func procFromEntry(e procs.Entry) proc {
 		if value, ok := strings.CutPrefix(string(variable), TasksSessionEnv+"="); ok {
 			p.session = value
 		}
+		if bytes.Equal(variable, []byte(cliagent.ACPTerminalEnv+"=1")) {
+			p.acpTerminal = true
+		}
 		// D-Bus sets this for every service it activates, and the
 		// service's own children inherit it.
 		if bytes.HasPrefix(variable, []byte("DBUS_STARTER_BUS_TYPE=")) {
@@ -121,11 +127,20 @@ var backgroundMinAge = shelltool.ForegroundWaitLimit
 // commands explicitly moved to the background, and orphaned commands are
 // visible immediately.
 func BackgroundProcesses() []Process {
+	return listedProcesses(false)
+}
+
+// RunningProcesses includes foreground commands for the live process list.
+func RunningProcesses() []Process {
+	return listedProcesses(true)
+}
+
+func listedProcesses(includeForeground bool) []Process {
 	markers := hubMarkers()
 	if len(markers) == 0 {
 		return nil
 	}
-	out := append(managedBackgroundProcesses(), strayProcesses(markers)...)
+	out := append(managedBackgroundProcesses(), scanAgentProcesses(markers, includeForeground)...)
 	slices.SortFunc(out, func(a, b Process) int { return a.Started.Compare(b.Started) })
 	return out
 }
@@ -133,6 +148,10 @@ func BackgroundProcesses() []Process {
 // strayProcesses lists the background processes carrying one of markers
 // that no managed job holds: what agents started outside crush bg.
 func strayProcesses(markers []string) []Process {
+	return scanAgentProcesses(markers, false)
+}
+
+func scanAgentProcesses(markers []string, includeForeground bool) []Process {
 	procs := markedProcs(markers)
 	now, moved := time.Now(), cliagent.LastBackground()
 	var out []Process
@@ -140,13 +159,19 @@ func strayProcesses(markers []string) []Process {
 		if managedBackgroundJob(cmp.Or(p.managedJobID, p.nativeShellID)) != nil {
 			continue
 		}
-		if p.session == "" || p.cliHelper {
+		if p.session == "" || p.cliHelper || p.busService {
+			continue
+		}
+		if isForegroundCommand(p, procs) {
+			if includeForeground && isForegroundRoot(p, procs) {
+				out = append(out, Process{PID: p.pid, Command: commandText(p.args), Started: p.started, Session: p.session, Foreground: true})
+			}
 			continue
 		}
 		if p.nativeShellID == "" && !isDetached(p, procs) && now.Sub(p.started) < backgroundMinAge && !p.started.Before(moved) {
 			continue
 		}
-		if !p.busService && isCommandRoot(p, procs) && !isForegroundCommand(p, procs) {
+		if isCommandRoot(p, procs) {
 			out = append(out, Process{PID: p.pid, Command: commandText(p.args), Started: p.started, Session: p.session})
 		}
 	}
@@ -156,8 +181,17 @@ func strayProcesses(markers []string) []Process {
 // SessionBackgroundProcesses lists the background processes of one chat:
 // BackgroundProcesses filtered by Session.
 func SessionBackgroundProcesses(sessionID string) []Process {
+	return processesForSession(BackgroundProcesses(), sessionID)
+}
+
+// SessionRunningProcesses lists the visible running commands of one chat.
+func SessionRunningProcesses(sessionID string) []Process {
+	return processesForSession(RunningProcesses(), sessionID)
+}
+
+func processesForSession(list []Process, sessionID string) []Process {
 	var out []Process
-	for _, p := range BackgroundProcesses() {
+	for _, p := range list {
 		if p.Session == sessionID {
 			out = append(out, p)
 		}
@@ -171,7 +205,7 @@ func SessionBackgroundProcesses(sessionID string) []Process {
 // was shown with still finds it.
 func SessionProcessHolding(sessionID string, pid int) (Process, bool) {
 	table := markedProcs(hubMarkers())
-	for _, p := range SessionBackgroundProcesses(sessionID) {
+	for _, p := range SessionRunningProcesses(sessionID) {
 		if p.PID == pid || slices.Contains(processTree(p, table), pid) {
 			return p, true
 		}
@@ -294,6 +328,9 @@ func detachedNotification(k detachedKey, d detachedProc, ended time.Time) string
 // a command as background. Include the unwrapped shell script so Claude's
 // quoting does not prevent a match.
 func isForegroundCommand(p proc, procs map[int]proc) bool {
+	if p.acpTerminal && p.ppid == os.Getpid() && p.sid == p.pid {
+		return true
+	}
 	if p.nativeShellID != "" && tools.IsForegroundShell(p.nativeShellID) {
 		return true
 	}
@@ -311,13 +348,27 @@ func isForegroundCommand(p proc, procs map[int]proc) bool {
 	return false
 }
 
+// isForegroundRoot keeps the outermost matching process, including commands
+// where the shell replaces itself with the executable.
+func isForegroundRoot(p proc, procs map[int]proc) bool {
+	if p.ppid == os.Getpid() {
+		return isCommandRoot(p, procs)
+	}
+	for parent, ok := procs[p.ppid]; ok; parent, ok = procs[parent.ppid] {
+		if isForegroundCommand(parent, procs) {
+			return false
+		}
+	}
+	return true
+}
+
 // isCommandRoot reports whether p is where a command starts: the shell a
 // CLI tool opened, or a process whose parent is gone (a command that
 // detached or outlived its shell).
 func isCommandRoot(p proc, procs map[int]proc) bool {
 	parent, marked := procs[p.ppid]
 	if !marked {
-		if p.ppid == os.Getpid() && p.sid == p.pid && p.nativeShellID != "" {
+		if p.ppid == os.Getpid() && p.sid == p.pid && (p.nativeShellID != "" || p.acpTerminal) {
 			return true
 		}
 		// The CLI itself is Crush's child; anything else was orphaned.
@@ -421,7 +472,7 @@ func killProcess(pid int, byUser bool) error {
 		}
 	}
 	root, ok := procs[pid]
-	if !ok || !isCommandRoot(root, procs) {
+	if !ok || (!isCommandRoot(root, procs) && !(isForegroundCommand(root, procs) && isForegroundRoot(root, procs))) {
 		return fmt.Errorf("process %d is not one of the agents' background processes", pid)
 	}
 	// The stop is told once, here: a detached process in the tree is not

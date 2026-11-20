@@ -31,7 +31,22 @@ func (c *Config) addLocalModels() {
 	}
 	list := make([]catwalk.Model, 0, len(models))
 	for _, model := range models {
-		list = append(list, catwalk.Model{ID: model.ID, Name: fmt.Sprintf("%s · %.1f GiB", model.Name, float64(model.Bytes)/(1<<30)), ContextWindow: localmodel.ContextSize, DefaultMaxTokens: 4096})
+		entry := catwalk.Model{ID: model.ID, Name: fmt.Sprintf("%s · %.1f GiB", model.Name, float64(model.Bytes)/(1<<30)), ContextWindow: localmodel.Default.PlannedContext(model), DefaultMaxTokens: 4096}
+		entry.Reasoning = localReasoning(model)
+		list = append(list, entry)
 	}
 	c.Providers.Set(localmodel.ProviderID, ProviderConfig{ID: localmodel.ProviderID, Name: "Local models", Type: catwalk.TypeCompletions, BaseURL: endpoint, APIKey: key, Models: list, AutoDiscoverModels: new(false)})
+}
+
+// localReasoning offers the effort switch the model's own chat template
+// reads; the local relay turns the chosen level into that switch.
+func localReasoning(model localmodel.Model) catwalk.Reasoning {
+	info, _ := localmodel.ModelInfo(model.Path)
+	switch info.Reasoning {
+	case "effort":
+		return catwalk.Reasoning{Thinking: catwalk.ThinkingToggleable, EffortLevels: catwalk.NewEffortLevels("low", "medium", "high"), DefaultEffortLevel: "medium"}
+	case "thinking":
+		return catwalk.Reasoning{Thinking: catwalk.ThinkingToggleable, EffortLevels: catwalk.NewEffortLevels("off", "on"), DefaultEffortLevel: "on"}
+	}
+	return catwalk.Reasoning{}
 }

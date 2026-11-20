@@ -67,6 +67,22 @@
   let pendingLocal = null;
   let localRevision = 0;
 
+  // The memory size slider belongs to the local model in use, like the
+  // effort row: far right is "biggest that fits" (saved as 0), worked out by
+  // the engine from free graphics plus main memory.
+  let dragging = $state(null);
+  const tokensLabel = (n) => `${Math.round(n / 1024)}K`;
+
+  async function saveSize(id, value, max) {
+    const tokens = value >= max ? 0 : value;
+    localRevision += 1;
+    try {
+      local = await api.sizeLocalModel(id, tokens);
+    } catch (error) {
+      localError = error?.message ?? String(error);
+    } finally { dragging = null; }
+  }
+
   const localLabel = (item) => /^(.*) · ([\d.]+ GiB)$/.exec(item.model.name || "");
 
   const hasLocal = $derived(rows.some((item) => item.provider.id === "local-gguf"));
@@ -142,6 +158,11 @@
   const searching = $derived(query.trim() !== "");
   const rows = $derived(searching ? searchRows(built.items, query) : (shownGroup?.items ?? []));
   const levels = $derived(effortShown(rows, current) ? (coder.info?.reasoning_levels ?? []) : []);
+  const sizeModel = $derived(current?.provider === "local-gguf" && effortShown(rows, current) ? current.model : "");
+  const size = $derived(sizeModel ? local.sizes?.[sizeModel] : null);
+  const sizeValue = $derived(dragging ?? (size?.choice ? Math.min(size.choice, size.max) : size?.max ?? 0));
+  const sizeText = $derived(!size ? "" : size.max < 4096 && !size.choice ? "Not enough free memory" : dragging !== null ? (dragging >= size.max ? `${tokensLabel(size.max)} · biggest that fits` : tokensLabel(dragging)) : size.choice > size.max ? `${tokensLabel(size.choice)} · only ${tokensLabel(size.max)} fits now` : size.choice ? tokensLabel(size.choice) : `${tokensLabel(size.max)} · biggest that fits`);
+  const sizeStale = $derived(Boolean(size && local.model_id === sizeModel && local.context && dragging === null && (size.choice ? local.context !== Math.min(size.choice, size.max) : local.context < size.max * 0.9)));
   const levelNow = $derived(current?.reasoning_effort || coder.info?.default_reasoning_effort || "");
   const kind = $derived(kindOf(current?.provider));
   const accounts = $derived(hasAccounts(kind) ? fallback.accounts.filter((a) => a.kind === kind) : []);
@@ -344,8 +365,8 @@
       bindKey("menu", "Escape", () => (removing ? (removing = null) : close(), true)),
       bindKey("menu", "ArrowDown", () => step(1)),
       bindKey("menu", "ArrowUp", () => step(-1)),
-      bindKey("menu", "ArrowLeft", () => (columnOf(document.activeElement) === "search" ? false : moveAcross(-1))),
-      bindKey("menu", "ArrowRight", () => (columnOf(document.activeElement) === "search" ? false : moveAcross(1))),
+      bindKey("menu", "ArrowLeft", () => (["search", "size"].includes(columnOf(document.activeElement)) ? false : moveAcross(-1))),
+      bindKey("menu", "ArrowRight", () => (["search", "size"].includes(columnOf(document.activeElement)) ? false : moveAcross(1))),
       bindKey("menu", "Enter", () => {
         if (columnOf(document.activeElement) === "search") {
           pick(rows[0]);
@@ -463,7 +484,28 @@
     </div>
     <Scrollbar target={rowsBox} mode={barMode} />
     {#if hasLocal}
-      <p class="local-status" class:failed={Boolean(localError || local.error)} role="status" data-testid="local-status">{localError || local.error || (local.state === "loading" ? "Loading model…" : local.state === "ready" ? "Model loaded" : "")}</p>
+      <p class="local-status" class:failed={Boolean(localError || local.error)} role="status" data-testid="local-status">{localError || local.error || (local.state === "loading" ? "Loading model…" : local.state === "ready" ? `Model loaded${local.context ? ` · ${tokensLabel(local.context)}` : ""}` : "")}</p>
+    {/if}
+    {#if size}
+      <div class="size" data-column="size">
+        <h3 class="label size-head"><span>Memory size</span><span class="size-value" data-testid="local-size">{sizeText}</span></h3>
+        {#if size.max >= 4096}
+          <input
+            class="slider"
+            type="range"
+            min="4096"
+            max={size.max}
+            step="1024"
+            value={sizeValue}
+            aria-label="Memory size"
+            aria-valuetext={sizeText}
+            oninput={(event) => (dragging = Number(event.currentTarget.value))}
+            onchange={(event) => saveSize(sizeModel, Number(event.currentTarget.value), size.max)}
+          />
+          <div class="size-ends"><span>4K</span><span>{tokensLabel(size.max)}</span></div>
+        {/if}
+        {#if sizeStale}<p class="size-note">Unload and load again to use this size.</p>{/if}
+      </div>
     {/if}
     {#if routeTo}
       <div class="route" data-column="route">
@@ -540,6 +582,13 @@
   .local-size { flex: none; font-variant-numeric: tabular-nums; }
   .local-status { min-height: 1.5em; margin: calc(8 * var(--px)) calc(10 * var(--px)) 0; color: var(--slate); font: var(--t-item); overflow-wrap: anywhere; }
   .local-status.failed { color: var(--vermilion); }
+  .size { margin-top: calc(12 * var(--px)); padding-top: calc(12 * var(--px)); border-top: 1px solid var(--rule-control); }
+  .size-head { display: flex; justify-content: space-between; gap: calc(8 * var(--px)); }
+  .size-value { font: var(--t-small); letter-spacing: 0; text-transform: none; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .slider { display: block; box-sizing: border-box; width: calc(100% - 20 * var(--px)); margin: calc(4 * var(--px)) calc(10 * var(--px)); accent-color: var(--vermilion); cursor: pointer; }
+  .slider:focus-visible { outline: 1px solid var(--vermilion); outline-offset: calc(2 * var(--px)); }
+  .size-ends { display: flex; justify-content: space-between; margin: 0 calc(10 * var(--px)); font: var(--t-small); color: var(--slate); font-variant-numeric: tabular-nums; }
+  .size-note { margin: calc(6 * var(--px)) calc(10 * var(--px)) 0; font: var(--t-small); color: var(--slate); }
   /* The paper and hairlines of the app's other popups (Popup.svelte), on the
      menu layer the chat's context menu uses; no shadow, as every other menu. */
   .model-menu {

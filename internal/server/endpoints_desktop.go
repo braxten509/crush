@@ -23,6 +23,8 @@ func (c *controllerV1) desktopEndpoints() []apigen.Endpoint {
 			Handle(c.localOnly(serve(c, rpc.LoadLocalModel, c.loadLocalModel))),
 		apigen.For(rpc.UnloadLocalModel).Summary("Unload the model process started by Crush").Tags("models").Fails(403).
 			Handle(c.localOnly(serve(c, rpc.UnloadLocalModel, c.unloadLocalModel))),
+		apigen.For(rpc.SizeLocalModel).Summary("Save a downloaded model's context size").Tags("models").Fails(400, 403).
+			Handle(c.localOnly(serve(c, rpc.SizeLocalModel, c.sizeLocalModel))),
 		route(c, rpc.PendingQuestion, c.pendingQuestion).
 			Summary("Get the question a chat waits on").
 			Description("Returns the pending question form of the chat or of one of its helpers, "+

@@ -120,6 +120,7 @@ export const api = {
   localModels: () => get("/v1/local-models"),
   loadLocalModel: (model_id) => post("/v1/local-models/load", { model_id }),
   unloadLocalModel: () => post("/v1/local-models/unload"),
+  sizeLocalModel: (model_id, context) => post("/v1/local-models/size", { model_id, context }),
   // Which agent CLIs hold their own login (rpc.GetAuthState).
   authState: () => get("auth/state"),
   agentInfo: () => get("agent"),

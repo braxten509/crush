@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/crush/internal/agent/providers"
 	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/charmbracelet/crush/internal/localmodel"
 	"github.com/charmbracelet/crush/internal/session"
 )
 
@@ -129,6 +130,13 @@ func (c *coordinator) buildHelperModel(ctx context.Context) (Model, error) {
 // builtModel is a built model with what the agent needs to know about its
 // provider.
 func builtModel(languageModel fantasy.LanguageModel, catwalkModel catwalk.Model, selection config.SelectedModel, providerCfg config.ProviderConfig) Model {
+	// A loaded local model's window is the size it was started with, which
+	// the slider can change after the config listed it.
+	if providerCfg.ID == localmodel.ProviderID {
+		if tokens := localmodel.Default.ContextFor(catwalkModel.ID); tokens > 0 {
+			catwalkModel.ContextWindow = tokens
+		}
+	}
 	return Model{
 		Model:        languageModel,
 		CatwalkCfg:   catwalkModel,

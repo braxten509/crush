@@ -24,6 +24,10 @@ type Status struct {
 	ModelID string  `json:"model_id"`
 	State   string  `json:"state"`
 	Error   string  `json:"error,omitempty"`
+	// Context is the loaded model's context size.
+	Context int64 `json:"context,omitempty"`
+	// Sizes are every model's slider, by model ID.
+	Sizes map[string]Size `json:"sizes"`
 }
 
 type Manager struct {
@@ -39,19 +43,88 @@ type Manager struct {
 	endpoint string
 	key      string
 	server   *http.Server
+	// context, reasoning and footprint describe the loaded model; baseline
+	// is the free memory measured just before it started.
+	context   int64
+	reasoning string
+	footprint int64
+	baseline  int64
 }
 
 var Default = &Manager{}
 
 func (m *Manager) Status() Status {
 	models := Discover(Roots())
+	free := m.freeForLoad()
+	choices := Choices()
+	sizes := make(map[string]Size, len(models))
+	for _, model := range models {
+		info, _ := ModelInfo(model.Path)
+		sizes[model.ID] = Size{Max: FitContext(free, model.Bytes, info), Choice: choices[model.ID]}
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	state := m.state
 	if state == "" {
 		state = "unloaded"
 	}
-	return Status{Models: models, ModelID: m.id, State: state, Error: m.err}
+	status := Status{Models: models, ModelID: m.id, State: state, Error: m.err, Sizes: sizes}
+	if state == "ready" || state == "loading" {
+		status.Context = m.context
+	}
+	return status
+}
+
+// freeForLoad is the memory a new load could use. Loading unloads the model
+// Crush runs now, so its share counts as free, but never more than was free
+// just before it started (its weights may sit in page cache that already
+// counts as available).
+func (m *Manager) freeForLoad() int64 {
+	free := FreeMemory()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.state == "ready" || m.state == "loading" {
+		free = min(m.baseline, free+m.footprint)
+	}
+	return free
+}
+
+// PlannedContext is the size a model would load with now; config uses it as
+// the window until the model is loaded, then ContextFor takes over.
+func (m *Manager) PlannedContext(model Model) int64 {
+	info, _ := ModelInfo(model.Path)
+	tokens := FitContext(m.freeForLoad(), model.Bytes, info)
+	if tokens == 0 {
+		return ContextSize
+	}
+	if choice := Choices()[model.ID]; choice > 0 {
+		tokens = min(choice, tokens)
+	}
+	return tokens
+}
+
+// ContextFor is the loaded size of model id, or 0 when it isn't loaded.
+func (m *Manager) ContextFor(id string) int64 {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.id == id && (m.state == "ready" || m.state == "loading") {
+		return m.context
+	}
+	return 0
+}
+
+// SetSize saves a model's slider: 0 is "biggest that fits", else a token
+// count of at least MinContext. It takes effect at the next Load.
+func (m *Manager) SetSize(id string, tokens int64) error {
+	if tokens != 0 && (tokens < MinContext || tokens > 1<<24) {
+		return fmt.Errorf("context size must be 0 or between %d and %d", MinContext, 1<<24)
+	}
+	for _, model := range Discover(Roots()) {
+		if model.ID == id {
+			return saveChoice(id, tokens)
+		}
+	}
+	return fmt.Errorf("downloaded model was not found; reopen the provider list")
 }
 
 // Endpoint is a process-owned loopback relay. It refuses a different model ID
@@ -75,7 +148,7 @@ func (m *Manager) Endpoint() (string, string, error) {
 
 func (m *Manager) serve(w http.ResponseWriter, r *http.Request) {
 	m.mu.Lock()
-	state, id, target, key := m.state, m.id, m.target, m.key
+	state, id, target, key, reasoning := m.state, m.id, m.target, m.key, m.reasoning
 	m.mu.Unlock()
 	fail := func(code int, text string) {
 		w.Header().Set("Content-Type", "application/json")
@@ -106,6 +179,7 @@ func (m *Manager) serve(w http.ResponseWriter, r *http.Request) {
 		fail(409, "This local model is not loaded; select it and click Load in the provider list")
 		return
 	}
+	body = templateEffort(body, reasoning)
 	r.Body = io.NopCloser(bytes.NewReader(body))
 	r.ContentLength = int64(len(body))
 	upstream, _ := url.Parse(target)
@@ -114,6 +188,39 @@ func (m *Manager) serve(w http.ResponseWriter, r *http.Request) {
 		fail(502, "The local model server stopped; load the model again")
 	}
 	proxy.ServeHTTP(w, r)
+}
+
+// templateEffort hands Crush's reasoning_effort to the model's chat template,
+// the switch the template itself reads: reasoning_effort, or enable_thinking
+// for "on"/"off" models. llama-server reads template switches only from
+// chat_template_kwargs.
+func templateEffort(body []byte, reasoning string) []byte {
+	var request map[string]any
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.UseNumber()
+	if reasoning == "" || decoder.Decode(&request) != nil {
+		return body
+	}
+	effort, ok := request["reasoning_effort"].(string)
+	if !ok {
+		return body
+	}
+	delete(request, "reasoning_effort")
+	kwargs, _ := request["chat_template_kwargs"].(map[string]any)
+	if kwargs == nil {
+		kwargs = map[string]any{}
+	}
+	if reasoning == "effort" {
+		kwargs["reasoning_effort"] = effort
+	} else {
+		kwargs["enable_thinking"] = effort != "off"
+	}
+	request["chat_template_kwargs"] = kwargs
+	out, err := json.Marshal(request)
+	if err != nil {
+		return body
+	}
+	return out
 }
 
 // Load returns immediately; the UI polls Status until the health check passes.
@@ -144,6 +251,18 @@ func (m *Manager) Load(id string) error {
 	if err := m.stop(); err != nil {
 		return err
 	}
+	info, _ := ModelInfo(selected.Path)
+	free := FreeMemory()
+	// A saved size bigger than what fits now (memory filled up since) loads
+	// at what fits, so the 4 GB stay free; the status shows the real size.
+	fit := FitContext(free, selected.Bytes, info)
+	if fit == 0 {
+		return fmt.Errorf("not enough free memory for this model while keeping 4 GB free")
+	}
+	tokens := fit
+	if choice := Choices()[id]; choice > 0 {
+		tokens = min(choice, fit)
+	}
 	port, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return err
@@ -152,7 +271,7 @@ func (m *Manager) Load(id string) error {
 	number := address.Port
 	port.Close()
 	cmd := exec.Command(server, "--model", selected.Path, "--host", "127.0.0.1", "--port", fmt.Sprint(number), "--alias", id,
-		"--ctx-size", fmt.Sprint(ContextSize), "--parallel", "1", "--gpu-layers", "auto", "--flash-attn", "auto", "--jinja", "--log-disable", "--no-agent")
+		"--ctx-size", fmt.Sprint(tokens), "--parallel", "1", "--gpu-layers", "auto", "--flash-attn", "auto", "--jinja", "--log-disable", "--no-agent")
 	// Avoid inheriting LLAMA_ARG_* (especially agent tools) or provider secrets.
 	home, _ := os.UserHomeDir()
 	cmd.Env = []string{"PATH=/usr/bin:/bin", "HOME=" + home, "LANG=C.UTF-8", "LD_LIBRARY_PATH=" + filepath.Dir(server)}
@@ -167,6 +286,8 @@ func (m *Manager) Load(id string) error {
 	done := make(chan struct{})
 	m.mu.Lock()
 	m.id, m.state, m.err, m.cmd, m.done, m.cancel, m.target = id, "loading", "", cmd, done, cancel, fmt.Sprintf("http://127.0.0.1:%d", number)
+	m.context, m.reasoning, m.baseline = tokens, info.Reasoning, free
+	m.footprint = selected.Bytes + tokens*info.TokenBytes + info.FixedBytes + overheadBytes
 	m.mu.Unlock()
 	go func() {
 		err := cmd.Wait()
@@ -241,6 +362,7 @@ func (m *Manager) stop() error {
 	}
 	m.mu.Lock()
 	m.state, m.id, m.err, m.target, m.cmd, m.done = "unloaded", "", "", "", nil, nil
+	m.context, m.reasoning, m.footprint, m.baseline = 0, "", 0, 0
 	m.mu.Unlock()
 	return nil
 }

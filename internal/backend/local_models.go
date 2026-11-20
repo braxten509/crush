@@ -17,3 +17,10 @@ func (b *Backend) UnloadLocalModel() (localmodel.Status, error) {
 	}
 	return localmodel.Default.Status(), nil
 }
+
+func (b *Backend) SizeLocalModel(id string, tokens int64) (localmodel.Status, error) {
+	if err := localmodel.Default.SetSize(id, tokens); err != nil {
+		return localmodel.Status{}, err
+	}
+	return localmodel.Default.Status(), nil
+}

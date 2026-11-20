@@ -15,6 +15,7 @@ func TestLocalModelRoutesAreLocalOnly(t *testing.T) {
 		{http.MethodGet, "/v1/local-models"},
 		{http.MethodPost, "/v1/local-models/load"},
 		{http.MethodPost, "/v1/local-models/unload"},
+		{http.MethodPost, "/v1/local-models/size"},
 	} {
 		liveError(t, g.h, route.method, route.path, map[string]string{"model_id": "unknown"}, http.StatusForbidden, "local_only", "")
 	}

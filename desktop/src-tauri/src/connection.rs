@@ -273,6 +273,7 @@ const ROUTES: &[(&str, &str)] = &[
     ("GET", "/v1/local-models"),
     ("POST", "/v1/local-models/load"),
     ("POST", "/v1/local-models/unload"),
+    ("POST", "/v1/local-models/size"),
     ("GET", "agent"),
     ("GET", "git/branch"),
     ("GET", "git/branches"),
@@ -2690,7 +2691,7 @@ mod tests {
         design.extend(CATALOG_ROUTES.iter().map(|p| ("GET", *p)));
         design.extend(LAST_PICK_ROUTES.iter().copied());
         design.extend(LOCK_ROUTES.iter().copied());
-        design.extend([("GET", "/v1/local-models"), ("POST", "/v1/local-models/load"), ("POST", "/v1/local-models/unload")]);
+        design.extend([("GET", "/v1/local-models"), ("POST", "/v1/local-models/load"), ("POST", "/v1/local-models/unload"), ("POST", "/v1/local-models/size")]);
         design.extend([("GET", "git/branches"), ("POST", "sessions/{sid}/git/branch"), ("DELETE", "sessions/{sid}/git/branch")]);
         design.sort();
         assert_eq!(listed, design, "the route list is design 1.3's table, 5-6's 6.5, the fallback, other-folder, catalog and last-pick routes, no more and no less");

@@ -96,6 +96,10 @@ async function signIn(login, openSignInTerminal) {
   if (login.account?.kind === "agy-cli") {
     await openSignInTerminal(login.login_argv, name);
     await loadFallback();
+    // The tab closes when AGY ends, so say how it went.
+    const id = login.account?.id;
+    if (fallback.accounts.find((a) => a.kind === "agy-cli" && a.id === id)?.signed_in) notify("info", `Signed in to ${name}.`);
+    else notify("error", `Signing in to ${name} didn't finish.`);
     return;
   }
   notify("info", `Finish signing in to ${name} in your browser.`, 0);

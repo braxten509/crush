@@ -187,19 +187,22 @@ func RunAGYProfile(ctx context.Context, id, name string, args []string, login bo
 	if cause := context.Cause(ctx); cause != nil {
 		return cause
 	}
-	if err != nil {
+	if !login {
 		return err
 	}
-	if login {
-		check, cancel := context.WithTimeout(ctx, 3*time.Second)
-		defer cancel()
-		count, err := ring.loginCount(check)
+	// The user quits AGY once signed in, however they like; the saved login
+	// decides, not AGY's exit status.
+	check, cancel = context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	count, countErr := ring.loginCount(check)
+	if countErr != nil {
+		return countErr
+	}
+	if count == 0 {
 		if err != nil {
 			return err
 		}
-		if count == 0 {
-			return errors.New("AGY did not save a login in the keyring")
-		}
+		return errors.New("AGY did not save a login in the keyring")
 	}
 	return nil
 }

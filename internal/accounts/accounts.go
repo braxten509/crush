@@ -208,7 +208,9 @@ func syncClaudeSettings(dir string) error {
 // LoginArgv is the command that signs an account in, in a terminal.
 func LoginArgv(kind catwalk.Type, id string) ([]string, error) {
 	if kind == config.TypeAGYCLI && id != "" {
-		bin, args, err := AGYCommand(id, AGYBin(), []string{"models"}, true)
+		// AGY signs in when started with no arguments (1.5.13: `agy models`
+		// only says to sign in first).
+		bin, args, err := AGYCommand(id, AGYBin(), nil, true)
 		return append([]string{bin}, args...), err
 	}
 	env := config.AccountEnv(kind, id)

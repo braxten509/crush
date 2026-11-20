@@ -7,10 +7,11 @@ export const AGENT_CLIS = [
   // Grok shows only its CLI accounts; the xAI subscription sign-in row is
   // gone (owner, 2026-10-24).
   { kind: "grok-cli", name: "Grok", login: ["grok", "login"], accounts: true },
-  // AGY has no login subcommand; `agy models` is what fetches a token when
-  // none is stored. OpenCode's `auth login` asks its questions in a terminal,
-  // so both run in a tab.
-  { kind: "agy-cli", name: "Antigravity", login: ["agy", "models"], accounts: true, terminal: true },
+  // AGY has no login subcommand: started with no arguments it asks the user
+  // to sign in (since 1.5.13 `agy models` only says to sign in first), and
+  // the user quits it once signed in. OpenCode's `auth login` asks its
+  // questions in a terminal, so both run in a tab.
+  { kind: "agy-cli", name: "Antigravity", login: ["agy"], accounts: true, terminal: true },
   { kind: "opencode-cli", name: "OpenCode Go", login: ["opencode", "auth", "login"], accounts: false, terminal: true },
   { kind: "opencode-zen-cli", name: "OpenCode Zen", login: ["opencode", "auth", "login"], accounts: false, terminal: true },
 ];

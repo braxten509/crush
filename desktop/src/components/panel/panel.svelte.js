@@ -78,12 +78,14 @@ export function refillNow() {
   return { kind: reading?.kind ?? "", account: reading?.account ?? "", count: Number(reading?.refills) || 0 };
 }
 
+const creditFormat = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
+
 export function creditsNow() {
   const reading = readingNow();
   if (reading?.kind !== "codex-cli") return "";
   if (reading.unlimited_credits) return "Unlimited";
   const balance = reading.credit_balance?.trim();
-  return balance ? `${balance} left` : "";
+  return balance ? `${creditFormat.format(balance)} left` : "";
 }
 
 export function meterNow(now = Date.now()) {

@@ -154,10 +154,12 @@ type ToolResult struct {
 func (ToolResult) isPart() {}
 
 type Finish struct {
-	Reason  FinishReason `json:"reason"`
-	Time    int64        `json:"time"`
-	Message string       `json:"message,omitempty"`
-	Details string       `json:"details,omitempty"`
+	Reason                FinishReason `json:"reason"`
+	Time                  int64        `json:"time"`
+	Message               string       `json:"message,omitempty"`
+	Details               string       `json:"details,omitempty"`
+	EstimatedCodexCredits float64      `json:"estimated_codex_credits,omitempty"`
+	CodexCreditSessionID  string       `json:"codex_credit_session_id,omitempty"`
 }
 
 func (Finish) isPart() {}

@@ -74,11 +74,19 @@ func (r *codexRun) handleResponse(id string, msg rpcMessage) error {
 		_ = r.p.send(map[string]any{"id": codexHooksID, "method": "hooks/list", "params": map[string]any{"cwds": []string{r.m.Dir}}})
 	case codexThreadID:
 		var res struct {
-			Thread struct {
+			Model       string  `json:"model"`
+			ServiceTier *string `json:"serviceTier"`
+			Thread      struct {
 				ID string `json:"id"`
 			} `json:"thread"`
 		}
 		_ = json.Unmarshal(msg.Result, &res)
+		if res.Model != "" {
+			r.credits.selectedModel = res.Model
+		}
+		if r.m.ServiceTier == "" && res.ServiceTier != nil {
+			r.credits.tier = *res.ServiceTier
+		}
 		r.threadID = res.Thread.ID
 		if err := r.t.Emit(Event{Type: EventSession, Session: r.threadID}); err != nil {
 			return err
@@ -182,7 +190,18 @@ func (r *codexRun) handleNotification(msg rpcMessage) (done bool, err error) {
 		}
 		r.output[params.ItemID].WriteString(params.Delta)
 	case "thread/tokenUsage/updated":
+		r.recordCreditUsage(params)
 		err = r.handleTokenUsage(params)
+	case "model/rerouted":
+		var route struct {
+			ToModel string `json:"toModel"`
+		}
+		if ids := r.active.Load(); ids != nil && ids[0] == params.ThreadID && ids[1] == params.TurnID {
+			if json.Unmarshal(msg.Params, &route) == nil && route.ToModel != "" {
+				r.credits.start(params.TurnID)
+				r.credits.model = route.ToModel
+			}
+		}
 	case "account/rateLimits/updated":
 		var up struct {
 			RateLimits codexSnapshot `json:"rateLimits"`

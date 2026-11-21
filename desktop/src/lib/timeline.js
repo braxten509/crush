@@ -402,6 +402,8 @@ export function hypercredits(v) {
   return v >= 1 ? v.toFixed(0) : v.toFixed(1);
 }
 
+const creditFormat = new Intl.NumberFormat("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
 // {text, saved} of a footer: "Model via Provider in 12s" on the prompt's last
 // turn, "Model → Routed" on a Prism turn; saved is the Prism savings, if any.
 export function footerText(m, providers, lastUserTime) {
@@ -671,7 +673,11 @@ export function buildTimeline(input, state = createTimelineState()) {
       }
       case "footer": {
         const { text, saved } = footerText(e.m, providers, e.lastUserTime);
-        items.push(keep(state, seen, e.key, [text, saved], () => ({ ...base("footer", e.m.id), letter: "", text, saved })));
+        // A branch can show copied replies with another chat's credit total.
+        const finish = finishOf(e.m);
+        const estimate = finish?.codex_credit_session_id === sessionId ? finish.estimated_codex_credits : 0;
+        const credits = estimate > 0 ? `Est. ${creditFormat.format(Math.max(1, estimate))} credits used` : "";
+        items.push(keep(state, seen, e.key, [text, saved, credits], () => ({ ...base("footer", e.m.id), letter: "", text, saved, credits })));
         break;
       }
       case "waiting": {

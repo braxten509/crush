@@ -44,6 +44,7 @@ var chatTables = []chatTable{
 	// as plain data (PLAN §9.2).
 	{name: "chat_branches", where: inSet + " AND parent_session_id IN (SELECT id FROM temp.lock_set)"},
 	{name: "cli_message_markers", where: inSet},
+	{name: "codex_credit_usage", where: inSet},
 	{name: "session_context_budgets", where: inSet},
 	{name: "session_kept_skills", where: inSet},
 	{name: "session_models", where: inSet},

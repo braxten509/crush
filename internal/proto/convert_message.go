@@ -63,10 +63,12 @@ func partFromDomain(p message.ContentPart) ContentPart {
 		}
 	case message.Finish:
 		return Finish{
-			Reason:  FinishReason(v.Reason),
-			Time:    v.Time,
-			Message: v.Message,
-			Details: v.Details,
+			Reason:                FinishReason(v.Reason),
+			Time:                  v.Time,
+			Message:               v.Message,
+			Details:               v.Details,
+			EstimatedCodexCredits: v.EstimatedCodexCredits,
+			CodexCreditSessionID:  v.CodexCreditSessionID,
 		}
 	case message.ImageURLContent:
 		return ImageURLContent{URL: v.URL, Detail: v.Detail}
@@ -150,10 +152,12 @@ func partToDomain(p ContentPart) message.ContentPart {
 		}
 	case Finish:
 		return message.Finish{
-			Reason:  message.FinishReason(v.Reason),
-			Time:    v.Time,
-			Message: v.Message,
-			Details: v.Details,
+			Reason:                message.FinishReason(v.Reason),
+			Time:                  v.Time,
+			Message:               v.Message,
+			Details:               v.Details,
+			EstimatedCodexCredits: v.EstimatedCodexCredits,
+			CodexCreditSessionID:  v.CodexCreditSessionID,
 		}
 	case ImageURLContent:
 		return message.ImageURLContent{URL: v.URL, Detail: v.Detail}

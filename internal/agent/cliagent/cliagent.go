@@ -141,6 +141,8 @@ type Turn struct {
 	// Env is added to the CLI process environment.
 	Env  []string
 	Emit func(Event) error
+	// OnCodexUsage records the latest estimated credits for a native Codex turn.
+	OnCodexUsage func(CodexUsage)
 	// Steer returns messages the user queued while the turn runs, or "".
 	// Drivers whose CLI can take input mid-turn poll it, send what it
 	// returns and emit EventUserMessage with the same text once the CLI

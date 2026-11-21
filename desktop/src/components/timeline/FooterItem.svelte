@@ -12,6 +12,7 @@
 <p class="footer">
   <Icon name="diamond" size={16} />
   <span class="line">{item.text}{#if item.saved}{" "}{item.saved}{/if}</span>
+  {#if item.credits}<span class="credits">· {item.credits}</span>{/if}
 </p>
 
 <style>
@@ -28,5 +29,9 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+  .credits {
+    flex-shrink: 0;
+    white-space: nowrap;
   }
 </style>

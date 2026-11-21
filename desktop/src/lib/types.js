@@ -21,7 +21,7 @@
  *   text:string}} NoticeItem                                                            CHAT-008 to CHAT-011
  * @typedef {ItemBase & {kind:"banner", banner:"canceled"|"error"|"refused"|"compacting"|"compacted"|"compaction_canceled",
  *   title:string, details:string}} BannerItem                                           CHAT-025, CHAT-027 to CHAT-029
- * @typedef {ItemBase & {kind:"footer", text:string, saved:string}} FooterItem          CHAT-035 to CHAT-037
+ * @typedef {ItemBase & {kind:"footer", text:string, saved:string, credits:string}} FooterItem          CHAT-035 to CHAT-037
  * @typedef {ItemBase & {kind:"pending", submissionId:string, text:string, chips:ChipView[],
  *   state:"working"|"uncertain"}} PendingItem                                           TYPE-042, TYPE-048
  * @typedef {ItemBase & {kind:"status", words:string, startedAt:number, thought:string}} StatusItem   CHAT-019 to CHAT-022

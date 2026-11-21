@@ -60,19 +60,16 @@ type codexChange struct {
 }
 
 type codexParams struct {
+	ThreadID   string    `json:"threadId"`
+	TurnID     string    `json:"turnId"`
 	Item       codexItem `json:"item"`
 	ItemID     string    `json:"itemId"`
 	Delta      string    `json:"delta"`
 	Command    string    `json:"command"`
 	TokenUsage *struct {
-		ModelContextWindow int64 `json:"modelContextWindow"`
-		Last               struct {
-			InputTokens       int64 `json:"inputTokens"`
-			CachedInputTokens int64 `json:"cachedInputTokens"`
-			OutputTokens      int64 `json:"outputTokens"`
-			ReasoningTokens   int64 `json:"reasoningOutputTokens"`
-			TotalTokens       int64 `json:"totalTokens"`
-		} `json:"last"`
+		ModelContextWindow int64             `json:"modelContextWindow"`
+		Last               codexTokenCounts  `json:"last"`
+		Total              *codexTokenCounts `json:"total"`
 	} `json:"tokenUsage"`
 	Turn struct {
 		ID     string `json:"id"`
@@ -142,7 +139,9 @@ type codexKey struct {
 // model can check on them, and follow-ups skip its startup.
 type codexLive struct {
 	liveProc[codexKey]
-	thread string
+	thread      string
+	creditModel string
+	creditTier  string
 }
 
 func (l *codexLive) resumeID() string { return l.thread }
@@ -164,10 +163,11 @@ func codexCtrlB(sessions []string) string {
 // codexRun is one turn of a Codex app-server process: what it was started
 // with, the thread and turn it drives, and what it has reported so far.
 type codexRun struct {
-	ctx context.Context
-	m   *Model
-	t   Turn
-	p   *proc
+	ctx     context.Context
+	m       *Model
+	t       Turn
+	p       *proc
+	credits codexTurnCredits
 
 	approval, sandbox string
 	threadID          string
@@ -238,7 +238,10 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 	r.catalogWindow, r.catalogLimit, r.effectivePercent = codexCatalogContext(m.ID)
 	defer func() {
 		if r.finished && keep && r.threadID != "" {
-			codexSessions.keep(t.SessionID, &codexLive{liveProc: liveProc[codexKey]{p: p, lines: lines, key: key}, thread: r.threadID}, nil, nil, nil)
+			codexSessions.keep(t.SessionID, &codexLive{
+				liveProc: liveProc[codexKey]{p: p, lines: lines, key: key}, thread: r.threadID,
+				creditModel: r.credits.selectedModel, creditTier: r.credits.tier,
+			}, nil, nil, nil)
 		} else {
 			p.finish()
 		}
@@ -278,6 +281,7 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 func newCodexRun(ctx context.Context, m *Model, t Turn) *codexRun {
 	r := &codexRun{
 		ctx: ctx, m: m, t: t,
+		credits:      codexTurnCredits{selectedModel: m.ID, tier: m.ServiceTier},
 		openCmds:     map[string]time.Time{},
 		backgrounded: map[string]bool{},
 		openItems:    map[string]string{},
@@ -306,6 +310,7 @@ func (r *codexRun) open(keep bool, key codexKey) (*codexLive, <-chan []byte, err
 	}
 	if live != nil {
 		r.p, r.threadID = live.p, live.thread
+		r.credits.selectedModel, r.credits.tier = live.creditModel, live.creditTier
 		return live, live.lines, nil
 	}
 	// Crush hands every CLI the shared memory; Codex's own stays off.
@@ -440,6 +445,12 @@ func (r *codexRun) readLoop(lines <-chan []byte) (done bool, err error) {
 			// Interrupted: once the turn winds down the process is kept, as
 			// exiting would stop the commands it runs in the background.
 			r.stopSteer()
+			if msg.Method == "thread/tokenUsage/updated" {
+				var params codexParams
+				if json.Unmarshal(msg.Params, &params) == nil {
+					r.recordCreditUsage(params)
+				}
+			}
 			if msg.Method == "turn/completed" {
 				r.finished = true
 				return true, r.ctx.Err()

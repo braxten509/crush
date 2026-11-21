@@ -588,6 +588,7 @@ func (a *sessionAgent) notifySessionFinished(call SessionAgentCall, sess session
 	if active != nil || interrupting || accepted > 0 || len(queued) > 0 {
 		return
 	}
+	a.saveCompletionCredits(assistant)
 	a.notify.Publish(pubsub.CreatedEvent, notify.Notification{
 		SessionID:    call.SessionID,
 		SessionTitle: sess.Title,

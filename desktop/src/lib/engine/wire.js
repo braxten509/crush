@@ -25,7 +25,7 @@
  *  | {type:"tool_result", data:{tool_call_id:string, name:string, content:string, data?:string,
  *        mime_type?:string, metadata:string, is_error:boolean, review?:Review}}
  *  | {type:"finish", data:{reason:"end_turn"|"max_tokens"|"tool_use"|"canceled"|"error"|"content_filter"|"unknown",
- *        time:number, message?:string, details?:string}}
+ *        time:number, message?:string, details?:string, estimated_codex_credits?:number, codex_credit_session_id?:string}}
  *  | {type:"shell_command", data:{command:string, output:string, exit_code:number}}} Part
  *   (message.go:95-196 and 519-571). Note: binary parts have no JSON tags, so their keys are
  *   capitalised and Data is base64 (message.go:137-141). */

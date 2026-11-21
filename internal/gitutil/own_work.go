@@ -121,6 +121,35 @@ func SameRepoWorktree(mainDir, path string) string {
 	return root
 }
 
+// MainWorktreePath maps a linked worktree directory to the corresponding
+// directory in the repository's main checkout, including any subdirectory.
+func MainWorktreePath(path string) string {
+	if path == "" {
+		return ""
+	}
+	root := checkoutRoot(path)
+	if root == "" {
+		return ""
+	}
+	if info, err := os.Stat(filepath.Join(root, ".git")); err != nil || info.IsDir() {
+		return ""
+	}
+	listing, err := execGit(root, "worktree", "list", "--porcelain", "-z")
+	if err != nil {
+		return ""
+	}
+	first, _, _ := strings.Cut(listing, "\x00")
+	main, found := strings.CutPrefix(first, "worktree ")
+	if !found || !filepath.IsAbs(main) || main == root {
+		return ""
+	}
+	relative, err := filepath.Rel(root, path)
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(main, relative)
+}
+
 // checkoutRoot walks up from path to the folder holding .git.
 func checkoutRoot(path string) string {
 	dir, err := filepath.Abs(path)

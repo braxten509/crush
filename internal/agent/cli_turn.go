@@ -120,7 +120,7 @@ func (a *sessionAgent) cliStream(m *cliagent.Model, call SessionAgentCall, histo
 		if a.isSubAgent {
 			shared += "\n\n" + subAgentCommandNote
 		}
-		memory := shared + "\n\n" + memoryInstructions(a.isSubAgent)
+		memory := shared + "\n\n" + memoryInstructions(m.Dir, a.isSubAgent)
 		if m.Kind == config.TypeClaudeCode && memory != "" {
 			instructions = memory + "\n\n" + instructions
 		}

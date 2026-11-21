@@ -635,7 +635,7 @@ func (t *turn) buildSystemPrompt() ([]fantasy.AgentTool, string, error) {
 		systemPrompt += "\n\n" + note
 	}
 	if !t.isCLI && a.cfg != nil && a.cfg.Config().Options != nil && a.cfg.Config().Options.DisableInstructionFiles {
-		systemPrompt += "\n\n" + sharedCLIInstructions + "\n\n" + memoryInstructions(a.isSubAgent)
+		systemPrompt += "\n\n" + sharedCLIInstructions + "\n\n" + memoryInstructions(t.workDir, a.isSubAgent)
 		if a.tasks != nil && !a.isSubAgent {
 			systemPrompt += "\n\n" + a.tasks.instructions()
 		}

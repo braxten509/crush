@@ -187,8 +187,11 @@ func (r *codexRun) handleNotification(msg rpcMessage) (done bool, err error) {
 		var up struct {
 			RateLimits codexSnapshot `json:"rateLimits"`
 		}
-		_ = json.Unmarshal(msg.Params, &up)
-		setLimits(limitKey{config.TypeCodexCLI, r.m.Account}, up.RateLimits.limits(), -1)
+		if json.Unmarshal(msg.Params, &up) == nil && (up.RateLimits.LimitID == nil || *up.RateLimits.LimitID == "codex") {
+			storeLimitsReading(limitKey{config.TypeCodexCLI, r.m.Account}, sharedLimits{
+				Limits: up.RateLimits.limits(), Refills: -1, Credits: up.RateLimits.Credits, ReadAt: time.Now(),
+			})
+		}
 	case "turn/plan/updated":
 		var up struct {
 			Plan any `json:"plan"`

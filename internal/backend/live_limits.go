@@ -129,7 +129,11 @@ func sendLimits(kind catwalk.Type, account string) {
 // arrived, error while there is none and the last refresh failed, checking
 // otherwise.
 func cliLimits(k cliagent.KindLimits) proto.CLILimits {
-	out := proto.CLILimits{Kind: string(k.Kind), Account: k.Account, Refills: k.Refills, Error: k.Err, Windows: make([]proto.LimitWindow, 0, len(k.Limits))}
+	out := proto.CLILimits{
+		Kind: string(k.Kind), Account: k.Account, Refills: k.Refills, Error: k.Err,
+		CreditBalance: k.CreditBalance, UnlimitedCredits: k.UnlimitedCredits,
+		Windows: make([]proto.LimitWindow, 0, len(k.Limits)),
+	}
 	switch {
 	case !k.ReadAt.IsZero():
 		out.State, out.ReadAt = "ready", k.ReadAt.UTC()

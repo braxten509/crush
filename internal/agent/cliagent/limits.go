@@ -77,6 +77,7 @@ var limitStore struct {
 	lastErr map[limitKey]string
 	// refills is how many free refills an account has (Codex), when read.
 	refills map[limitKey]int
+	credits map[limitKey]*codexCredits
 	// asked is when an account's usage was last asked for (refreshLimits),
 	// which a turn's own update never is.
 	asked map[limitKey]time.Time
@@ -132,13 +133,15 @@ func limitProviderKey(provider string) string {
 
 // KindLimits is what the store knows about one account's usage limits.
 type KindLimits struct {
-	Kind    catwalk.Type
-	Account string // "" for the tool's own login
-	Limits  []Limit
-	Refills int       // free refills left (Codex); 0 when none or unread
-	ReadAt  time.Time // set only by setLimits
-	Err     string    // last refresh error since the last reading
-	Pending bool
+	Kind             catwalk.Type
+	Account          string // "" for the tool's own login
+	Limits           []Limit
+	Refills          int // free refills left (Codex); 0 when none or unread
+	CreditBalance    string
+	UnlimitedCredits bool
+	ReadAt           time.Time // set only by setLimits
+	Err              string    // last refresh error since the last reading
+	Pending          bool
 }
 
 // Snapshot returns the store's state for every CLI with a usage fetcher
@@ -168,7 +171,7 @@ func Snapshot() []KindLimits {
 	})
 	out := make([]KindLimits, 0, len(sorted))
 	for _, k := range sorted {
-		out = append(out, KindLimits{
+		reading := KindLimits{
 			Kind:    k.kind,
 			Account: k.account,
 			Limits:  slices.Clone(limitStore.byKind[k]),
@@ -176,7 +179,11 @@ func Snapshot() []KindLimits {
 			ReadAt:  limitStore.readAt[k],
 			Err:     limitStore.lastErr[k],
 			Pending: limitStore.pending[k],
-		})
+		}
+		if credits := limitStore.credits[k]; credits != nil {
+			reading.CreditBalance, reading.UnlimitedCredits = credits.Balance, credits.Unlimited
+		}
+		out = append(out, reading)
 	}
 	return out
 }
@@ -209,6 +216,7 @@ func forgetKind(kind catwalk.Type) {
 	maps.DeleteFunc(limitStore.readAt, func(k limitKey, _ time.Time) bool { return of(k) })
 	maps.DeleteFunc(limitStore.lastErr, func(k limitKey, _ string) bool { return of(k) })
 	maps.DeleteFunc(limitStore.refills, func(k limitKey, _ int) bool { return of(k) })
+	maps.DeleteFunc(limitStore.credits, func(k limitKey, _ *codexCredits) bool { return of(k) })
 	maps.DeleteFunc(limitStore.asked, func(k limitKey, _ time.Time) bool { return of(k) })
 	maps.DeleteFunc(limitStore.seeded, func(k limitKey, _ bool) bool { return of(k) })
 	maps.DeleteFunc(limitStore.modelsAt, func(k limitKey, _ time.Time) bool { return of(k) })
@@ -401,7 +409,11 @@ func setLimits(k limitKey, limits []Limit, refills int) {
 // setLimitsAt is setLimits for a reading taken at a known time (another
 // engine's, limits_shared.go).
 func setLimitsAt(k limitKey, limits []Limit, refills int, at time.Time) {
-	if len(limits) == 0 {
+	storeLimitsReading(k, sharedLimits{Limits: limits, Refills: refills, ReadAt: at})
+}
+
+func storeLimitsReading(k limitKey, reading sharedLimits) {
+	if !reading.hasReading() {
 		return
 	}
 	limitStore.Lock()
@@ -417,29 +429,37 @@ func setLimitsAt(k limitKey, limits []Limit, refills int, at time.Time) {
 	if limitStore.refills == nil {
 		limitStore.refills = map[limitKey]int{}
 	}
-	limitStore.byKind[k] = limits
+	if len(reading.Limits) > 0 {
+		limitStore.byKind[k] = reading.Limits
+	}
 	limitStore.fetched[k] = time.Now()
-	limitStore.readAt[k] = at
-	if refills >= 0 {
-		limitStore.refills[k] = refills
+	limitStore.readAt[k] = reading.ReadAt
+	if reading.Refills >= 0 {
+		limitStore.refills[k] = reading.Refills
+	}
+	if reading.Credits != nil {
+		if limitStore.credits == nil {
+			limitStore.credits = map[limitKey]*codexCredits{}
+		}
+		limitStore.credits[k] = reading.Credits
 	}
 	delete(limitStore.lastErr, k)
 	delete(limitStore.seeded, k)
-	known := -1
-	if v, ok := limitStore.refills[k]; ok {
-		known = v
+	reading.Refills = -1
+	if known, ok := limitStore.refills[k]; ok {
+		reading.Refills = known
 	}
-	modelsAt := limitStore.modelsAt[k]
+	reading.ModelsAt = limitStore.modelsAt[k]
 	limitStore.Unlock()
-	saveLimits(k, limits, known, at, modelsAt)
+	saveLimitsReading(k, reading)
 	limitsChanged(k)
 }
 
 // limitAccountKey carries the account a fetch is for.
 type limitAccountKey struct{}
 
-// refillSinkKey carries where a fetch reports the account's refills.
-type refillSinkKey struct{}
+// limitReadingKey carries the account details a fetch reports with its windows.
+type limitReadingKey struct{}
 
 // LimitAccount is the account a usage fetch is for ("" for the tool's own
 // login).
@@ -451,8 +471,8 @@ func LimitAccount(ctx context.Context) string {
 // ReportRefills tells the store how many free refills the account being
 // fetched has. Fetchers that know call it.
 func ReportRefills(ctx context.Context, n int) {
-	if sink, ok := ctx.Value(refillSinkKey{}).(*int); ok {
-		*sink = n
+	if reading, ok := ctx.Value(limitReadingKey{}).(*sharedLimits); ok {
+		reading.Refills = n
 	}
 }
 
@@ -595,10 +615,8 @@ func refreshLimits(ctx context.Context, k limitKey, force bool) (bool, error) {
 		delete(limitStore.pending, k)
 		limitStore.Unlock()
 	}()
-	refills := -1
-	ctx = context.WithValue(context.WithValue(ctx, limitAccountKey{}, k.account), refillSinkKey{}, &refills)
-	limits, at, err := readLimits(ctx, k, fetch, &refills)
-	if err == nil && force && len(limits) == 0 {
+	reading, err := readLimits(context.WithValue(ctx, limitAccountKey{}, k.account), k, fetch)
+	if err == nil && force && !reading.hasReading() {
 		err = errors.New("No usage windows were returned by this CLI")
 	}
 	if err != nil {
@@ -617,15 +635,15 @@ func refreshLimits(ctx context.Context, k limitKey, force bool) (bool, error) {
 		limitsChanged(k)
 		return false, err
 	}
-	slog.Debug("Usage read", "kind", k.kind, "account", k.account, "forced", force, "read_at", at)
+	slog.Debug("Usage read", "kind", k.kind, "account", k.account, "forced", force, "read_at", reading.ReadAt)
 	// A usage read holds the per-model limits as of its own time.
 	limitStore.Lock()
 	if limitStore.modelsAt == nil {
 		limitStore.modelsAt = map[limitKey]time.Time{}
 	}
-	limitStore.modelsAt[k] = at
+	limitStore.modelsAt[k] = reading.ReadAt
 	limitStore.Unlock()
-	setLimitsAt(k, limits, refills, at)
+	storeLimitsReading(k, reading)
 	return true, nil
 }
 
@@ -1039,9 +1057,17 @@ func withModelLimits(k limitKey, limits []Limit) []Limit {
 
 // codexSnapshot is Codex's RateLimitSnapshot.
 type codexSnapshot struct {
-	LimitID   *string      `json:"limitId"`
-	Primary   *codexWindow `json:"primary"`
-	Secondary *codexWindow `json:"secondary"`
+	LimitID   *string       `json:"limitId"`
+	Primary   *codexWindow  `json:"primary"`
+	Secondary *codexWindow  `json:"secondary"`
+	Credits   *codexCredits `json:"credits"`
+}
+
+// A nil snapshot carries no credit update. An empty snapshot clears a
+// previous balance. Codex reports exact amounts as decimal strings.
+type codexCredits struct {
+	Balance   string `json:"balance,omitempty"`
+	Unlimited bool   `json:"unlimited,omitempty"`
 }
 
 type codexWindow struct {
@@ -1067,7 +1093,7 @@ func (s codexSnapshot) limits() []Limit {
 
 // fetchCodexLimits reads account/rateLimits/read from a short-lived
 // `codex app-server` on the account; it makes no model request. The
-// account's free refills come with it.
+// account's paid credit balance and free refills come with it.
 func fetchCodexLimits(ctx context.Context) ([]Limit, error) {
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
@@ -1092,7 +1118,8 @@ func fetchCodexLimits(ctx context.Context) ([]Limit, error) {
 			return nil, errors.New(msg.Error.Message)
 		}
 		var res struct {
-			RateLimits codexSnapshot `json:"rateLimits"`
+			RateLimits codexSnapshot            `json:"rateLimits"`
+			ByLimitID  map[string]codexSnapshot `json:"rateLimitsByLimitId"`
 			Refills    *struct {
 				Available int `json:"availableCount"`
 			} `json:"rateLimitResetCredits"`
@@ -1104,8 +1131,18 @@ func fetchCodexLimits(ctx context.Context) ([]Limit, error) {
 		if res.Refills != nil {
 			refills = res.Refills.Available
 		}
+		windows := res.RateLimits.limits()
 		ReportRefills(ctx, refills)
-		return res.RateLimits.limits(), nil
+		if reading, ok := ctx.Value(limitReadingKey{}).(*sharedLimits); ok {
+			reading.Credits = res.RateLimits.Credits
+			if reading.Credits == nil {
+				reading.Credits = res.ByLimitID["codex"].Credits
+			}
+			if reading.Credits == nil && len(windows) > 0 {
+				reading.Credits = &codexCredits{}
+			}
+		}
+		return windows, nil
 	}
 	return nil, exitError("codex", p)
 }

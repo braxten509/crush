@@ -72,11 +72,12 @@ func freshLimits(ctx context.Context) context.Context {
 // sharedLimits is one account's reading, or its refusal, as an engine
 // shares it.
 type sharedLimits struct {
-	Owner   string    `json:"owner"`
-	ReadAt  time.Time `json:"read_at"`
-	Limits  []Limit   `json:"limits,omitempty"`
-	Refills int       `json:"refills"`
-	Err     string    `json:"error,omitempty"`
+	Owner   string        `json:"owner"`
+	ReadAt  time.Time     `json:"read_at"`
+	Limits  []Limit       `json:"limits,omitempty"`
+	Refills int           `json:"refills"`
+	Credits *codexCredits `json:"credits,omitempty"`
+	Err     string        `json:"error,omitempty"`
 	// ModelsAt is when the per-model limits (Claude's weekly Fable one)
 	// were read: only the usage address knows them, and a turn's own
 	// reading carries an older copy.
@@ -84,6 +85,10 @@ type sharedLimits struct {
 	// Until is set on a "too many asks" refusal: no engine asks again
 	// before it.
 	Until time.Time `json:"until,omitzero"`
+}
+
+func (r sharedLimits) hasReading() bool {
+	return len(r.Limits) > 0 || r.Credits != nil
 }
 
 // refusedError is a tool's "too many asks" answer (HTTP 429); after is how
@@ -135,22 +140,22 @@ func readSharedLimits(path string, newest time.Time) (sharedLimits, bool) {
 	if r.Owner == sharedLimitsOwner || age < 0 || age >= sharedLimitsFor || r.ReadAt.Before(newest) {
 		return r, false
 	}
-	return r, len(r.Limits) > 0 || r.Err != ""
+	return r, r.hasReading() || r.Err != ""
 }
 
 // writeSharedLimits shares a reading or a refusal taken at at; a read cut
 // short by its own engine says nothing about the tool and is not shared.
-func writeSharedLimits(ctx context.Context, path string, limits []Limit, refills int, err error, at time.Time) {
-	r := sharedLimits{Owner: sharedLimitsOwner, ReadAt: at, ModelsAt: at, Limits: limits, Refills: refills}
+func writeSharedLimits(ctx context.Context, path string, r sharedLimits, err error) {
+	r.Owner, r.ModelsAt = sharedLimitsOwner, r.ReadAt
 	if err != nil {
 		if ctx.Err() != nil {
 			return
 		}
-		r.Limits, r.Err = nil, err.Error()
+		r.Limits, r.Credits, r.Err = nil, nil, err.Error()
 		if refused := (refusedError{}); errors.As(err, &refused) {
 			r.Until = r.ReadAt.Add(max(refusalWait, refused.after))
 		}
-	} else if len(limits) == 0 {
+	} else if !r.hasReading() {
 		return
 	}
 	writeLimitsFile(path, r)
@@ -219,12 +224,18 @@ func mergeReadings(a, b sharedLimits) (merged sharedLimits, changed bool) {
 	}
 	merged, account, perModel := a, a.Limits, a.Limits
 	if later {
-		merged.ReadAt, account = b.ReadAt, b.Limits
+		merged.ReadAt = b.ReadAt
+		if len(b.Limits) > 0 {
+			account = b.Limits
+		}
 		if b.Refills >= 0 {
 			merged.Refills = b.Refills
 		}
+		if b.Credits != nil {
+			merged.Credits = b.Credits
+		}
 	}
-	if models {
+	if models && len(b.Limits) > 0 {
 		merged.ModelsAt, perModel = b.ModelsAt, b.Limits
 	}
 	merged.Limits = joinLimits(account, perModel)
@@ -236,8 +247,12 @@ func mergeReadings(a, b sharedLimits) (merged sharedLimits, changed bool) {
 // replaces a newer one, though its newer per-model limits are kept. Engines
 // save under a lock, so two at once cannot undo each other.
 func saveLimits(k limitKey, limits []Limit, refills int, at, modelsAt time.Time) {
+	saveLimitsReading(k, sharedLimits{ReadAt: at, ModelsAt: modelsAt, Limits: limits, Refills: refills})
+}
+
+func saveLimitsReading(k limitKey, reading sharedLimits) {
 	path := savedLimitsPath(k)
-	if path == "" || len(limits) == 0 {
+	if path == "" || !reading.hasReading() {
 		return
 	}
 	// Bounded: a stuck engine must not hold a turn. Without the lock the
@@ -253,7 +268,7 @@ func saveLimits(k limitKey, limits []Limit, refills int, at, modelsAt time.Time)
 	if !ok {
 		saved.Refills = -1
 	}
-	merged, changed := mergeReadings(saved, sharedLimits{ReadAt: at, ModelsAt: modelsAt, Limits: limits, Refills: refills})
+	merged, changed := mergeReadings(saved, reading)
 	if changed {
 		merged.Owner, merged.Err, merged.Until = sharedLimitsOwner, "", time.Time{}
 		writeLimitsFile(path, merged)
@@ -271,7 +286,7 @@ func adoptSavedLimits(k limitKey) {
 		return
 	}
 	r, ok := loadSharedLimits(path)
-	if !ok || len(r.Limits) == 0 || r.ReadAt.IsZero() {
+	if !ok || !r.hasReading() || r.ReadAt.IsZero() {
 		return
 	}
 	limitStore.Lock()
@@ -301,6 +316,12 @@ func adoptSavedLimits(k limitKey) {
 		limitStore.readAt[k] = r.ReadAt
 		if r.Refills >= 0 {
 			limitStore.refills[k] = r.Refills
+		}
+		if r.Credits != nil {
+			if limitStore.credits == nil {
+				limitStore.credits = map[limitKey]*codexCredits{}
+			}
+			limitStore.credits[k] = r.Credits
 		}
 		stale := time.Since(r.ReadAt) >= limitRefresh
 		limitStore.seeded[k] = stale
@@ -402,18 +423,13 @@ func (e sharedLimitsError) Error() string { return string(e) }
 
 // readLimits is one reading of k and when it was taken: another engine's
 // fresh one when there is one, else fetch's own, which is then shared. Only
-// one engine at a time asks for k; the others wait for its reading. refills
-// is where fetch reports the account's refills.
-func readLimits(ctx context.Context, k limitKey, fetch func(context.Context) ([]Limit, error), refills *int) ([]Limit, time.Time, error) {
+// one engine at a time asks for k; the others wait for its reading.
+func readLimits(ctx context.Context, k limitKey, fetch func(context.Context) ([]Limit, error)) (sharedLimits, error) {
 	path := sharedLimitsPath(k)
-	if path == "" {
-		limits, err := fetch(ctx)
-		return limits, time.Now(), err
-	}
 	if r, held := heldRefusal(path); held {
-		return nil, r.ReadAt, sharedLimitsError(r.Err)
+		return r, sharedLimitsError(r.Err)
 	}
-	if ctx.Value(freshLimitsKey{}) == nil {
+	if path != "" && ctx.Value(freshLimitsKey{}) == nil {
 		limitStore.Lock()
 		newest := limitStore.readAt[k]
 		if limitStore.seeded[k] {
@@ -437,15 +453,17 @@ func readLimits(ctx context.Context, k limitKey, fetch func(context.Context) ([]
 		}
 		if ok {
 			if r.Err != "" {
-				return nil, r.ReadAt, sharedLimitsError(r.Err)
+				return r, sharedLimitsError(r.Err)
 			}
-			*refills = r.Refills
-			return r.Limits, r.ReadAt, nil
+			return r, nil
 		}
 	}
 	waitSignInGap(ctx, k)
-	limits, err := fetch(ctx)
-	at := time.Now()
-	writeSharedLimits(ctx, path, limits, *refills, err, at)
-	return limits, at, err
+	reading := sharedLimits{Refills: -1}
+	limits, err := fetch(context.WithValue(ctx, limitReadingKey{}, &reading))
+	reading.Limits, reading.ReadAt = limits, time.Now()
+	if path != "" {
+		writeSharedLimits(ctx, path, reading, err)
+	}
+	return reading, err
 }

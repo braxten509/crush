@@ -10,7 +10,7 @@
   // the row evenly. No hover box (owner,
   // 2026-10-19): the meters say it all; Ctrl+P keeps Customize.
   import { metersPerRow } from "./metergrid.js";
-  import { meterNow, meterRoom, refillNow } from "./panel.svelte.js";
+  import { creditsNow, meterNow, meterRoom, refillNow } from "./panel.svelte.js";
   import { useRefill } from "../../lib/fallback/store.svelte.js";
 
   // The reset times count down and a window past its reset is whole again.
@@ -21,7 +21,10 @@
   });
 
   const model = $derived(meterNow(now));
-  const meters = $derived(model.meters);
+  const credits = $derived(creditsNow());
+  const meters = $derived(credits
+    ? [...model.meters, { id: "credits", label: "Credits", text: credits, bar: false }]
+    : model.meters);
   const perRow = $derived(metersPerRow(meters.length));
   const rows = $derived(Math.ceil(meters.length / perRow));
   // More than one row: a horizontal rule between the rows, and each later

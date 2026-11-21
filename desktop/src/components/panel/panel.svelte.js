@@ -78,6 +78,14 @@ export function refillNow() {
   return { kind: reading?.kind ?? "", account: reading?.account ?? "", count: Number(reading?.refills) || 0 };
 }
 
+export function creditsNow() {
+  const reading = readingNow();
+  if (reading?.kind !== "codex-cli") return "";
+  if (reading.unlimited_credits) return "Unlimited";
+  const balance = reading.credit_balance?.trim();
+  return balance ? `${balance} left` : "";
+}
+
 export function meterNow(now = Date.now()) {
   const agent = agentNow();
   const session = shownSession();

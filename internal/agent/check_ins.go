@@ -20,7 +20,9 @@ import (
 // one waits until the agent has had the previous one, so they never pile up
 // behind a busy agent. Running services are named in one line at the end;
 // when only services run, no note comes (owner, 2026-10-25: no "Still
-// running" notice for servers).
+// running" notice for servers). A job holding a local port counts as a
+// service too, however it was started, as the Servers list shows it as one
+// (owner, 2026-11-21).
 
 // checkInTailLines and checkInTotalBytes bound the output quoted in one
 // check-in; several running items share them.
@@ -55,6 +57,9 @@ type checkInWork struct {
 	started  time.Time
 	// service work is only named, without its output.
 	service bool
+	// serving, when set, reports whether the work now listens on a port,
+	// which makes it a service as well.
+	serving func() bool
 	// ctx is the work's own; a check-in is sent under one still live.
 	ctx      context.Context
 	progress func() string
@@ -144,10 +149,8 @@ func (h *taskHub) runCheckIns(sessionID string, s *sessionCheckIns) {
 // the loop has run for earlier work or services (owner, 2026-10-27). With
 // no such work it is now, as the note is then skipped anyway.
 func (h *taskHub) firstCheckInDue(s *sessionCheckIns, interval time.Duration) time.Time {
-	h.mu.Lock()
-	defer h.mu.Unlock()
 	var oldest time.Time
-	for _, w := range s.work {
+	for _, w := range h.checkInWorkNow(s) {
 		if !w.service && (oldest.IsZero() || w.started.Before(oldest)) {
 			oldest = w.started
 		}
@@ -162,9 +165,7 @@ func (h *taskHub) firstCheckInDue(s *sessionCheckIns, interval time.Duration) ti
 // context of one that is still live, and whether a note about it is due:
 // only while work other than services runs.
 func (h *taskHub) checkInSnapshot(s *sessionCheckIns) ([]checkInWork, context.Context, bool) {
-	h.mu.Lock()
-	work := slices.Collect(maps.Values(s.work))
-	h.mu.Unlock()
+	work := h.checkInWorkNow(s)
 	due := slices.ContainsFunc(work, func(w checkInWork) bool { return !w.service })
 	slices.SortFunc(work, func(a, b checkInWork) int { return a.started.Compare(b.started) })
 	for _, w := range work {
@@ -173,6 +174,21 @@ func (h *taskHub) checkInSnapshot(s *sessionCheckIns) ([]checkInWork, context.Co
 		}
 	}
 	return work, nil, due
+}
+
+// checkInWorkNow lists the session's running work, each marked a service
+// if it is one or now listens on a port. The port scan runs without the
+// hub's lock, since it takes the hubs' lock itself.
+func (h *taskHub) checkInWorkNow(s *sessionCheckIns) []checkInWork {
+	h.mu.Lock()
+	work := slices.Collect(maps.Values(s.work))
+	h.mu.Unlock()
+	for i, w := range work {
+		if !w.service && w.serving != nil && w.serving() {
+			work[i].service = true
+		}
+	}
+	return work
 }
 
 // checkInLoop waits interval, sends a note, and repeats; each wait starts
@@ -272,7 +288,7 @@ func serviceList(services []checkInWork, now time.Time) string {
 }
 
 // backgroundJobWork is a running job as its session's check-ins list it.
-func backgroundJobWork(ctx context.Context, job *shell.BackgroundShell, service bool) checkInWork {
+func backgroundJobWork(ctx context.Context, job *shell.BackgroundShell, marker string, service bool) checkInWork {
 	name := BackgroundProcessName
 	if job.Description != "" {
 		name += ": " + job.Description
@@ -280,6 +296,9 @@ func backgroundJobWork(ctx context.Context, job *shell.BackgroundShell, service 
 	return checkInWork{id: "Job " + job.ID, name: name, started: job.Started, service: service, ctx: ctx, progress: func() string {
 		stdout, stderr, _, _ := job.GetOutput()
 		return stdout + "\n" + stderr
+	}, serving: func() bool {
+		servers, _ := FindServers([]Process{{JobID: job.ID, Started: job.Started, marker: marker}})
+		return len(servers) > 0
 	}}
 }
 

@@ -520,9 +520,7 @@ func RefreshLimitsDuringTurn(ctx context.Context, kind catwalk.Type, account str
 	ctx = freshLimits(context.WithoutCancel(ctx))
 	go func() {
 		for {
-			read, cancel := context.WithTimeout(ctx, time.Minute)
-			_ = ReadAccountLimitsNow(read, kind, account)
-			cancel()
+			readTurnLimits(ctx, k)
 			turnReads.Lock()
 			if !turnReads.again[k] {
 				delete(turnReads.running, k)
@@ -533,6 +531,42 @@ func RefreshLimitsDuringTurn(ctx context.Context, kind catwalk.Type, account str
 			turnReads.Unlock()
 		}
 	}()
+}
+
+func readTurnLimits(ctx context.Context, k limitKey) {
+	read := func() error {
+		ctx, cancel := context.WithTimeout(ctx, time.Minute)
+		defer cancel()
+		return ReadAccountLimitsNow(ctx, k.kind, k.account)
+	}
+	var balance string
+	if k.kind == config.TypeCodexCLI {
+		balance = paidCodexBalance(k)
+	}
+	if err := read(); err != nil || balance == "" || paidCodexBalance(k) != balance {
+		return
+	}
+	// A turn can finish before OpenAI posts its charge. Check once more
+	// if the account has paid credits and the first read stayed the same.
+	<-time.After(5 * time.Second)
+	if paidCodexBalance(k) == balance {
+		_ = read()
+	}
+}
+
+// paidCodexBalance returns the last confirmed balance if it can be spent.
+func paidCodexBalance(k limitKey) string {
+	limitStore.Lock()
+	credits := limitStore.credits[k]
+	limitStore.Unlock()
+	if credits == nil || credits.Unlimited {
+		return ""
+	}
+	balance := strings.TrimSpace(credits.Balance)
+	if amount, err := strconv.ParseFloat(balance, 64); err != nil || amount <= 0 {
+		return ""
+	}
+	return balance
 }
 
 // turnReads lists the accounts with a turn's read on its way, and those
@@ -1137,9 +1171,6 @@ func fetchCodexLimits(ctx context.Context) ([]Limit, error) {
 			reading.Credits = res.RateLimits.Credits
 			if reading.Credits == nil {
 				reading.Credits = res.ByLimitID["codex"].Credits
-			}
-			if reading.Credits == nil && len(windows) > 0 {
-				reading.Credits = &codexCredits{}
 			}
 		}
 		return windows, nil

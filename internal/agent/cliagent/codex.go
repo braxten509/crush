@@ -262,6 +262,9 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 	}
 
 	done, err := r.readLoop(lines)
+	if active := r.active.Load(); r.finished || (active != nil && active[1] != "") {
+		RefreshLimitsDuringTurn(ctx, config.TypeCodexCLI, m.Account)
+	}
 	if !done && ctx.Err() != nil {
 		err = ctx.Err()
 	} else if !done && live != nil {

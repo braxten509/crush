@@ -13,6 +13,7 @@ import { createSubscriber, SvelteMap } from "svelte/reactivity";
 import { closeDialog, openDialog } from "../dialogs.js";
 import { api } from "../engine/api.js";
 import { onEvent, onResync } from "../engine/events.js";
+import { limitKind } from "../footer.js";
 import { refreshCapabilities } from "../models/capabilities.svelte.js";
 import { modelData, shownAgent } from "../models/store.svelte.js";
 import { helperChats } from "../stores/helperchats.svelte.js";
@@ -323,8 +324,10 @@ export function startWatches() {
       untrack(() => refreshCapabilities(sid));
     });
     $effect(() => {
-      const provider = agentNow()?.model_cfg?.provider ?? "";
-      untrack(() => agentProviderChanged(provider));
+      const agent = agentNow();
+      const kind = limitKind(agent, ws.providers);
+      const account = agent?.model_cfg?.account ?? "";
+      untrack(() => agentProviderChanged(kind, account));
     });
     $effect(() => {
       if (ui.focus === "tray" && traySections.length === 0) untrack(() => focusField());

@@ -4,6 +4,7 @@
 // reading is "checking…", never 0.
 import { api } from "../engine/api.js";
 import { onEvent, onResync } from "../engine/events.js";
+import { CODEX } from "../fallback/blocks.js";
 
 export const limits = $state({ byKind: {} }); // limitsKey → CLILimits with the newest read_at (engine design 5.9)
 
@@ -43,7 +44,7 @@ export function applyLimits(reading) {
 }
 
 let loaded = false;
-let wanted = ""; // a kind to refresh once the snapshot shows it reports limits
+let wanted = null; // the selection to refresh once the snapshot arrives
 
 // GET /v1/limits ({clis: CLILimits[]}): at start and on every resync.
 export async function loadLimits() {
@@ -51,9 +52,9 @@ export async function loadLimits() {
   for (const reading of snapshot?.clis ?? []) applyLimits(reading);
   loaded = true;
   if (wanted) {
-    const kind = wanted;
-    wanted = "";
-    refreshLimitsFor(kind);
+    const { kind, account } = wanted;
+    wanted = null;
+    refreshLimitsFor(kind, { account });
   }
 }
 
@@ -61,28 +62,36 @@ onEvent("limits", (_kind, reading) => applyLimits(reading));
 onResync(loadLimits);
 
 let lastProvider = "";
+let lastAccount;
 
 // The agent's provider, after every agent read: a change asks the engine for
 // a fresh reading of that kind, as the terminal does when the selected
 // provider changes (internal/ui/model/workspace_cache.go:200-203; first read
 // included). A built-in agent CLI's provider id is its kind (cli_providers.go).
+// Codex follows the selected sign-in even when the provider stays the same.
 // Only kinds the snapshot lists report limits; the answer comes as an event.
-export function agentProviderChanged(provider) {
-  if (!provider || provider === lastProvider) return;
+export function agentProviderChanged(provider, account = "") {
+  const selectedAccount = provider === CODEX ? account : undefined;
+  if (provider === lastProvider && selectedAccount === lastAccount) return;
   lastProvider = provider;
-  refreshLimitsFor(provider);
+  lastAccount = selectedAccount;
+  if (!provider) {
+    wanted = null;
+    return;
+  }
+  refreshLimitsFor(provider, { account: selectedAccount });
 }
 
-const askedAt = new Map(); // kind → when this window last asked for a refresh (ms)
+const askedAt = new Map(); // limitsKey → when this window last asked for a refresh (ms)
 
-function refreshLimitsFor(kind, { due = false } = {}) {
+function refreshLimitsFor(kind, { due = false, account } = {}) {
   if (!loaded) {
-    wanted = kind;
+    wanted = { kind, account };
     return;
   }
   if (!limits.byKind[kind]) return;
-  askedAt.set(kind, Date.now());
-  api.refreshLimits(kind, { due }).catch((error) => console.error("limits refresh failed", error));
+  askedAt.set(limitsKey(kind, account), Date.now());
+  api.refreshLimits(kind, { due, account }).catch((error) => console.error("limits refresh failed", error));
 }
 
 // The terminal's poll (internal/ui/model/polling.go:15, update_ui.go:268-280):
@@ -98,26 +107,42 @@ function refreshLimitsFor(kind, { due = false } = {}) {
 // the poll while connected; idle() tells whether the shown chat is idle.
 const POLL_MS = 60_000;
 const STALE_MS = 3 * 60_000;
+const RETURN_REFRESH_GAP_MS = 5_000;
 let poll = null;
+
+function refreshCodexOnReturn() {
+  if (lastProvider !== CODEX || globalThis.document?.visibilityState === "hidden") return;
+  const asked = askedAt.get(limitsKey(CODEX, lastAccount));
+  // Restoring a window can fire both visibilitychange and focus.
+  if (asked !== undefined && Date.now() - asked < RETURN_REFRESH_GAP_MS) return;
+  refreshLimitsFor(CODEX, { account: lastAccount });
+}
 
 export function startLimitsPoll({ idle = () => true } = {}) {
   stopLimitsPoll();
+  globalThis.window?.addEventListener("focus", refreshCodexOnReturn);
+  globalThis.document?.addEventListener("visibilitychange", refreshCodexOnReturn);
   poll = setInterval(() => {
     if (globalThis.document?.visibilityState === "hidden" || !idle()) return;
     const kind = lastProvider;
-    const read = readTime(limits.byKind[kind]?.read_at);
+    if (!kind) return;
+    const account = lastAccount;
+    const key = limitsKey(kind, account);
+    const read = readTime(limits.byKind[key]?.read_at);
     const now = Date.now();
     if (read && now - read[0] < STALE_MS) return;
-    if (askedAt.has(kind) && now - askedAt.get(kind) < STALE_MS) return;
+    if (askedAt.has(key) && now - askedAt.get(key) < STALE_MS) return;
     // A timer, so only what is due: the engine first takes any newer
     // reading another engine saved, and asks the tool only after 3 min.
-    refreshLimitsFor(kind, { due: true });
+    refreshLimitsFor(kind, { due: true, account });
   }, POLL_MS);
 }
 
 export function stopLimitsPoll() {
   clearInterval(poll);
   poll = null;
+  globalThis.window?.removeEventListener("focus", refreshCodexOnReturn);
+  globalThis.document?.removeEventListener("visibilitychange", refreshCodexOnReturn);
 }
 
 // The windows that apply to a model, as cliagent.Limits does

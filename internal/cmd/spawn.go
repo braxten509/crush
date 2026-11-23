@@ -37,6 +37,10 @@ crush spawn --cli claude --model opus --effort max --fast --name "Compose a tune
 Write the song.
 EOF
 
+crush spawn --cli codex --account codex-2 --read-only --name "Review on account 2" <<'EOF'
+Review the parser; don't change it.
+EOF
+
 crush spawn --continue t2 <<'EOF'
 Also check the error paths you skipped.
 EOF
@@ -70,6 +74,7 @@ crush spawn --stop t2`,
 			req.Fast, _ = cmd.Flags().GetBool("fast")
 			req.ReadOnly, _ = cmd.Flags().GetBool("read-only")
 			req.MCP, _ = cmd.Flags().GetBool("mcp")
+			req.Account, _ = cmd.Flags().GetString("account")
 			req.Name, _ = cmd.Flags().GetString("name")
 			// -c starts a new sub-agent in that folder; a follow-up keeps its own.
 			if f := cmd.Flag("cwd"); f != nil && f.Value.String() != "" && req.Continue == "" {
@@ -133,6 +138,9 @@ crush spawn --stop t2`,
 		if t.MCP {
 			tuning += ", with MCP add-ons"
 		}
+		if t.Account != "" {
+			tuning += ", account " + t.Account
+		}
 		if t.Dir != "" {
 			tuning += ", in " + t.Dir
 		}
@@ -149,6 +157,7 @@ func init() {
 	spawnCmd.Flags().Bool("fast", false, "Run in fast mode (claude and codex only)")
 	spawnCmd.Flags().Bool("read-only", false, "Run where it can't change the project's files, as for reviews; follow-ups stay read-only")
 	spawnCmd.Flags().Bool("mcp", false, "Start it with the MCP add-on servers (REA, Cloudflare, ...), which sub-agents otherwise go without; with --continue, turns them on for a stopped or finished task")
+	spawnCmd.Flags().String("account", "", "Sign-in to run an agent CLI on: an account ID (like codex-2), its email or shown name, or \"default\" for the tool's own login; with --continue, switches a stopped or finished task to it")
 	spawnCmd.Flags().String("name", "", "Short title shown in Crush")
 	spawnCmd.Flags().String("stop", "", "Stop the task with this ID instead")
 	spawnCmd.Flags().String("continue", "", "Send the prompt to this task, which keeps its conversation: as a follow-up once it is done, or into its work while it runs")

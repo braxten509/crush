@@ -201,6 +201,11 @@ func (h *taskHub) continueTask(req TaskRequest) (*Task, error) {
 		account = ""
 	}
 	selected.Account = h.taskAccount(req.Session, provider, account)
+	if req.Account != "" {
+		if selected.Account, err = h.chosenAccount(provider, req.Account); err != nil {
+			return nil, err
+		}
+	}
 	readOnly := prev.ReadOnly || req.ReadOnly
 	mcp := prev.MCP || req.MCP
 	sub, m, err := h.subAgent(ctx, provider, model, selected, readOnly, mcp, prev.Dir)

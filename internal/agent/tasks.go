@@ -112,6 +112,10 @@ type TaskRequest struct {
 	ReadOnly bool `json:"read_only,omitempty"`
 	// MCP starts the sub-agent with the MCP add-ons (`crush spawn --mcp`).
 	MCP bool `json:"mcp,omitempty"`
+	// Account picks the sign-in an agent CLI runs on (`crush spawn
+	// --account`): an account ID, its email or shown name, or "default" for
+	// the tool's own login. Empty keeps the usual choice.
+	Account string `json:"account,omitempty"`
 	// Dir is the folder an agent CLI starts in and may save to (`crush
 	// spawn -c`); empty is the chat's own folder.
 	Dir    string `json:"dir,omitempty"`
@@ -720,6 +724,7 @@ Providers and models (the first model is the default), with their effort levels:
 Providers marked [API] are API services billed per use: never start a sub-agent on one unless the user asks for that provider or one of its models.
 --effort sets the model's reasoning effort (default: the model's own); use the level the user names, like "max". --fast turns on fast mode where supported (Claude Code, Codex, and Abacus OpenAI priority models). Abacus effort levels depend on the chosen model; recent Claude models accept low, medium, high, xhigh, max. --read-only runs the sub-agent where it can't change the project's files; use it for reviews, critiques and anything else that must only look. Run every review or second opinion from another model as a sub-agent like this, never through another tool or script that starts an agent CLI.
 Add --mcp when the sub-agent needs MCP add-on tools (REA, Cloudflare, ...); without it, it starts without them.
+--account picks which sign-in an agent CLI (claude, codex, grok, agy) runs on: an account ID like codex-2, its email or shown name, or "default" for the tool's own login. Use it when the user names an account, or when a sub-agent failed because its account hit a usage limit and another account of that tool is signed in.
 Sub-agents run in parallel and don't block you. Never wait, sleep or poll for them: keep working, or end your turn if you have nothing else to do. When one finishes, its result arrives as a <%[3]s> message and you continue from there.%[6]s Stop one with: %[1]s spawn --stop <task-id>
 To give a finished sub-agent more work or corrections, continue it instead of starting a new one; it keeps its conversation and remembers its earlier work, and it shows in Crush as the same sub-agent:
   %[1]s spawn --continue <task-id> <<'EOF'

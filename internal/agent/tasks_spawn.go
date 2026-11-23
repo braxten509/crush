@@ -17,6 +17,7 @@ import (
 	"charm.land/fantasy"
 	"github.com/google/uuid"
 
+	"github.com/charmbracelet/crush/internal/accounts"
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	agentprompt "github.com/charmbracelet/crush/internal/agent/prompt"
 	"github.com/charmbracelet/crush/internal/agent/tools"
@@ -111,6 +112,11 @@ func (h *taskHub) spawn(req TaskRequest) (*Task, error) {
 		return nil, err
 	}
 	selected.Account = h.taskAccount(req.Session, *provider, "")
+	if req.Account != "" {
+		if selected.Account, err = h.chosenAccount(*provider, req.Account); err != nil {
+			return nil, err
+		}
+	}
 	var parentBranch string
 	if h.c != nil && h.c.sessions != nil && h.c.cfg != nil {
 		if chat, err := h.c.sessions.Get(ctx, req.Session); err == nil && chat.Branch != "" {
@@ -176,6 +182,39 @@ func (h *taskHub) taskAccount(parentSessionID string, provider config.ProviderCo
 		return cur.Account
 	}
 	return previous
+}
+
+// chosenAccount is the account ID `crush spawn --account` names for the
+// provider's tool: an ID, an email or shown name (any case), or "default"
+// (also "1" or "own") for the tool's own login. An account that is not
+// signed in, or a provider without accounts, is refused with the choices.
+func (h *taskHub) chosenAccount(provider config.ProviderConfig, want string) (string, error) {
+	want = strings.TrimSpace(want)
+	if !config.HasAccounts(provider.Type) {
+		return "", fmt.Errorf("%s has no accounts to choose from", taskProviderName(provider))
+	}
+	cfg := h.c.cfg.Config()
+	var choices []string
+	for _, s := range accounts.Every(cfg) {
+		if s.Kind != provider.Type {
+			continue
+		}
+		id := cmp.Or(s.ID, "default")
+		choices = append(choices, fmt.Sprintf("%s (%s)", id, s.Name))
+		match := strings.EqualFold(want, id) ||
+			strings.EqualFold(want, s.Name) ||
+			strings.EqualFold(want, s.Label) ||
+			strings.EqualFold(want, cfg.AccountNumberName(s.Kind, s.ID)) ||
+			(s.ID == "" && (want == "1" || strings.EqualFold(want, "own")))
+		if !match {
+			continue
+		}
+		if !accounts.SignedIn(s.Kind, s.ID) {
+			return "", fmt.Errorf("the account %s is not signed in; sign it in from Crush's settings first", id)
+		}
+		return s.ID, nil
+	}
+	return "", fmt.Errorf("no %s account called %q; choose one of: %s", taskProviderName(provider), want, strings.Join(choices, ", "))
 }
 
 // subAgent builds the agent a task runs on. Without mcp an agent CLI starts

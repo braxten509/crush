@@ -116,7 +116,7 @@ export function listRows() {
   const rows = [];
   const placed = new Set();
   for (const group of chatGroups()) {
-    for (const row of group.rows) rows.push({ kind: "chat", id: row.id, title: row.title, group: group.dir, folder: row.folder ?? null });
+    for (const row of group.rows) rows.push({ kind: "chat", id: row.id, title: row.title, group: group.dir, folder: row.folder ?? null, dir: row.dir });
     for (const tab of group.terminals) {
       placed.add(tab.id);
       rows.push({ kind: "terminal", id: tab.id, title: tab.title || "Terminal", group: group.dir });
@@ -153,7 +153,8 @@ export function showRow(row) {
   if (mainView.current?.kind === "terminal") closeMain();
   if (row.id === DRAFT_ID) return true;
   // A chat of another folder opens in that folder, as the list's own rows do.
-  if (row.folder) openInFolder(row.folder.dir, row.id).catch((error) => console.error("opening a chat failed", error));
+  if (row.id === sessions.currentId && !conn.switching) return true;
+  if (row.dir || row.folder) openInFolder(row.dir || row.folder.dir, row.id).catch((error) => console.error("opening a chat failed", error));
   else if (row.id !== sessions.currentId) openChat(row.id);
   return true;
 }

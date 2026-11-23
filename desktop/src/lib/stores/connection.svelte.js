@@ -33,6 +33,7 @@ export const conn = $state({
   slow: false, // the join has taken over 400 ms: the gate shows "Starting Crush…" (2.9)
   launch: { session: "", continueLast: false }, // -s and -C (START-006)
   switching: 0, // folder switches under way: the shown chat may not be this folder's yet
+  pickedChat: "", // chat picked for the latest folder switch
   switchingTo: "", // the folder the latest of them opens (the loading layer names it)
 });
 
@@ -240,7 +241,8 @@ function sameFolder(a, b) {
 // no engine restart. The shown chat moves first (showLanding), unless
 // keepShown: a kept chat of that folder already shows (openInFolder).
 // Resolves true once the folder shows.
-export async function switchFolder(dir, { keepShown = false } = {}) {
+export async function switchFolder(dir, { keepShown = false, chatId = "" } = {}) {
+  conn.pickedChat = chatId;
   conn.switching += 1;
   try {
     // A join or switch still under way ends first, so a chat of the folder
@@ -249,6 +251,7 @@ export async function switchFolder(dir, { keepShown = false } = {}) {
       await current.catch(() => {});
       if (joining === current) break;
     }
+    if (chatId && conn.pickedChat !== chatId) return false;
     if (!dir || sameFolder(dir, conn.project.cwd) || sameFolder(dir, conn.project.path)) return true;
     if (!keepShown) showLanding();
     conn.error = null;

@@ -22,7 +22,7 @@
       state: conn.state,
       workspace: conn.workspace,
       switching: conn.switching,
-      switchingTo: conn.switchingTo,
+      switchingTo: conn.pickedChat && conn.pickedChat === sessions.currentId ? "" : conn.switchingTo,
       listLoaded: sessions.loaded || start.listGaveUp,
       startingChat: leftList.startingChats > 0,
     }),

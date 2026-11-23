@@ -38,7 +38,7 @@
   // × takes the row away.
   function open() {
     if (row.draft) focusField();
-    else if (row.folder) openInFolder(row.folder.dir, row.id).catch((error) => console.error("opening a chat failed", error));
+    else if (row.dir) openInFolder(row.dir, row.id).catch((error) => console.error("opening a chat failed", error));
     else openChat(row.id);
   }
 

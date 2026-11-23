@@ -513,6 +513,21 @@ function errorText(error) {
 }
 
 let openSeq = 0;
+export function chatSelectionVersion() {
+  return openSeq;
+}
+let folderHandoff = null;
+
+// Typing can start as soon as the chat is visible. Sending needs its engine.
+export function holdSendsForFolder(id, ready) {
+  const handoff = { id, ready };
+  folderHandoff = handoff;
+  const clear = () => {
+    if (folderHandoff === handoff) folderHandoff = null;
+  };
+  ready.then(clear, clear);
+}
+
 let deferred = []; // sends made while a switch was pending (TYPE-049)
 
 // A send while another chat opens is meant for that chat: it waits for the
@@ -520,6 +535,14 @@ let deferred = []; // sends made while a switch was pending (TYPE-049)
 // (deferSendDuringSwitch, internal/ui/model/session_load.go:155-193). send is
 // {run(sid), text, attachments, hidden, shell}. True when it was held.
 export function deferSend(send) {
+  if (!sessions.opening && folderHandoff?.id === sessions.currentId) {
+    const { id, ready } = folderHandoff;
+    ready.then((joined) => {
+      if (joined && sessions.currentId === id && !sessions.opening) return send.run(id);
+      restoreOne(send, id);
+    }, () => restoreOne(send, id)).catch((error) => console.error("a held send failed", error));
+    return true;
+  }
   if (!sessions.opening || sessions.opening.id === sessions.currentId) return false;
   deferred.push({ ...send, targetId: sessions.opening.id });
   return true;
@@ -624,24 +647,33 @@ function keep(sid, record) {
 // Loads a chat this window does not show yet and keeps it, so a click on it
 // shows it at once (open chats at startup, owner 2026-10-21). Resolves true
 // when it is kept.
-export async function preloadChat(id) {
+const preloads = new Map();
+export function preloadChat(id) {
+  if (!preloads.has(id)) {
+    const read = readPreloadedChat(id).finally(() => preloads.delete(id));
+    preloads.set(id, read);
+  }
+  return preloads.get(id);
+}
+
+async function readPreloadedChat(id) {
   if (!id || id === sessions.currentId || sessions.opening?.id === id || messages.bySession[id]) return false;
   if (lockHidden(id)) return false; // a locked chat's messages stay in the vault
-  let record;
-  try {
-    [record] = await Promise.all([api.getSession(id), load(id)]);
-  } catch (error) {
-    console.error("preloading a chat failed", errorText(error));
-    if (id !== sessions.currentId && sessions.opening?.id !== id) unload(id);
-    return false;
-  }
-  // Opened (or closed) meanwhile: the opening owns it now.
+  // Both read routes check the lock in the owning database. Start both while
+  // the directory is known, then check the returned record before showing it.
+  const [record, loaded] = await Promise.allSettled([api.getSession(id), load(id)]);
   if (id === sessions.currentId || sessions.opening?.id === id) return false;
-  if (!record?.id || messages.bySession[id]?.status !== "ready") {
+  if (record.status === "fulfilled" && HIDDEN_LOCK.has(record.value?.lock_state)) {
+    upsertSession(record.value);
     unload(id);
     return false;
   }
-  keep(id, record);
+  if (record.status === "rejected" || !record.value?.id || loaded.status === "rejected" ||
+      !loaded.value || lockHidden(id) || messages.bySession[id]?.status !== "ready") {
+    unload(id);
+    return false;
+  }
+  keep(id, record.value);
   return true;
 }
 
@@ -659,6 +691,7 @@ export function isKept(sid) {
 // Exported for closing the last listed chat (closed.svelte.js, P4.1), which
 // leaves a busy chat too.
 export function showLanding() {
+  openSeq += 1;
   abandonOpen();
   const old = sessions.currentId;
   sessions.currentId = "";
@@ -856,7 +889,7 @@ async function refreshKept(id) {
   const filesRead = startFilesRead(id);
   const [read, files] = await Promise.allSettled([api.getSession(id), api.history(id), load(id)]);
   if (read.status === "fulfilled" && read.value?.id && sessions.byId[id]) upsertSession(read.value, { since });
-  if (files.status === "fulfilled" && ws.files[id]) setFiles(id, files.value, filesRead);
+  if (files.status === "fulfilled" && (sessions.currentId === id || ws.files[id])) setFiles(id, files.value, filesRead);
 }
 
 // Save an empty chat when requested, so leaving it does not remove its row.

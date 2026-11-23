@@ -14,7 +14,7 @@ import { conn, inFolder, joinedFolder, switchFolder } from "./connection.svelte.
 import { keepFolders } from "./listfolders.svelte.js";
 import { load, messages, rootChatOf } from "./messages.svelte.js";
 import { notify } from "./ui.svelte.js";
-import { isHelperChat, isKept, openChat, preloadChat, sessions, setOpenChats, showKept, showLanding, shownJoined } from "./sessions.svelte.js";
+import { chatSelectionVersion, holdSendsForFolder, isHelperChat, isKept, openChat, preloadChat, sessions, setOpenChats, showKept, showLanding, shownJoined } from "./sessions.svelte.js";
 
 export const openChats = $state({ list: [], loaded: false });
 
@@ -62,13 +62,14 @@ async function read() {
 // 2026-10-21) and stays drawn (TimelineStack; owner, 2026-10-22: "all chats
 // should stay open"). Chats of other folders are read from their saved
 // files (api.js setOtherFolder). Each is tried once per joined folder.
+let folderPick = null;
 const tried = new Set();
 let preloading = false;
 async function preloadOpen() {
   if (preloading || conn.state !== "connected") return;
   preloading = true;
   try {
-    for (;;) {
+    while (!folderPick) {
       const dir = folderNow();
       const untried = (c) => !tried.has(`${dir}\n${c.id}`) && c.id !== sessions.currentId;
       const next = openChats.list.find((c) => c.dir === dir && untried(c)) ?? openChats.list.find(untried);
@@ -94,7 +95,7 @@ function chatFolderOf(sid) {
   return untrack(() => {
     const root = rootChatOf(sid);
     if (!root || root === sessions.opening?.id) return null;
-    const dir = openChats.list.find((c) => c.id === root)?.dir ?? "";
+    const dir = folderPick?.id === root ? folderPick.dir : openChats.list.find((c) => c.id === root)?.dir;
     if (!dir) return null;
     return { dir, joined: inFolder(dir) || joinedFolder(dir) };
   });
@@ -103,7 +104,12 @@ setChatFolder(chatFolderOf);
 
 // The drawn chats of another folder are read again: that folder's events may
 // have been missed (its stream just started, or this window just left it).
+const pendingResyncs = new Set();
 function rereadFolder(dir) {
+  if (folderPick) {
+    pendingResyncs.add(dir);
+    return;
+  }
   for (const c of openChats.list) {
     if (c.id === sessions.currentId || (dir && !sameDir(c.dir, dir)) || inFolder(c.dir)) continue;
     if (messages.bySession[c.id]?.status === "ready") load(c.id).catch((error) => console.error("rereading a chat failed", error?.message ?? error));
@@ -189,18 +195,50 @@ export async function closeListed(id, { mustStop = false } = {}) {
   return true;
 }
 
-// A chat of another folder: the window joins that folder, then shows it. A
-// kept chat shows at once and the folder follows behind it (owner,
-// 2026-10-20: "switching between two chats takes just as long").
-export async function openInFolder(dir, sessionId) {
-  if (!inFolder(dir) && isKept(sessionId)) {
-    showKept(sessionId, { refresh: false });
-    const joined = await switchFolder(dir, { keepShown: true });
-    if (joined) shownJoined(sessionId);
-    return joined;
+// Read the picked conversation while the window changes folders. A preloaded
+// chat can be shown immediately, including one already being read for the list.
+export async function openInFolder(dir, id) {
+  const pick = { dir, id };
+  folderPick = pick;
+  try {
+    if (inFolder(dir) && !conn.switching) return await openChat(id);
+
+    const listed = openChats.list.some((chat) => chat.id === id);
+    const shown = () => sessions.currentId === id;
+    if (!shown() && !isKept(id)) showLanding();
+    let version = chatSelectionVersion();
+    const stillPicked = () => folderPick === pick && conn.pickedChat === id && version === chatSelectionVersion()
+      && (!listed || openChats.list.some((chat) => chat.id === id));
+
+    const preload = !shown() && !isKept(id) ? preloadChat(id) : null;
+    const switching = switchFolder(dir, { keepShown: true, chatId: id });
+    holdSendsForFolder(id, switching);
+    const showReady = async () => {
+      if (preload) await preload;
+      if (stillPicked() && !shown() && isKept(id)) {
+        showKept(id, { refresh: false });
+        version = chatSelectionVersion();
+      }
+    };
+    const [folder, preview] = await Promise.allSettled([switching, showReady()]);
+    if (!stillPicked()) return false;
+    if (folder.status === "rejected" || !folder.value || !inFolder(dir)) {
+      if (shown()) showLanding();
+      if (folder.status === "rejected") throw folder.reason;
+      return false;
+    }
+    if (preview.status === "rejected") console.error("could not preload the picked chat", preview.reason);
+    if (!shown()) return await openChat(id);
+    shownJoined(id);
+    return true;
+  } finally {
+    if (folderPick === pick) {
+      folderPick = null;
+      for (const dir of pendingResyncs.has("") ? [""] : pendingResyncs) rereadFolder(dir);
+      pendingResyncs.clear();
+      preloadOpen();
+    }
   }
-  if (!(await switchFolder(dir))) return false;
-  return openChat(sessionId);
 }
 
 $effect.root(() => {

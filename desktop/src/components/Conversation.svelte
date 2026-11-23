@@ -63,7 +63,7 @@
   </div>
 
   <NoticeLine />
-  {#if !locked}
+  {#if sessionId && !locked}
     <Tray />
 
     <Rule marks="both" class="above-composer" />

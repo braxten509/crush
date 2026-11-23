@@ -9,7 +9,8 @@ import (
 )
 
 // guardedTool refuses tool calls that would read a secrets folder or
-// another chat's private folder. It sits
+// another chat's private folder, and shell commands that start an agent
+// CLI instead of using crush spawn (crush bg runs through it too). It sits
 // inside any hooks, so it checks the input after hooks rewrite it, and it
 // applies to sub-agents too.
 type guardedTool struct {
@@ -30,6 +31,9 @@ func (g guardedTool) Run(ctx context.Context, call fantasy.ToolCall) (fantasy.To
 	}
 	if secretguard.BlocksChatFolder(call.Name, []byte(call.Input), ownChatFolder(ctx)) {
 		return fantasy.NewTextErrorResponse(secretguard.ChatFolderReason), nil
+	}
+	if call.Name == tools.BashToolName && secretguard.BlocksAgentCLI([]byte(call.Input)) {
+		return fantasy.NewTextErrorResponse(secretguard.AgentCLIReason), nil
 	}
 	return g.AgentTool.Run(ctx, call)
 }

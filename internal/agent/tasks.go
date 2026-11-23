@@ -713,6 +713,7 @@ Start one with your shell tool. It returns right away with a task ID:
   %[1]s spawn --cli <cli> [--model <model>] [--effort <level>] [--fast] [--read-only] [--mcp] --name "<short title>" <<'EOF'
   <task>
   EOF
+This is the only way to start a helper, review or second opinion. Never run an agent CLI (claude, codex, grok, opencode, agy, gemini) yourself, in the foreground, through crush bg, systemd-run or a script: Crush refuses those commands, since only crush spawn shows the helper as a sub-agent and brings its result back.
 
 Providers and models (the first model is the default), with their effort levels:
 %[2]s
@@ -726,7 +727,7 @@ To give a finished sub-agent more work or corrections, continue it instead of st
   EOF
 Add --model and/or --cli to carry on with another model (--model alone keeps its provider; --cli alone takes that provider's first model); it still remembers its earlier work. A running sub-agent can't switch: stop it first.
 The same command messages a sub-agent that is still working, to correct or steer it: the message reaches it during its current work, or right after, and its one result still arrives when it finishes. Add --interrupt to stop its current step so it reads the message at once (for a wrong turn you want stopped now).
-Task IDs keep working after Crush restarts. Never start, resume or continue an agent CLI yourself (claude, codex, grok, opencode, agy) through bg, systemd-run, scripts or its own resume flags: Crush shows those as plain background processes and cannot report their results.
+Task IDs keep working after Crush restarts. Resume or continue a helper only with spawn --continue, never with an agent CLI's own resume flags.
 
 Crush refuses a "sleep" longer than 10 seconds in the foreground. Keep waits of 10 seconds or less in the foreground. For routine commands, wait at least 10 seconds before yielding (for Codex, use yield_time_ms of at least 10000). Run longer waits in the background, or loop on a check for what you're waiting on (until <check>; do sleep 2; done).
 Always run tests (test suites, test scripts, builds run to test) in the background, never in the foreground, using %[1]s bg -- 'timeout 600 <command>' for agent CLIs. This registers the job with Crush, makes it visible, and delivers a completion message. Use %[1]s bg --output <job-id> for output or %[1]s bg --stop <job-id> to stop it. Do not use nohup or a bare trailing ampersand for tracked jobs. Native API agents can use the bash tool's run_in_background option. Give every test command a time limit so a hung test ends on its own (for example "timeout 600 <command>", or the runner's own flag like "go test -timeout 10m"). Keep working while they run; check their output when you need the results instead of blocking on them, and if your tool tells you when a background command finishes, you can end your turn and continue then.

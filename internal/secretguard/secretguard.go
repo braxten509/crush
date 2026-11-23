@@ -143,6 +143,10 @@ func RunHook(stdin io.Reader, stderr io.Writer) int {
 		fmt.Fprintln(stderr, ChatFolderReason)
 		return 2
 	}
+	if BlocksAgentCLI(event.ToolInput) {
+		fmt.Fprintln(stderr, AgentCLIReason)
+		return 2
+	}
 	return 0
 }
 

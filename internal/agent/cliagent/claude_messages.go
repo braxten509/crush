@@ -11,6 +11,7 @@ import (
 
 	"github.com/charmbracelet/crush/internal/agent/tools/shelltool"
 	"github.com/charmbracelet/crush/internal/message"
+	"github.com/charmbracelet/crush/internal/secretguard"
 )
 
 // steerEchoTimeout is how long a finished turn waits for Claude to start on
@@ -113,6 +114,8 @@ func claudeControl(ctx context.Context, m *Model, t Turn, p *proc, line claudeLi
 	msg := "The user denied this tool call."
 	if sleepRefused(name, input) {
 		msg = shelltool.SleepRefusal
+	} else if agentCLIRefused(name, input) {
+		msg = secretguard.AgentCLIReason
 	} else if guardRefused(m, name, input) {
 		msg = shelltool.GuardRefusal
 	}

@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/crush/internal/agent/tools/shelltool"
 	"github.com/charmbracelet/crush/internal/filechange"
 	"github.com/charmbracelet/crush/internal/permission"
+	"github.com/charmbracelet/crush/internal/secretguard"
 )
 
 // claudeTool maps a Claude Code tool call onto the matching Crush tool so the
@@ -170,6 +171,10 @@ func (m *Model) approve(ctx context.Context, sessionID, callID, name, input stri
 		slog.Info("Refused a foreground sleep", "command", str("command"))
 		return false
 	}
+	if agentCLIRefused(name, input) {
+		slog.Info("Refused an agent CLI started by command", "command", str("command"))
+		return false
+	}
 	if m.Guarded {
 		if name == tools.BashToolName && shelltool.CommandBlocked(str("command")) {
 			slog.Info("Blocked a sub-agent command", "command", str("command"))
@@ -224,6 +229,12 @@ func (m *Model) approve(ctx context.Context, sessionID, callID, name, input stri
 func guardRefused(m *Model, name, input string) bool {
 	var in struct{ Command string }
 	return m.Guarded && name == tools.BashToolName && json.Unmarshal([]byte(input), &in) == nil && shelltool.CommandBlocked(in.Command)
+}
+
+// agentCLIRefused reports whether a tool call is a shell command that
+// starts an agent CLI, which must go through crush spawn instead.
+func agentCLIRefused(name, input string) bool {
+	return name == tools.BashToolName && secretguard.BlocksAgentCLI([]byte(input))
 }
 
 // sleepRefused reports whether a tool call is a shell command that starts

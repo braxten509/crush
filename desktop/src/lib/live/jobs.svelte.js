@@ -51,11 +51,16 @@ const held = new SvelteMap(); // job key → ms the engine answered its kill (0 
 let readTurn = 0;
 let timer = null;
 
+// The chat the jobs follow: the one being opened, else the one shown. The
+// read starts at the pick, not after the chat's messages have loaded (owner,
+// 2026-11-22), so the rows are there when the chat shows.
+const pickedSid = () => sessions.opening?.id || sessions.currentId;
+
 // The chat's jobs that are no server, in the engine's order, without the ones
 // killed here and not yet gone.
 export function trayJobs() {
   const sid = jobs.sid;
-  if (!sid || sid !== sessions.currentId) return [];
+  if (!sid || sid !== pickedSid()) return [];
   const servers = jobs.servers;
   return jobs.list.filter((job) => !isServer(job, servers) && !held.has(jobKey(job)));
 }
@@ -142,7 +147,7 @@ export function startJobs() {
   started = true;
   $effect.root(() => {
     $effect(() => {
-      const sid = sessions.currentId;
+      const sid = pickedSid();
       untrack(() => showChat(sid));
     });
   });

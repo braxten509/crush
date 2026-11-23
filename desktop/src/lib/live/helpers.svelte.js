@@ -162,11 +162,16 @@ let readTurn = 0;
 let reading = false;
 let timer = null;
 
+// The chat the helpers follow: the one being opened, else the one shown. The
+// read starts at the pick, not after the chat's messages have loaded (owner,
+// 2026-11-22), so the rows are there when the chat shows.
+const pickedSid = () => sessions.opening?.id || sessions.currentId;
+
 // The chat's running helpers, oldest first (tasks.go:56-69), without the ones
 // stopped here and not yet gone.
 export function runningHelpers() {
   const sid = helpers.sid;
-  if (!sid || sid !== sessions.currentId) return [];
+  if (!sid || sid !== pickedSid()) return [];
   const out = [];
   for (const h of helpers.byId.values()) {
     if (h.session_id === sid && h.status === "running" && !held.has(h.id)) out.push(h);
@@ -277,7 +282,7 @@ export function startHelpers() {
   started = true;
   $effect.root(() => {
     $effect(() => {
-      const sid = sessions.currentId;
+      const sid = pickedSid();
       untrack(() => showChat(sid));
     });
   });

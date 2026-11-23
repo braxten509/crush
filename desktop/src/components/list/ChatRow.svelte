@@ -185,6 +185,11 @@
     gap: calc(12 * var(--px));
     min-width: 0;
     overflow: hidden;
+    /* Room above and below for the state, raised 1.5 px, so its icon is not
+       clipped at the top or bottom; the equal negative margin keeps every
+       item exactly where it was (owner, 2026-11-22). */
+    padding-block: calc(4 * var(--px));
+    margin-block: calc(-4 * var(--px));
   }
   .has-state .line2 {
     padding-right: calc(4 * var(--px));

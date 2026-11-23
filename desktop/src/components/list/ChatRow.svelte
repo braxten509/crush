@@ -217,7 +217,13 @@
     text-transform: uppercase;
     color: var(--slate);
   }
+  /* Up one screen pixel at Compact zoom, rounded to whole pixels so the text
+     stays sharp: in the real app the state's words sat 1.5 px and its icon
+     0.5-1 px below the title's cap middle, though the boxes are centred
+     (owner's screenshots, 2026-11-22: centre them on the title). */
   .state {
+    position: relative;
+    top: round(calc(-1.5 * var(--px)), 1px);
     display: flex;
     flex: 0 1 auto;
     min-width: 0;

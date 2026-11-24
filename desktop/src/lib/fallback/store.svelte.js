@@ -5,6 +5,7 @@
 // what is shown.
 import { api, SCOPE } from "../engine/api.js";
 import { onEvent } from "../engine/events.js";
+import { forgetLimits } from "../stores/limits.svelte.js";
 import { notify } from "../stores/ui.svelte.js";
 import { sign_in_run } from "../engine/commands.js";
 import { kindsToRefresh } from "./blocks.js";
@@ -171,8 +172,10 @@ export function saveAccountOrder(kind, ids) {
 }
 
 export async function removeAccount(id) {
+  const removed = fallback.accounts.find((a) => a.id === id);
   try {
     take(await api.removeAccount(id));
+    if (removed?.kind) forgetLimits(removed.kind, id);
   } catch (error) {
     notify("error", `Couldn't remove the account: ${errorText(error)}`);
   }

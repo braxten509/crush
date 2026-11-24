@@ -111,3 +111,47 @@ func openCodeConsoleToken() (string, error) {
 	}
 	return credential.Access, nil
 }
+
+// hasOpenCodeConsoleToken reports whether OpenCode's database has an active
+// Console sign-in.
+func hasOpenCodeConsoleToken() bool {
+	tok, err := openCodeConsoleToken()
+	return err == nil && tok != ""
+}
+
+// removeOpenCodeConsoleAuth removes OpenCode Console credentials from
+// OpenCode's database so signing out of OpenCode Go clears both auth.json
+// and the Console login.
+func removeOpenCodeConsoleAuth() error {
+	dir := openCodeDataDir()
+	if dir == "" {
+		return nil
+	}
+	dbPath := filepath.Join(dir, "opencode.db")
+	if _, err := os.Stat(dbPath); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	params := url.Values{}
+	params.Set("_pragma", "busy_timeout(5000)")
+	dsn := (&url.URL{Scheme: "file", Path: dbPath, RawQuery: params.Encode()}).String()
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		return fmt.Errorf("open OpenCode database: %w", err)
+	}
+	defer db.Close()
+	var table string
+	err = db.QueryRow(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'credential'`).Scan(&table)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("inspect OpenCode database: %w", err)
+	}
+	if _, err := db.Exec(`DELETE FROM credential WHERE integration_id IN ('opencode', 'opencode-go')`); err != nil {
+		return fmt.Errorf("remove OpenCode Console sign-in: %w", err)
+	}
+	return nil
+}

@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/stretchr/testify/require"
@@ -85,4 +86,32 @@ func TestSignOutRemovesOpenCodeEntryWithoutTouchingOther(t *testing.T) {
 
 	require.NoError(t, SignOut(t.Context(), config.TypeOpenCodeZenCLI))
 	require.False(t, SignedIn(config.TypeOpenCodeZenCLI))
+}
+
+// SignOut on OpenCode Go also clears the OpenCode Console credential in
+// opencode.db and deletes remembered usage limits so it does not stay shown
+// as idle after restart.
+func TestSignOutOpenCodeGoClearsConsoleAndSavedLimits(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_DATA_HOME", filepath.Join(home, "data"))
+	t.Setenv("GROK_HOME", "")
+	shareLimitsForTest(t, config.TypeOpenCodeCLI)
+
+	dir := filepath.Join(home, "data", "opencode")
+	require.NoError(t, os.MkdirAll(dir, 0o700))
+	writeOpenCodeCredential(t, filepath.Join(dir, "opencode.db"), `{"type":"oauth","access":"console-token"}`)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.json"), []byte(`{"opencode":{"type":"api","key":"zen-key"}}`), 0o600))
+	require.True(t, SignedIn(config.TypeOpenCodeCLI))
+
+	k := limitKey{kind: config.TypeOpenCodeCLI}
+	setLimitsAt(k, []Limit{{Name: "5h", Used: 10}}, -1, time.Now())
+	require.FileExists(t, savedLimitsPath(k))
+	require.NotEmpty(t, Limits(config.TypeOpenCodeCLI, ""))
+
+	require.NoError(t, SignOut(t.Context(), config.TypeOpenCodeCLI))
+	require.False(t, SignedIn(config.TypeOpenCodeCLI))
+	require.True(t, SignedIn(config.TypeOpenCodeZenCLI))
+	require.Empty(t, Limits(config.TypeOpenCodeCLI, ""))
+	require.NoFileExists(t, savedLimitsPath(k))
 }

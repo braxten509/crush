@@ -17,6 +17,7 @@
   import { fallback, loadFallback } from "../../lib/fallback/store.svelte.js";
   import { modelData, refreshModels } from "../../lib/models/store.svelte.js";
   import { projectDir } from "../../lib/stores/composer.svelte.js";
+  import { forgetLimits } from "../../lib/stores/limits.svelte.js";
   import { notify } from "../../lib/stores/ui.svelte.js";
   import { openTerminal } from "../../lib/terminal/tabs.svelte.js";
   import ToolAccounts from "./ToolAccounts.svelte";
@@ -73,6 +74,7 @@
     try {
       if (row.hasKey) await api.removeConfig(SCOPE.global, `providers.${row.id}.api_key`);
       if (row.hasOAuth) await api.removeConfig(SCOPE.global, `providers.${row.id}.oauth`);
+      forgetLimits(row.id);
       await refreshModels();
       notify("info", `Removed the ${row.name} sign-in.`);
     } catch (error) {

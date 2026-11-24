@@ -43,6 +43,14 @@ export function applyLimits(reading) {
   limits.byKind[key] = reading;
 }
 
+// Drops a cached reading for an account that was signed out or removed.
+export function forgetLimits(kind, account = "") {
+  if (!kind) return;
+  const key = limitsKey(kind, account);
+  delete limits.byKind[key];
+  askedAt.delete(key);
+}
+
 let loaded = false;
 let wanted = null; // the selection to refresh once the snapshot arrives
 

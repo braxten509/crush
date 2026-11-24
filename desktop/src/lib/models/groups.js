@@ -49,7 +49,7 @@ function subscriptionModels(providerId, configured) {
 // `type` names the recent list ("large" for the chats' picks, "small" for the
 // helper); `current` is the model shown as chosen (the chat's own, or the
 // helper), never a folder-wide model.
-export function buildGroups({ catalog, cfg, type, current = null }) {
+export function buildGroups({ catalog, cfg, type, current = null, hidden = null }) {
   current = current ?? {};
   const items = [];
   const byKey = new Map();
@@ -69,7 +69,7 @@ export function buildGroups({ catalog, cfg, type, current = null }) {
   const known = new Set(catalog.map((p) => p.id));
   const custom = [];
   for (const [id, p] of cfg.providers) {
-    if (p.disable) continue;
+    if (p.disable || hidden?.has(id)) continue;
     if (!known.has(id)) custom.push({ id, name: p.name || id, p });
   }
   custom.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
@@ -81,7 +81,7 @@ export function buildGroups({ catalog, cfg, type, current = null }) {
 
   // addKnownProviderGroups (models.go:472-507).
   for (const provider of catalog) {
-    if (added.has(provider.id)) continue;
+    if (added.has(provider.id) || hidden?.has(provider.id)) continue;
     const configured = cfg.providers.get(provider.id);
     if (configured?.disable) continue;
     const shown = configured ? withConfiguredModels(provider, configured) : provider;
@@ -99,6 +99,10 @@ export function buildGroups({ catalog, cfg, type, current = null }) {
   const valid = [];
   const recentItems = [];
   for (const recent of recentList) {
+    if (hidden?.has(recent?.provider)) {
+      valid.push(recent);
+      continue;
+    }
     const item = byKey.get(modelKey(recent?.provider, recent?.model));
     if (!item) continue;
     valid.push(recent);

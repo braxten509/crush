@@ -222,6 +222,45 @@ func forgetKind(kind catwalk.Type) {
 	maps.DeleteFunc(limitStore.modelsAt, func(k limitKey, _ time.Time) bool { return of(k) })
 }
 
+// ForgetAccountLimits drops remembered and cached usage readings for one
+// account (in memory and on disk) after signing out or removing its key.
+func ForgetAccountLimits(kind catwalk.Type, account string) {
+	k := limitKey{kind: kind, account: account}
+	limitStore.Lock()
+	delete(limitStore.byKind, k)
+	delete(limitStore.fetched, k)
+	delete(limitStore.readAt, k)
+	delete(limitStore.lastErr, k)
+	delete(limitStore.refills, k)
+	delete(limitStore.credits, k)
+	delete(limitStore.asked, k)
+	delete(limitStore.seeded, k)
+	delete(limitStore.modelsAt, k)
+	limitStore.Unlock()
+	if path := sharedLimitsPath(k); path != "" {
+		_ = os.Remove(path)
+	}
+	if path := savedLimitsPath(k); path != "" {
+		_ = os.Remove(path)
+	}
+	limitsChanged(k)
+}
+
+// hasLimitCredential reports whether k currently has a stored login or API
+// key on this machine, so signed-out tools do not reload stale saved limits.
+func hasLimitCredential(k limitKey) bool {
+	switch k.kind {
+	case config.TypeClaudeCode, config.TypeCodexCLI, config.TypeGrokCLI, config.TypeAGYCLI:
+		return accounts.SignedIn(k.kind, k.account)
+	case config.TypeOpenCodeCLI:
+		return SignedIn(config.TypeOpenCodeCLI)
+	case catwalk.Type(catwalk.InferenceKimiCoding):
+		return limitProviderKey(kimiProvider) != ""
+	default:
+		return true
+	}
+}
+
 // SetLimitFetchersForTest makes fetchers the only usage fetchers, with an
 // empty store for them, until restore runs. Tests use it so that no real
 // CLI or account is asked. A fetcher reads the account it is asked about
@@ -618,6 +657,10 @@ func ReadAccountLimitsNow(ctx context.Context, kind catwalk.Type, account string
 }
 
 func refreshLimits(ctx context.Context, k limitKey, force bool) (bool, error) {
+	if !LimitFetchersReplaced() && !hasLimitCredential(k) {
+		ForgetAccountLimits(k.kind, k.account)
+		return false, nil
+	}
 	// The newest amounts any engine saved show while the read is on its
 	// way, and stay if it is refused; a fresh one makes the read not due.
 	adoptSavedLimits(k)

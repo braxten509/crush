@@ -19,3 +19,22 @@ export const AGENT_CLIS = [
 export function cliOf(kind) {
   return AGENT_CLIS.find((cli) => cli.kind === kind) ?? null;
 }
+
+// Agent CLIs that require a sign-in (OpenCode Zen's free tier runs without
+// one) and are currently signed out, so the model picker can hide them while
+// Settings → Accounts keeps them available to sign back in.
+export function signedOutCLIs({ accounts = [], accountsLoaded = false, cliSignedIn = null, cliLoaded = false, cfg = null } = {}) {
+  const out = new Set();
+  if (accountsLoaded) {
+    for (const cli of AGENT_CLIS) {
+      if (!cli.accounts) continue;
+      const known = (accounts ?? []).filter((a) => a.kind === cli.kind);
+      if (known.length > 0 && !known.some((a) => a.signed_in)) out.add(cli.kind);
+    }
+  }
+  if (cliLoaded && cliSignedIn?.["opencode-cli"] === false) {
+    const p = cfg?.providers?.get?.("opencode-cli");
+    if (!p?.has_api_key && !p?.has_oauth) out.add("opencode-cli");
+  }
+  return out;
+}

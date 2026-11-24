@@ -4,6 +4,7 @@
 // keeps one, its login's email cross the wire; no credential is read here.
 import { api } from "../engine/api.js";
 import { onEvent } from "../engine/events.js";
+import { forgetLimits } from "../stores/limits.svelte.js";
 
 export const cliState = $state({
   loaded: false,
@@ -24,6 +25,7 @@ export async function loadCLIState() {
 
 export async function signOutCLI(kind) {
   const answer = await api.signOutCLI(kind);
+  forgetLimits(kind);
   if (answer) {
     cliState.providers = answer.providers ?? {};
     cliState.emails = answer.emails ?? {};

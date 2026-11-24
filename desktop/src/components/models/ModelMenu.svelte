@@ -36,6 +36,8 @@
   import { sessions } from "../../lib/stores/sessions.svelte.js";
   import { api, SCOPE } from "../../lib/engine/api.js";
   import { setAccount, setEffort } from "../../lib/models/toggles.js";
+  import { signedOutCLIs } from "../../lib/accounts/clis.js";
+  import { cliState, loadCLIState } from "../../lib/accounts/state.svelte.js";
   import { fallback, loadFallback } from "../../lib/fallback/store.svelte.js";
   import { hasAccounts } from "../../lib/fallback/blocks.js";
   import { unfold } from "../../lib/motion.js";
@@ -155,7 +157,8 @@
   // The chat's model (the picker's chat list), not the helper model.
   const type = "large";
   const current = $derived(coder.selected);
-  const built = $derived(modelData.cfg ? buildGroups({ catalog: modelData.catalog, cfg: modelData.cfg, type, current }) : { items: [] });
+  const hidden = $derived(signedOutCLIs({ accounts: fallback.accounts, accountsLoaded: fallback.loaded, cliSignedIn: cliState.providers, cliLoaded: cliState.loaded, cfg: modelData.cfg }));
+  const built = $derived(modelData.cfg ? buildGroups({ catalog: modelData.catalog, cfg: modelData.cfg, type, current, hidden }) : { items: [] });
   const groups = $derived(menuGroups(built.items, addableProviders(modelData.cfg)));
   const shownGroup = $derived(groups.find((g) => g.name === chosenGroup) ?? groups.find((g) => g.name === startGroup(groups, current)) ?? null);
   const searching = $derived(query.trim() !== "");
@@ -378,6 +381,7 @@
     measure();
     search?.focus({ preventScroll: true });
     if (!fallback.loaded) loadFallback();
+    if (!cliState.loaded) loadCLIState();
     const unbind = [
       bindKey("menu", "Escape", () => (removing ? (removing = null) : close(), true)),
       bindKey("menu", "ArrowDown", () => step(1)),

@@ -14,6 +14,7 @@
 // ago, and asks the tool only when its reading is old. The sign-in the shown
 // chat uses is asked that way every minute, so its meter follows its turns
 // in any folder without asking Anthropic more often.
+import { cliState, loadCLIState } from "../accounts/state.svelte.js";
 import { api } from "../engine/api.js";
 import { AGY, CLAUDE, CODEX } from "../fallback/blocks.js";
 import { fallback, loadFallback } from "../fallback/store.svelte.js";
@@ -77,14 +78,21 @@ export function setAccountMeters(on) {
   restart();
 }
 
-// The listed tools, in LIST_KINDS order: those with a sign-in, and those
-// without sign-ins that have a reading (one never set up stays hidden).
-export function listedKinds(accounts, byKind = {}) {
+// The listed tools, in LIST_KINDS order: those with a signed-in account, and
+// those without an account list that are signed in and have a reading.
+export function listedKinds(accounts, byKind = {}, { cliSignedIn = null, providers = null } = {}) {
   return LIST_KINDS.filter((kind) => {
-    if (kind === AGY) {
-      return (accounts ?? []).some((a) => a.kind === kind && (a.id || a.signed_in)) || Boolean(readTime(byKind[kind]?.read_at));
+    if (SIGN_IN_KINDS.includes(kind)) {
+      const known = (accounts ?? []).filter((a) => a.kind === kind);
+      if (known.length > 0) return known.some((a) => a.signed_in);
+      return kind === AGY && Boolean(readTime(byKind[kind]?.read_at));
     }
-    return SIGN_IN_KINDS.includes(kind) ? (accounts ?? []).some((a) => a.kind === kind) : Boolean(readTime(byKind[kind]?.read_at));
+    if (kind === "opencode-cli" && cliSignedIn && cliSignedIn[kind] === false) return false;
+    if (kind === "kimi-coding" && providers?.has?.(kind)) {
+      const p = providers.get(kind);
+      if (!p?.has_api_key && !p?.has_oauth) return false;
+    }
+    return Boolean(readTime(byKind[kind]?.read_at));
   });
 }
 
@@ -173,10 +181,10 @@ function partOf(windows, name, now) {
 // read failed), "idle" (the last read failed, so the numbers are old: an
 // unused Claude login expires until Claude Code runs on it again) or
 // "signed-out".
-export function accountGroups({ accounts = [], byKind = {}, inUse = { kind: "", account: "" }, now = Date.now() } = {}) {
-  return listedKinds(accounts, byKind).map((kind) => {
+export function accountGroups({ accounts = [], byKind = {}, inUse = { kind: "", account: "" }, now = Date.now(), cliSignedIn = null, providers = null } = {}) {
+  return listedKinds(accounts, byKind, { cliSignedIn, providers }).map((kind) => {
     const known = accounts.filter((a) => a.kind === kind);
-    const logins = known.length ? known : [{ id: "", kind, name: TOOL_NAMES[kind], signed_in: true }];
+    const logins = known.length ? known.filter((a) => a.signed_in) : [{ id: "", kind, name: TOOL_NAMES[kind], signed_in: true }];
     const tool = TOOL_NAMES[kind] ?? kind;
     return {
       kind,
@@ -222,9 +230,11 @@ export function accountPollConnected(on) {
 
 function readKind(kind) {
   if (globalThis.document?.visibilityState === "hidden") return;
+  const cliSignedIn = cliState.loaded ? cliState.providers : null;
+  if (kind === "opencode-cli" && cliSignedIn?.[kind] === false) return;
   // A tool without sign-ins is read even before it is listed: its first
   // reading is what lists it.
-  if (SIGN_IN_KINDS.includes(kind) && !listedKinds(fallback.accounts).includes(kind)) return;
+  if (SIGN_IN_KINDS.includes(kind) && !listedKinds(fallback.accounts, limits.byKind, { cliSignedIn }).includes(kind)) return;
   askedAt.set(kind, Date.now());
   api.refreshLimits(kind, { due: READ_EVERY_MS[kind] >= ENGINE_FLOOR_MS }).catch((error) => console.error("account limits refresh failed", error));
 }
@@ -253,7 +263,13 @@ function restart() {
   for (const timer of timers) clearInterval(timer);
   timers = [];
   if (!connected || !accountMeters.on) return;
-  const first = fallback.loaded ? Promise.resolve() : loadFallback();
+  const first =
+    fallback.loaded && cliState.loaded
+      ? Promise.resolve()
+      : Promise.all([
+          fallback.loaded ? Promise.resolve() : loadFallback(),
+          cliState.loaded ? Promise.resolve() : loadCLIState(),
+        ]);
   first.then(() => {
     if (!connected || !accountMeters.on) return;
     for (const kind of LIST_KINDS) readKind(kind);

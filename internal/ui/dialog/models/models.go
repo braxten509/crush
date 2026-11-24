@@ -7,12 +7,15 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"testing"
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/catwalk/v3/pkg/catwalk"
+	"github.com/charmbracelet/crush/internal/accounts"
+	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
@@ -446,6 +449,9 @@ func (m *Models) addCustomProviderGroups(b *modelGroupsBuilder, cfg *config.Conf
 		if p.Disable {
 			continue
 		}
+		if !testing.Testing() && isSignedOutCLI(cfg, p.Type) {
+			continue
+		}
 
 		// Check if this provider is not in the known providers list
 		if !slices.ContainsFunc(knownProviders, containsProviderFunc(id)) ||
@@ -594,6 +600,22 @@ func (m *Models) addRecentGroup(b *modelGroupsBuilder, recentItems []config.Sele
 		b.groups = append([]ModelGroup{recentGroup}, b.groups...)
 	}
 	return nil
+}
+
+func isSignedOutCLI(cfg *config.Config, kind catwalk.Type) bool {
+	switch kind {
+	case config.TypeClaudeCode, config.TypeCodexCLI, config.TypeGrokCLI, config.TypeAGYCLI:
+		if accounts.SignedIn(kind, "") {
+			return false
+		}
+		return !slices.ContainsFunc(cfg.Accounts(kind), func(a config.Account) bool {
+			return accounts.SignedIn(kind, a.ID)
+		})
+	case config.TypeOpenCodeCLI:
+		return !cliagent.SignedIn(kind)
+	default:
+		return false
+	}
 }
 
 func modelKey(providerID, modelID string) string {

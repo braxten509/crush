@@ -24,7 +24,7 @@ func SignedIn(kind catwalk.Type) bool {
 	case config.TypeGrokCLI:
 		return fileHasBytes(filepath.Join(grokHome(), "auth.json"))
 	case config.TypeOpenCodeCLI:
-		return openCodeAuthHas("opencode-go")
+		return openCodeAuthHas("opencode-go") || hasOpenCodeConsoleToken()
 	case config.TypeOpenCodeZenCLI:
 		return openCodeAuthHas("opencode")
 	case config.TypeAGYCLI:
@@ -91,19 +91,26 @@ func fileHasBytes(path string) bool {
 }
 
 // SignOut removes kind's own stored sign-in on this machine: the entry in
-// OpenCode's auth.json for OpenCode Go or Zen, or the tool's own login for
-// Claude Code, Codex, Grok and Antigravity.
+// OpenCode's auth.json (and OpenCode Console's database for OpenCode Go), or
+// the tool's own login for Claude Code, Codex, Grok and Antigravity, and
+// clears any remembered usage limits for it.
 func SignOut(ctx context.Context, kind catwalk.Type) error {
+	var err error
 	switch kind {
 	case config.TypeOpenCodeCLI:
-		return removeOpenCodeAuth("opencode-go")
+		err = errors.Join(removeOpenCodeAuth("opencode-go"), removeOpenCodeConsoleAuth())
 	case config.TypeOpenCodeZenCLI:
 		return removeOpenCodeAuth("opencode")
 	case config.TypeClaudeCode, config.TypeCodexCLI, config.TypeGrokCLI, config.TypeAGYCLI:
-		return accounts.SignOutOwn(ctx, kind)
+		err = accounts.SignOutOwn(ctx, kind)
 	default:
 		return fmt.Errorf("cannot sign out of %s", kind)
 	}
+	if err != nil {
+		return err
+	}
+	ForgetAccountLimits(kind, "")
+	return nil
 }
 
 func removeOpenCodeAuth(key string) error {

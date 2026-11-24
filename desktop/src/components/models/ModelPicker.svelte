@@ -10,12 +10,15 @@
   // keeping the selection on the same row. During onboarding the sheet sits
   // at the bottom left of the main column without the task selector.
   //   onboarding?, helper?, compact? (the compaction model, Settings)
-  import { untrack } from "svelte";
+  import { onMount, untrack } from "svelte";
   import Field from "../kit/Field.svelte";
   import FilterList from "../kit/FilterList.svelte";
   import Sheet from "../kit/Sheet.svelte";
+  import { signedOutCLIs } from "../../lib/accounts/clis.js";
+  import { cliState, loadCLIState } from "../../lib/accounts/state.svelte.js";
   import { closeDialog } from "../../lib/dialogs.js";
   import { api, SCOPE } from "../../lib/engine/api.js";
+  import { fallback, loadFallback } from "../../lib/fallback/store.svelte.js";
   import { chooseModel } from "../../lib/models/choose.js";
   import { buildGroups, filterQuery, filterValue, selectedModelOf } from "../../lib/models/groups.js";
   import { coderModel, modelData, watchModels } from "../../lib/models/store.svelte.js";
@@ -36,7 +39,8 @@
 
   // The chat's own model (the last pick with no chat open), or the compaction model.
   const current = $derived((type === "compact" ? modelData.cfg?.models?.compact : coderModel(modelData).selected) ?? {});
-  const built = $derived(modelData.cfg ? buildGroups({ catalog: modelData.catalog, cfg: modelData.cfg, type, current }) : { items: [], selectedKey: "", prunedRecent: null });
+  const hidden = $derived(signedOutCLIs({ accounts: fallback.accounts, accountsLoaded: fallback.loaded, cliSignedIn: cliState.providers, cliLoaded: cliState.loaded, cfg: modelData.cfg }));
+  const built = $derived(modelData.cfg ? buildGroups({ catalog: modelData.catalog, cfg: modelData.cfg, type, current, hidden }) : { items: [], selectedKey: "", prunedRecent: null });
   const items = $derived(built.items);
   const placeholder = $derived(onboarding ? "Find your fave" : compact ? "Choose the model that compacts API chats" : "Choose a model for this chat");
   const chosenItem = $derived(selected >= 0 ? items[selected] : null);
@@ -49,6 +53,10 @@
   ]);
 
   $effect(() => watchModels());
+  onMount(() => {
+    if (!fallback.loaded) loadFallback();
+    if (!cliState.loaded) loadCLIState();
+  });
 
   // A failed first read with nothing known keeps the sheet closed (DLG-029).
   $effect(() => {

@@ -356,6 +356,7 @@ func (b *Backend) RemoveAccount(workspaceID, id string) (proto.FallbackSettings,
 	if err := accounts.Remove(id); err != nil {
 		return proto.FallbackSettings{}, err
 	}
+	cliagent.ForgetAccountLimits(a.Kind, id)
 	cfg = freshConfig(ws)
 	sendConfigChanged(ws)
 	return fallbackSettings(cfg), nil

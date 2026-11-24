@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
+	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/agent"
+	"github.com/charmbracelet/crush/internal/agent/cliagent"
 	mcptools "github.com/charmbracelet/crush/internal/agent/tools/mcp"
 	"github.com/charmbracelet/crush/internal/commands"
 	"github.com/charmbracelet/crush/internal/config"
@@ -38,7 +41,18 @@ func (o Ops) SetConfigFields(scope config.Scope, fields map[string]any) error {
 
 // RemoveConfigField removes a key from the config file for scope.
 func (o Ops) RemoveConfigField(scope config.Scope, key string) error {
-	return o.mutateConfig(func() error { return o.Cfg.RemoveConfigField(scope, key) })
+	if err := o.mutateConfig(func() error { return o.Cfg.RemoveConfigField(scope, key) }); err != nil {
+		return err
+	}
+	if rest, ok := strings.CutPrefix(key, "providers."); ok {
+		for _, suffix := range []string{".api_key", ".oauth"} {
+			if id, ok := strings.CutSuffix(rest, suffix); ok && id != "" && !strings.Contains(id, ".") {
+				cliagent.ForgetAccountLimits(catwalk.Type(id), "")
+				break
+			}
+		}
+	}
+	return nil
 }
 
 // ErrChatOwnsModel refuses a write of a folder-wide chat model: each chat

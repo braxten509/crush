@@ -1,10 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const calls = vi.hoisted(() => ({ fallback: vi.fn(), refreshLimits: vi.fn() }));
-vi.mock("../engine/api.js", () => ({ api: { fallback: calls.fallback, refreshLimits: calls.refreshLimits } }));
+const calls = vi.hoisted(() => ({ fallback: vi.fn(), refreshLimits: vi.fn(), authState: vi.fn() }));
+vi.mock("../engine/api.js", () => ({ api: { fallback: calls.fallback, refreshLimits: calls.refreshLimits, authState: calls.authState } }));
 vi.mock("../engine/events.js", () => ({ onEvent: vi.fn(), onResync: vi.fn() }));
 vi.mock("../engine/commands.js", () => ({ sign_in_run: vi.fn() }));
 
+import { signedOutCLIs } from "../accounts/clis.js";
+import { cliState } from "../accounts/state.svelte.js";
+import { buildGroups } from "../models/groups.js";
 import { accountGroups, accountMeters, accountPollConnected, checkingKinds, listedKinds } from "./accountmeters.svelte.js";
 import { fallback } from "../fallback/store.svelte.js";
 import { limits } from "./limits.svelte.js";
@@ -122,6 +125,37 @@ describe("account meters", () => {
     const signedOut = accounts.map((a) => (a.id === "c2" ? { ...a, signed_in: false } : a));
     expect(checkingKinds(signedOut, { "claude-code": reading("claude-code", "", 0, 31), "codex-cli": reading("codex-cli", "", 0, 0) })).toEqual([]);
   });
+
+  it("hides signed-out accounts and unsigned OpenCode Go from the usage list and model picker", () => {
+    const logins = [
+      { id: "", kind: "claude-code", name: "Claude 1", signed_in: false },
+      { id: "c2", kind: "claude-code", name: "Claude 2", signed_in: true },
+      { id: "", kind: "grok-cli", name: "Grok 1", signed_in: false },
+    ];
+    const byKind = {
+      "claude-code#c2": reading("claude-code", "c2", 10, 20),
+      "grok-cli": reading("grok-cli", "", 15, 25),
+      "opencode-cli": reading("opencode-cli", "", 0, 4, { error: "OpenCode Console is not signed in" }),
+      "kimi-coding": reading("kimi-coding", "", 0, 25),
+    };
+    const providers = new Map([
+      ["claude-code", { id: "claude-code", name: "Claude Code", type: "claude-code", models: [{ id: "opus", name: "Opus" }] }],
+      ["grok-cli", { id: "grok-cli", name: "Grok", type: "grok-cli", models: [{ id: "grok-4.7", name: "Grok 4.7" }] }],
+      ["opencode-cli", { id: "opencode-cli", name: "OpenCode Go", type: "opencode-cli", models: [{ id: "opencode-go/glm-5.3", name: "GLM 5.3" }] }],
+      ["opencode-zen-cli", { id: "opencode-zen-cli", name: "OpenCode Zen", type: "opencode-zen-cli", models: [{ id: "opencode/big-pickle", name: "Big Pickle" }] }],
+      ["kimi-coding", { id: "kimi-coding", name: "Kimi", type: "kimi-coding", has_api_key: false, models: [] }],
+    ]);
+    const cliSignedIn = { "grok-cli": false, "opencode-cli": false, "opencode-zen-cli": false };
+
+    const groups = accountGroups({ accounts: logins, byKind, now, cliSignedIn, providers });
+    expect(groups.map((g) => [g.kind, g.rows.map((r) => r.id)])).toEqual([["claude-code", ["c2"]]]);
+
+    const hidden = signedOutCLIs({ accounts: logins, accountsLoaded: true, cliSignedIn, cliLoaded: true, cfg: { providers } });
+    expect([...hidden].sort()).toEqual(["grok-cli", "opencode-cli"]);
+    const picker = buildGroups({ catalog: [], cfg: { providers, recent_models: { large: [{ provider: "grok-cli", model: "grok-4.7" }] } }, type: "large", hidden });
+    expect(picker.items.map((item) => item.provider.id)).toEqual(["claude-code", "opencode-zen-cli"]);
+    expect(picker.prunedRecent).toBeNull();
+  });
 });
 
 describe("the account meter timer", () => {
@@ -130,8 +164,12 @@ describe("the account meter timer", () => {
     vi.setSystemTime(now);
     calls.refreshLimits.mockReset();
     calls.refreshLimits.mockResolvedValue(undefined);
+    calls.authState.mockReset();
+    calls.authState.mockResolvedValue({ providers: {}, emails: {} });
     fallback.loaded = true;
     fallback.accounts = accounts;
+    cliState.loaded = true;
+    cliState.providers = {};
     limits.byKind = { "claude-code": reading("claude-code", "", 0, 31) };
     accountMeters.on = true;
   });

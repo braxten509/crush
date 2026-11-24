@@ -9,8 +9,10 @@
   // Claude, Argon under Agy; owner, 2026-11-12). Shown
   // only while Settings > Appearance > "Show every account's usage" is on;
   // lib/stores/accountmeters.svelte.js reads them.
+  import { cliState } from "../../lib/accounts/state.svelte.js";
   import { limitKind } from "../../lib/footer.js";
   import { fallback } from "../../lib/fallback/store.svelte.js";
+  import { modelData } from "../../lib/models/store.svelte.js";
   import { SPANS, accountGroups, accountMeters, setInUse } from "../../lib/stores/accountmeters.svelte.js";
   import { limits } from "../../lib/stores/limits.svelte.js";
   import { ws } from "../../lib/stores/workspace.svelte.js";
@@ -27,6 +29,8 @@
           accounts: fallback.accounts,
           byKind: limits.byKind,
           inUse,
+          cliSignedIn: cliState.loaded ? cliState.providers : null,
+          providers: modelData.cfg?.providers ?? null,
         })
       : [],
   );

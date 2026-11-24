@@ -449,8 +449,7 @@ func TestPathDedupe_DifferentPaths_DifferentWorkspaces(t *testing.T) {
 
 // TestPathDedupe_FirstWinsKeepsOriginalEnv verifies that the second
 // create at the same path returns the *originating* client's Env in
-// its proto and does not mutate the existing workspace's PermissionMode/Debug
-// flags.
+// its proto and keeps the existing workspace's debug flag.
 func TestPathDedupe_FirstWinsKeepsOriginalEnv(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
@@ -480,9 +479,9 @@ func TestPathDedupe_FirstWinsKeepsOriginalEnv(t *testing.T) {
 	_, protoB, err := b.CreateWorkspace(argsB)
 	require.NoError(t, err)
 	require.Equal(t, protoA.ID, protoB.ID)
-	require.Equal(t, proto.WorkspacePermissionModeYolo, protoB.PermissionMode, "first wins: PermissionMode must remain yolo")
+	require.Equal(t, proto.WorkspacePermissionModeYolo, protoB.PermissionMode, "the workspace always skips prompts")
 	require.Equal(t, originalEnv, protoB.Env, "proto must carry the originating client's Env")
-	require.Equal(t, permission.PermissionModeYolo, wsA.Cfg.Overrides().PermissionMode)
+	require.Equal(t, permission.PermissionModeYolo, wsA.Permissions.PermissionMode())
 }
 
 // TestPathDedupe_Symlink confirms two paths that resolve to the same
@@ -689,7 +688,7 @@ func xdgIsolated(t *testing.T) {
 }
 
 // TestFirstWinsMismatch_LogsOnFlagDifferences verifies that the
-// debug mismatch line is emitted when any of PermissionMode, Debug, DataDir,
+// debug mismatch line is emitted when any of Debug, DataDir,
 // or Env differs between the first and second CreateWorkspace at
 // the same path, and that the existing workspace's Debug flag is
 // not overwritten.
@@ -698,10 +697,6 @@ func TestFirstWinsMismatch_LogsOnFlagDifferences(t *testing.T) {
 		name   string
 		mutate func(*proto.Workspace)
 	}{
-		{
-			name:   "yolo",
-			mutate: func(p *proto.Workspace) { p.PermissionMode = proto.WorkspacePermissionModeYolo },
-		},
 		{
 			name:   "debug",
 			mutate: func(p *proto.Workspace) { p.Debug = true },
@@ -732,7 +727,6 @@ func TestFirstWinsMismatch_LogsOnFlagDifferences(t *testing.T) {
 			wsA, _, err := b.CreateWorkspace(argsA)
 			require.NoError(t, err)
 			originalDebug := wsA.Cfg.Config().Options.Debug
-			originalMode := wsA.Cfg.Overrides().PermissionMode
 
 			argsB := protoWS(cwd, dataDir, uuid.New().String())
 			argsB.Env = []string{"FOO=bar"} // identical by default
@@ -745,8 +739,6 @@ func TestFirstWinsMismatch_LogsOnFlagDifferences(t *testing.T) {
 				"Workspace flag mismatch on duplicate create",
 				"expected debug log for mismatching %s", tc.name,
 			)
-			// Existing workspace's PermissionMode and Debug must not change.
-			require.Equal(t, originalMode, wsA.Cfg.Overrides().PermissionMode, "PermissionMode must be immutable on first-wins")
 			require.Equal(t, originalDebug, wsA.Cfg.Config().Options.Debug, "Debug must be immutable on first-wins")
 		})
 	}

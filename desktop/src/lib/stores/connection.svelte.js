@@ -92,17 +92,10 @@ function applyOpen(opened) {
   };
   remember(opened, cwd);
   // The 5.2 notices (engine-design.md:545-550): the first window on a
-  // project fixed its folder and its YOLO choice.
+  // project fixed its folder.
   const joined = [];
   if (opened?.workspace?.path && cwd && opened.workspace.path !== cwd) {
     joined.push({ kind: "info", text: `The AI works in ${opened.workspace.path}, the folder the first window on this project opened.`, ttlMs: 5000 });
-  }
-  const yolo = opened?.workspace?.yolo;
-  if (typeof yolo === "boolean" && typeof opened?.sent_yolo === "boolean" && yolo !== opened.sent_yolo) {
-    const text = yolo
-      ? "Crush skips permission prompts on this project, as the first window on it chose."
-      : "Crush asks before using tools on this project, as the first window on it chose.";
-    joined.push({ kind: "info", text, ttlMs: 5000 });
   }
   noteInTurn(joined);
 }

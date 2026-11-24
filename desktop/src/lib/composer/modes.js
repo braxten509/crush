@@ -10,7 +10,6 @@ export const WORKING_PLACEHOLDERS = ["Working!", "Working...", "Brrrrr...", "Prr
 export const PLAN_BANNER = "Plan with Crush before generating any code.";
 export const YOLO_BANNER = "Skip permission prompts. System level commands will be blocked.";
 export const CODE_INFO = "input mode: code";
-export const YOLO_OFF = "Yolo mode disabled";
 export const BUSY_SWITCH = "Agent is busy, please wait before switching input mode...";
 export const SWITCHING = "Switching input mode, one moment...";
 
@@ -44,17 +43,10 @@ export function markOf({ bang = false, plan = false, yolo = false }) {
   return "normal";
 }
 
-// Shift+Tab (toggleInputMode, input_mode.go:16-36) as the steps to take:
-//   {warn}                                busy or a switch in flight
-//   {yoloOn, claim, switchTo: "code"}     from plan: YOLO on when it was off, and the
-//                                         cycle claims it (claim) only then
-//   {yoloOff, info}                       from code with YOLO the cycle turned on
-//   {switchTo: "plan"}                    otherwise
-export function cycleSteps({ plan, skip, cycleYolo, busy = false, switching = false }) {
+// Shift+Tab switches between planning and coding.
+export function cycleSteps({ plan, busy = false, switching = false }) {
   if (busy || switching) return { warn: BUSY_SWITCH };
-  if (plan) return { yoloOn: !skip, claim: !skip, switchTo: "code" };
-  if (skip && cycleYolo) return { yoloOff: true, info: CODE_INFO };
-  return { switchTo: "plan" };
+  return { switchTo: plan ? "code" : "plan" };
 }
 
 // The banner after a switch landed (applyModeSwitch, input_mode.go:96-123):

@@ -40,7 +40,9 @@ func init() {
 	rootCmd.PersistentFlags().BoolP("debug", "d", false, "Debug")
 	rootCmd.PersistentFlags().StringVarP(&clientHost, "host", "H", "", "Connect to a specific crush server host (for advanced users)")
 	rootCmd.Flags().BoolP("help", "h", false, "Help")
-	rootCmd.Flags().BoolP("yolo", "y", true, "Automatically accept all permissions (dangerous mode; default on, --yolo=false to disable)")
+	// Accept the old flag in existing launchers. Workspaces always skip prompts.
+	rootCmd.Flags().BoolP("yolo", "y", true, "Legacy approval flag")
+	_ = rootCmd.Flags().MarkHidden("yolo")
 	rootCmd.PersistentFlags().StringSlice("channels", nil, "MCP servers to enable as channels (repeatable), e.g. --channels server:webhook")
 	_ = rootCmd.PersistentFlags().MarkHidden("channels")
 	rootCmd.Flags().StringP("session", "s", "", "Continue a previous session by ID")
@@ -80,12 +82,6 @@ cat README.md | crush run "make this more glamorous" > GLAMOROUS_README.md
 
 # Run with debug logging in a specific directory
 crush --debug --cwd /path/to/project
-
-# Run in yolo mode (skip permission prompts)
-crush -y
-
-# Run in sysadmin mode (skip prompts and the exec-time block list too)
-crush -yy
 
 # Run with custom data directory
 crush --data-dir /path/to/custom/.crush
@@ -230,10 +226,8 @@ func printSessionResume(model *ui.UI, banner config.ExitBanner, ws workspace.Wor
 // (session, continue, data dir) when restarting Crush in another project.
 func relaunchArgs(cmd *cobra.Command, dir string) []string {
 	args := []string{"--cwd", dir}
-	for _, name := range []string{"yolo", "debug"} {
-		on, _ := cmd.Flags().GetBool(name)
-		args = append(args, fmt.Sprintf("--%s=%t", name, on))
-	}
+	debug, _ := cmd.Flags().GetBool("debug")
+	args = append(args, fmt.Sprintf("--debug=%t", debug))
 	if cmd.Flags().Changed("host") {
 		args = append(args, "--host", clientHost)
 	}

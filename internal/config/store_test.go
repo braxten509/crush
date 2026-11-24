@@ -11,7 +11,6 @@ import (
 
 	"github.com/charmbracelet/crush/internal/csync"
 	"github.com/charmbracelet/crush/internal/oauth"
-	"github.com/charmbracelet/crush/internal/permission"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
 )
@@ -118,13 +117,13 @@ func TestConfigStore_RuntimeOverrides_Independent(t *testing.T) {
 	store1 := &ConfigStore{config: &Config{}}
 	store2 := &ConfigStore{config: &Config{}}
 
-	require.Equal(t, permission.PermissionModeNormal, store1.Overrides().PermissionMode)
-	require.Equal(t, permission.PermissionModeNormal, store2.Overrides().PermissionMode)
+	require.Empty(t, store1.Overrides().EnabledChannels)
+	require.Empty(t, store2.Overrides().EnabledChannels)
 
-	store1.Overrides().PermissionMode = permission.PermissionModeYolo
+	store1.Overrides().EnabledChannels = []string{"example:main"}
 
-	require.Equal(t, permission.PermissionModeYolo, store1.Overrides().PermissionMode)
-	require.Equal(t, permission.PermissionModeNormal, store2.Overrides().PermissionMode)
+	require.Equal(t, []string{"example:main"}, store1.Overrides().EnabledChannels)
+	require.Empty(t, store2.Overrides().EnabledChannels)
 }
 
 func TestConfigStore_RuntimeOverrides_MutableViaPointer(t *testing.T) {
@@ -133,10 +132,10 @@ func TestConfigStore_RuntimeOverrides_MutableViaPointer(t *testing.T) {
 	store := &ConfigStore{config: &Config{}}
 	overrides := store.Overrides()
 
-	require.Equal(t, permission.PermissionModeNormal, overrides.PermissionMode)
+	require.Empty(t, overrides.EnabledChannels)
 
-	overrides.PermissionMode = permission.PermissionModeYolo
-	require.Equal(t, permission.PermissionModeYolo, store.Overrides().PermissionMode)
+	overrides.EnabledChannels = []string{"example:main"}
+	require.Equal(t, []string{"example:main"}, store.Overrides().EnabledChannels)
 }
 
 func TestGlobalWorkspaceDir(t *testing.T) {

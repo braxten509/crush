@@ -164,7 +164,7 @@ describe("every chat's share", () => {
 
 describe("phone requests", () => {
   it("refuses a request made for another chat, and runs nothing", async () => {
-    await runRemoteAction({ action_id: "a1", kind: "yolo", session_id: "s0" });
+    await runRemoteAction({ action_id: "a1", kind: "mode", session_id: "s0" });
     expect(runAction).not.toHaveBeenCalled();
     expect(api.remoteActionDone).toHaveBeenCalledWith("a1", { error: expect.any(String) });
   });

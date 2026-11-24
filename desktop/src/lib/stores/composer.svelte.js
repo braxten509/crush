@@ -1,7 +1,7 @@
 // The typing box (desktop-design 1.5.3): each chat's draft, the one mode mark
 // and the placeholder (TYPE-002, TYPE-003), sending (TYPE-004 to TYPE-008,
 // TYPE-041 to TYPE-049), `!` commands (TYPE-020, TYPE-021), stopping
-// (TYPE-046, TYPE-047), the input mode and YOLO (TYPE-023 to TYPE-025), the
+// (TYPE-046, TYPE-047), the input mode, the
 // prompt history and queue recall (TYPE-017 to TYPE-019), pastes and `@`
 // picks (TYPE-010 to TYPE-014, TYPE-026 to TYPE-030), the chips (TYPE-035 to
 // TYPE-040, SIDE-026) and the plan handoff (TYPE-052 to TYPE-058). The rules
@@ -16,7 +16,7 @@ import { attach_copy, clipboard_read, clipboard_write, file_info, file_read, fil
 import { onEvent, onResync } from "../engine/events.js";
 import { bangAfterPaste, bangAfterTyping, bangFromValue, joinDrafts, PromptHistory } from "../composer/history.js";
 import { absolutePath, fileRows, insertPick, mentionQuery, mentionSpan, moveFocus, opensAt, pickFile, previewPick, rankRows, rankSlash, slashOpens, slashQuery } from "../composer/mentions.js";
-import { AGENT_FOR, bannerFor, BUSY_SWITCH, cycleSteps, isQuitWord, markOf, pickPlaceholders, placeholderFor, SWITCHING, YOLO_BANNER, YOLO_OFF } from "../composer/modes.js";
+import { AGENT_FOR, bannerFor, BUSY_SWITCH, cycleSteps, isQuitWord, markOf, pickPlaceholders, placeholderFor, SWITCHING } from "../composer/modes.js";
 import {
   attachPath,
   dropText,
@@ -55,7 +55,6 @@ export const composer = $state({
   shells: {}, // request_id → ShellState (lib/types.js): live `!` commands, read by lib/timeline.js (P3.5)
   planHandoff: null, // null | { sessionId, open } (TYPE-052): a ready plan waits; open: its form is meant to show
   input: "code", // "code" | "plan": the input mode of the engine's main agent (TYPE-023)
-  yolo: false, // the engine skips permission prompts (TYPE-024), as last read or set here
   picks: pickPlaceholders(), // this round's ready and working placeholders (TYPE-003)
   pendingKept: [], // [{ id, name, by_agent }]: skills turned on before the chat exists (TYPE-041)
   slotButtons: [], // the slot form's buttons [{ label, selected }], for the probe (1.9)
@@ -72,7 +71,7 @@ onLockChange((sid) => {
 const NOT_READY = "coder agent is not initialized"; // workspace.ErrAgentNotInitialized (internal/workspace/workspace.go:34)
 const RECOVERED_IN_BANG = "Queued message recovered. Press Up outside shell mode to edit it."; // history.go:145
 const IMPLEMENT = "Implement the plan."; // input_mode.go:103
-const POLL_MS = 2000; // the queue and YOLO backstop (workspace_cache.go:42-46 polls faster, on every terminal message)
+const POLL_MS = 2000; // the queue backstop
 
 function errorText(error) {
   return error?.message ?? String(error);
@@ -162,11 +161,11 @@ export function working(sid = sessions.currentId) {
 }
 
 export function currentMode() {
-  return markOf({ bang: draftOf().bang, plan: composer.input === "plan", yolo: composer.yolo });
+  return markOf({ bang: draftOf().bang, plan: composer.input === "plan", yolo: true });
 }
 
 export function currentPlaceholder() {
-  return placeholderFor({ bang: draftOf().bang, plan: composer.input === "plan", yolo: composer.yolo, busy: working(), picks: composer.picks });
+  return placeholderFor({ bang: draftOf().bang, plan: composer.input === "plan", yolo: true, busy: working(), picks: composer.picks });
 }
 
 function syncMode() {
@@ -1250,61 +1249,11 @@ export function interruptPending(sid = sessions.currentId) {
   return interrupting.has(sid);
 }
 
-// -- Input mode and YOLO (TYPE-023 to TYPE-025) --
-
-let cycleYolo = false; // YOLO the Shift+Tab cycle turned on, which only it turns off
-let yoloTurn = 0;
-const yoloRead = { running: false, again: false };
-
-// toggleYoloMode (workspace_cache.go:352-367), written through at once and
-// put back when the engine refuses.
-async function setYolo(on) {
-  yoloTurn += 1;
-  const before = composer.yolo;
-  composer.yolo = on;
-  syncMode();
-  try {
-    await api.setPermissionsSkip(on);
-    return true;
-  } catch (error) {
-    yoloTurn += 1;
-    composer.yolo = before;
-    syncMode();
-    notify("error", errorText(error));
-    return false;
-  }
-}
-
-// GET permissions/skip; reads never overlap and a change made here meanwhile wins.
-export async function readYolo() {
-  if (yoloRead.running) {
-    yoloRead.again = true;
-    return;
-  }
-  yoloRead.running = true;
-  try {
-    do {
-      yoloRead.again = false;
-      const turn = yoloTurn;
-      try {
-        const answer = await api.permissionsSkip();
-        if (turn === yoloTurn && typeof answer?.skip === "boolean" && answer.skip !== composer.yolo) {
-          composer.yolo = answer.skip;
-          syncMode();
-        }
-      } catch (error) {
-        console.error("YOLO read failed", errorText(error));
-      }
-    } while (yoloRead.again);
-  } finally {
-    yoloRead.running = false;
-  }
-}
+// -- Input mode --
 
 // setInputMode and applyModeSwitch (input_mode.go:62-114): the mode changes
 // only once the engine switched its agent; a failure keeps the old one.
 async function switchInput(target, { continueSid = "" } = {}) {
-  const yolo = target === "code" && composer.yolo;
   composer.switching = true;
   try {
     await api.setMainAgent(AGENT_FOR[target]);
@@ -1319,15 +1268,14 @@ async function switchInput(target, { continueSid = "" } = {}) {
   syncMode();
   loadAgent().catch(() => {});
   if (continueSid && sessions.currentId === continueSid) sendMessage(IMPLEMENT, [], { hidden: true });
-  const banner = bannerFor(target, yolo);
+  const banner = bannerFor(target, true);
   notify(banner.kind, banner.text);
   return true;
 }
 
 // G-26 (desktop-design-5-6 7.1, TYPE-002's order): on every agent-info read
 // the mode follows the engine's main agent, so a switch another app made shows
-// here too: "plan" gives plan, "coder" gives YOLO while the skip switch is on,
-// else normal. "" (no coordinator yet) changes nothing, nor does a read while
+// here too. An empty value changes nothing, as does a read while
 // this window switches or the field is in bang mode.
 function followAgent(agent) {
   if (agent !== "plan" && agent !== "coder") return;
@@ -1340,43 +1288,12 @@ function followAgent(agent) {
 
 // Shift+Tab (toggleInputMode, input_mode.go:16-36).
 export async function cycleMode() {
-  const steps = cycleSteps({ plan: composer.input === "plan", skip: composer.yolo, cycleYolo, busy: working(), switching: composer.switching });
+  const steps = cycleSteps({ plan: composer.input === "plan", busy: working(), switching: composer.switching });
   if (steps.warn) {
     notify("warn", steps.warn);
     return false;
   }
-  if (steps.yoloOff) {
-    cycleYolo = false;
-    await setYolo(false);
-    notify("info", steps.info);
-    return true;
-  }
-  if (steps.yoloOn) {
-    cycleYolo = false;
-    if (!(await setYolo(true))) return false;
-  }
-  if (steps.claim) cycleYolo = true;
   return switchInput(steps.switchTo);
-}
-
-// switchPlanToYolo (input_mode.go:43-54).
-async function planToYolo() {
-  if (working() || composer.switching) {
-    notify("warn", BUSY_SWITCH);
-    return false;
-  }
-  if (!composer.yolo && !(await setYolo(true))) return false;
-  cycleYolo = false;
-  return switchInput("code");
-}
-
-// Ctrl+Y (keypress.go:634-643): in plan mode it switches to YOLO coding.
-export async function toggleYolo() {
-  if (composer.input === "plan") return planToYolo();
-  const on = !composer.yolo;
-  cycleYolo = false;
-  notify(on ? "yolo" : "info", on ? YOLO_BANNER : YOLO_OFF);
-  return setYolo(on);
 }
 
 // -- The plan handoff (TYPE-052 to TYPE-058; input_mode.go:136-219) --
@@ -1390,15 +1307,10 @@ onEvent("run_complete", (_kind, done) => {
   composer.planHandoff = { sessionId: sid, open: ui.slot?.kind !== "secure" };
 });
 
-// Start coding (yolo false) or Code with YOLO (yolo true): permission
-// skipping as asked, code mode, and the hidden "Implement the plan.".
-export async function confirmPlan(yolo) {
+// Start coding and send the continuation for the approved plan.
+export async function confirmPlan() {
   const sid = composer.planHandoff?.sessionId;
   if (!sid || sid !== sessions.currentId) return false;
-  if (composer.yolo !== yolo) {
-    cycleYolo = false;
-    if (!(await setYolo(yolo))) return false;
-  }
   composer.planHandoff = null;
   return switchInput("code", { continueSid: sid });
 }
@@ -1461,17 +1373,15 @@ export function setSlotButtons(buttons) {
   composer.slotButtons = buttons ?? [];
 }
 
-// After a reconnect: YOLO and the history are read again.
+// Reload history after a reconnect.
 onResync(() => {
-  readYolo();
   loadHistory();
 });
 
 // Called once by lib/plugins/composer.js: the mark and placeholder follow
 // other stores (busy), the shown chat's changes and given-back prompts are
 // applied, and the 2 s backstop reads the queue while the chat works or has
-// one and YOLO while connected (the terminal's TTL backstop,
-// internal/ui/model/workspace_cache.go:316-346).
+// one while connected.
 let started = false;
 export function startComposer({ connected = () => conn.state === "connected" } = {}) {
   if (started) return;
@@ -1495,15 +1405,11 @@ export function startComposer({ connected = () => conn.state === "connected" } =
     });
     $effect(() => {
       if (!connected()) return;
-      untrack(() => {
-        readYolo();
-        loadHistory();
-      });
+      untrack(() => loadHistory());
     });
   });
   setInterval(() => {
     if (!connected()) return;
-    if (globalThis.document?.visibilityState !== "hidden") readYolo();
     const sid = sessions.currentId;
     if (sid && (working(sid) || (queue.bySession[sid]?.count ?? 0) > 0)) refreshQueue(sid);
   }, POLL_MS);

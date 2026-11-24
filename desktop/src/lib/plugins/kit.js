@@ -93,7 +93,6 @@ const SYSTEM = [
   ["sessions", ""],
   ["Open Session", "ctrl+s"],
   ["Toggle Help", "ctrl+g"],
-  ["Toggle Yolo Mode", "ctrl+y"],
   ["Open File Picker", "ctrl+f"],
   ["Open External Editor", "ctrl+o"],
   ["Toggle Thinking Mode", ""],

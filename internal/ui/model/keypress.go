@@ -8,7 +8,6 @@ import (
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/crush/internal/permission"
 	"github.com/charmbracelet/crush/internal/ui/common"
 	"github.com/charmbracelet/crush/internal/ui/completions"
 	"github.com/charmbracelet/crush/internal/ui/dialog"
@@ -648,16 +647,6 @@ func (m *UI) handleGlobalKey(msg tea.KeyPressMsg) (cmd tea.Cmd, ok bool) {
 			return util.ReportWarn("Agent is busy, please wait..."), true
 		}
 		return tea.Suspend, true
-	case key.Matches(msg, m.keyMap.ToggleYolo):
-		if m.mode == uiInputModePlan {
-			// YOLO has no meaning while planning; activating it
-			// switches straight to YOLO coding.
-			return m.switchPlanToYolo(), true
-		}
-		if m.toggleMode(permission.PermissionModeYolo) {
-			return util.CmdHandler(util.InfoMsg{Type: util.InfoTypeYolo, Msg: yoloModeBannerMsg}), true
-		}
-		return util.ReportInfo("Yolo mode disabled"), true
 	}
 	return nil, false
 }

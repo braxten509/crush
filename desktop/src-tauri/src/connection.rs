@@ -164,21 +164,20 @@ struct Plan {
     /// The create body (join step 4) without `env`, which is added as it is sent.
     body: Value,
     env: EnvSource,
-    sent_yolo: bool,
 }
 
 /// The workspace create body (join step 4; proto.Workspace). START-009:
 /// `-D` as `data_dir`; START-010: `debug`; START-013: `channels`. Like the
 /// terminal's (`internal/cmd/workspace_setup.go:342-351`, whose `debug` and
 /// `channels` are omitempty), `debug` and `channels` go only when set.
-fn create_body(cwd: &str, data_dir: Option<&str>, client_id: &str, yolo: bool, debug: bool, channels: &[String]) -> Value {
+fn create_body(cwd: &str, data_dir: Option<&str>, client_id: &str, debug: bool, channels: &[String]) -> Value {
     let mut body = json!({
         "path": cwd,
         "data_dir": data_dir.unwrap_or(""),
         "version": APP_VERSION,
         "protocol": APP_PROTOCOL,
         "client_id": client_id,
-        "yolo": yolo,
+        "yolo": true,
     });
     if debug {
         body["debug"] = json!(true);
@@ -215,7 +214,7 @@ fn errno_text(e: &std::io::Error) -> String {
 /// Builds the plan for a window: the folder, then the login-shell
 /// environment and either the `-H` address or crush (found and
 /// version-checked, join step 1).
-async fn plan_for(launch: &Launch, settings_yolo: bool, cwd: &str, env: EnvSource, check: CrushCheck) -> AppResult<Plan> {
+async fn plan_for(launch: &Launch, cwd: &str, env: EnvSource, check: CrushCheck) -> AppResult<Plan> {
     let cwd = project_folder(cwd)?;
     let source = env.clone();
     let (finder, version): (Arc<dyn Finder>, Option<EngineVersion>) = match engine_plan(launch.host.as_deref())? {
@@ -236,9 +235,8 @@ async fn plan_for(launch: &Launch, settings_yolo: bool, cwd: &str, env: EnvSourc
         }
     };
     let client_id = uuid::Uuid::new_v4().to_string();
-    let sent_yolo = launch.yolo.unwrap_or(settings_yolo);
-    let body = create_body(&cwd, launch.data_dir.as_deref(), &client_id, sent_yolo, launch.debug, &launch.channels);
-    Ok(Plan { cwd, client_id, finder, version, body, env, sent_yolo })
+    let body = create_body(&cwd, launch.data_dir.as_deref(), &client_id, launch.debug, &launch.channels);
+    Ok(Plan { cwd, client_id, finder, version, body, env })
 }
 
 /// Join step 1 for real: `crush_bin::resolve` with the login shell's PATH,
@@ -539,8 +537,6 @@ pub struct OpenResult {
     pub workspace: serde_json::Value,
     pub engine: engine_cli::Ensured,
     pub version: engine_cli::EngineVersion,
-    /// What the app asked for; compare with workspace.yolo.
-    pub sent_yolo: bool,
     /// What the app asked for; compare with workspace.path.
     pub cwd: String,
 }
@@ -1107,7 +1103,6 @@ impl WindowConn {
             workspace: public_workspace(workspace),
             engine,
             version: plan.version.clone().unwrap_or(version),
-            sent_yolo: plan.sent_yolo,
             cwd: plan.cwd.clone(),
         };
         let folder = Folder {
@@ -1982,10 +1977,7 @@ pub async fn open(app: &crate::host::AppHandle, label: &str, cwd: &str) -> AppRe
     if !first_at_start {
         launch.data_dir = None;
     }
-    let (crush_path, settings_yolo) = {
-        let settings = state.settings.lock().unwrap();
-        (settings.crush_path.clone(), settings.yolo)
-    };
+    let crush_path = state.settings.lock().unwrap().crush_path.clone();
     let conn = {
         let mut windows = state.windows.lock().unwrap();
         windows
@@ -2000,7 +1992,7 @@ pub async fn open(app: &crate::host::AppHandle, label: &str, cwd: &str) -> AppRe
             .clone()
     };
     let env: EnvSource = Arc::new(login_env::login_env);
-    let plan = async move { plan_for(&launch, settings_yolo, &cwd, env, crush_check(crush_path)).await };
+    let plan = async move { plan_for(&launch, &cwd, env, crush_check(crush_path)).await };
     conn.open(plan).await
 }
 
@@ -2059,12 +2051,9 @@ fn plan_for_window(
     let state = app.state::<AppState>();
     let launch = state.launch.clone();
     let cwd = cwd.to_string();
-    let (crush_path, settings_yolo) = {
-        let settings = state.settings.lock().unwrap();
-        (settings.crush_path.clone(), settings.yolo)
-    };
+    let crush_path = state.settings.lock().unwrap().crush_path.clone();
     let env: EnvSource = Arc::new(login_env::login_env);
-    let plan = async move { plan_for(&launch, settings_yolo, &cwd, env, crush_check(crush_path)).await };
+    let plan = async move { plan_for(&launch, &cwd, env, crush_check(crush_path)).await };
     Ok((conn, plan))
 }
 
@@ -2259,12 +2248,11 @@ mod tests {
         let client_id = uuid::Uuid::new_v4().to_string();
         Plan {
             cwd: cwd.into(),
-            body: create_body(cwd, None, &client_id, true, false, &[]),
+            body: create_body(cwd, None, &client_id, false, &[]),
             client_id,
             finder,
             version: Some(EngineVersion { version: "v0.0.0-test".into(), protocol: 1 }),
             env: env(),
-            sent_yolo: true,
         }
     }
 
@@ -3135,7 +3123,7 @@ esac"#,
         let checks = Arc::new(AtomicUsize::new(0));
         let (conn, _) = window(TEST_TUNING, launch.debug);
         let check = check_with(crush, checks.clone());
-        let result = run(conn.open(plan_for(&launch, true, &project, env(), check)));
+        let result = run(conn.open(plan_for(&launch, &project, env(), check)));
         AppOpen { fake, dir, project, crush_log, checks, conn, result }
     }
 
@@ -3178,7 +3166,7 @@ esac"#,
             assert_eq!(s.query("client_id").as_deref(), Some(opened.client_id.as_str()));
         }
         assert_eq!(seen[3].json(), json!({"interactive": true}));
-        assert_eq!((opened.cwd.as_str(), opened.sent_yolo), (o.project.as_str(), true));
+        assert_eq!(opened.cwd.as_str(), o.project.as_str());
         assert_eq!((opened.version.version.as_str(), opened.version.protocol), ("v0.0.0-test", 1));
         assert_eq!((opened.engine.socket.as_str(), opened.engine.pid), (o.fake.socket.to_str().unwrap(), 4242));
         assert_eq!(opened.workspace["path"], json!(o.project));
@@ -3259,10 +3247,9 @@ esac"#,
     }
 
     #[test]
-    fn yolo_comes_from_the_flag_else_the_setting() {
-        let o = open_as_the_app("conn-yolo", Launch { yolo: Some(false), ..Default::default() }, false);
-        assert!(!o.result.as_ref().unwrap().sent_yolo);
-        assert_eq!(o.create()["yolo"], json!(false));
+    fn workspace_requests_skip_approvals() {
+        let o = open_as_the_app("conn-yolo", Launch::default(), false);
+        assert_eq!(o.create()["yolo"], json!(true));
     }
 
     #[test]
@@ -3276,7 +3263,7 @@ esac"#,
             let (conn, rings) = window(TEST_TUNING, false);
             let check = check_with(dir.join("crush"), checks.clone());
             let cwd = cwd.to_str().unwrap();
-            let e = run(conn.open(plan_for(&Launch::default(), true, cwd, env(), check))).err().unwrap();
+            let e = run(conn.open(plan_for(&Launch::default(), cwd, env(), check))).err().unwrap();
             assert_eq!(e.code, "bad_path");
             assert_eq!(e.message, format!("failed to change directory: chdir {cwd}: {reason}"));
             assert_eq!(rings.load(SeqCst), 0, "no connection event");

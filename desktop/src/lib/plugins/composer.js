@@ -1,5 +1,4 @@
-// The composer's registrations (desktop-design 1.10): the yolo.toggle and
-// mode.cycle actions, the tray's queue section,
+// The composer's mode cycle, the tray's queue section,
 // the keys of the field, its `@` popup and delete mode and the global ones
 // (1.8), and the probe's `composer` section (1.9).
 import QueueSection from "../../components/composer/QueueSection.svelte";
@@ -25,7 +24,6 @@ const queued = () => (sessions.currentId ? visibleItems(sessions.currentId) : []
 
 // -- Actions --
 
-registerAction({ id: "yolo.toggle", title: "Toggle Yolo mode", keys: ["Ctrl+Y"], run: () => C.toggleYolo() });
 registerAction({ id: "mode.cycle", title: "Switch input mode", keys: ["Shift+Tab"], run: () => C.cycleMode() });
 
 // -- The tray's sections (TYPE-044, TYPE-045). The to-do list is the right
@@ -194,7 +192,7 @@ for (const scope of ["composer", "timeline"]) {
 }
 
 // The popup (TYPE-028): while it shows rows it takes ↑ ↓ Enter Tab; while open,
-// Ctrl+N, Ctrl+P and Ctrl+Y never reach new chat or YOLO.
+// Ctrl+N and Ctrl+P stay in the popup. Ctrl+Y accepts a completion.
 const popupOpen = () => Boolean(C.composer.popup);
 const popupRows = () => (C.composer.popup?.rows.length ?? 0) > 0;
 bindKey("popup", "ArrowUp", () => popupRows() && (C.movePopup("up"), true));
@@ -210,10 +208,6 @@ bindKey("popup", "Ctrl+P", () => popupOpen() && (C.previewRow("previous"), true)
 bindKey("popup", "Escape", () => popupOpen() && (C.closePopup(), true));
 
 // Global keys.
-bindKey("global", "Ctrl+Y", () => {
-  C.toggleYolo();
-  return true;
-});
 // Ctrl+C copies a selection in the field (TYPE-009); without one it is left
 // for the quit key (phase 5).
 bindKey("global", "Ctrl+C", (event) => {
@@ -256,7 +250,7 @@ probeSection(
       slot: ui.slot && { kind: ui.slot.kind, buttons: C.composer.slotButtons.map((b) => ({ label: b.label, selected: b.selected })) },
       model: modelButtonText(agentNow(), ws.config?.options?.tui?.composer_footer),
       input: C.composer.input,
-      yolo: C.composer.yolo,
+      yolo: true,
       switching: C.composer.switching,
       plan_handoff: C.composer.planHandoff,
       shells: Object.values(C.composer.shells).map((s) => ({

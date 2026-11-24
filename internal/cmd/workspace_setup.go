@@ -17,7 +17,6 @@ import (
 	"github.com/charmbracelet/crush/internal/db"
 	"github.com/charmbracelet/crush/internal/event"
 	crushlog "github.com/charmbracelet/crush/internal/log"
-	"github.com/charmbracelet/crush/internal/permission"
 	"github.com/charmbracelet/crush/internal/projects"
 	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/server"
@@ -126,7 +125,6 @@ func setupLocalWorkspace(cmd *cobra.Command) (workspace.Workspace, func(), error
 // in-process app.App. The cleanup function shuts the app down.
 func setupLocalApp(cmd *cobra.Command) (*app.App, func(), error) {
 	debug, _ := cmd.Flags().GetBool("debug")
-	yolo, _ := cmd.Flags().GetBool("yolo")
 	channels, _ := cmd.Flags().GetStringSlice("channels")
 	dataDir, _ := cmd.Flags().GetString("data-dir")
 	ctx := cmd.Context()
@@ -143,9 +141,6 @@ func setupLocalApp(cmd *cobra.Command) (*app.App, func(), error) {
 
 	cfg := store.Config()
 	cpuaffinity.ApplyOptions(cfg.Options)
-	if yolo {
-		store.Overrides().PermissionMode = permission.PermissionModeYolo
-	}
 	store.Overrides().EnabledChannels = channels
 
 	if err := os.MkdirAll(cfg.Options.DataDirectory, 0o700); err != nil {
@@ -402,22 +397,17 @@ func connectToLegacyServer(cmd *cobra.Command, cwd string) (*serverConnection, e
 // brings up a new server when the one c reached is exiting.
 func createClientWorkspace(cmd *cobra.Command, c *client.Client, cwd string, replace func() error) (*serverConnection, error) {
 	debug, _ := cmd.Flags().GetBool("debug")
-	yolo, _ := cmd.Flags().GetBool("yolo")
 	channels, _ := cmd.Flags().GetStringSlice("channels")
 	dataDir, _ := cmd.Flags().GetString("data-dir")
 
-	permMode := proto.WorkspacePermissionModeNormal
-	if yolo {
-		permMode = proto.WorkspacePermissionModeYolo
-	}
 	wsReq := proto.Workspace{
 		Path:           cwd,
 		DataDir:        dataDir,
 		Debug:          debug,
-		PermissionMode: permMode,
+		PermissionMode: proto.WorkspacePermissionModeYolo,
 		// The older on/off form, for an engine started before permission
 		// modes existed.
-		YOLO:     yolo,
+		YOLO:     true,
 		Channels: channels,
 		Version:  version.Version,
 		Protocol: proto.ProtocolVersion,

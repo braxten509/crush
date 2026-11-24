@@ -48,7 +48,7 @@ pub async fn call(app: AppHandle, label: String, cmd: String, args: Value) -> Re
     let w = app.window(&label);
     match cmd.as_str() {
         // Async commands.
-        "engine_open" => res(commands::engine_open(app.clone(), w, app.state(), arg(&args, "cwd")?).await),
+        "engine_open" => res(commands::engine_open(app.clone(), w, arg(&args, "cwd")?).await),
         "engine_open_folder" => res(commands::engine_open_folder(app.clone(), w, arg(&args, "cwd")?).await),
         "engine_show_folder" => res(commands::engine_show_folder(app.clone(), w, arg(&args, "cwd")?).await),
         "engine_leave_folder" => res(commands::engine_leave_folder(app.clone(), w, arg(&args, "cwd")?).await),

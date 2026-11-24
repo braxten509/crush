@@ -375,60 +375,6 @@ func TestSessionSwitchRefreshesQueueAndBusy(t *testing.T) {
 	require.Equal(t, []string{"a", "b"}, m.queue.items)
 }
 
-// TestToggleYoloWritesThroughCache: both permission-mode toggle paths share
-// toggleMode, which must write the known new value through the cache —
-// no invalidation, no re-probe.
-func TestToggleYoloWritesThroughCache(t *testing.T) {
-	pinTTLs(t)
-
-	ws := &countingWorkspace{ready: true, permMode: permission.PermissionModeNormal}
-	m := newBusyUI(ws)
-
-	got := m.toggleMode(permission.PermissionModeYolo)
-	require.True(t, got)
-	require.Equal(t, 1, ws.permSetCalls)
-	readsAfterToggle := ws.permCalls
-	require.Equal(t, 1, readsAfterToggle, "toggle reads the authoritative value exactly once")
-
-	require.Equal(t, permission.PermissionModeYolo, m.permModeCached(), "the new value must be served from the cache")
-	require.True(t, m.permModeCache.fresh(busyCacheTTL), "write-through must stamp the cache fresh")
-	m.permModeCached()
-	require.Equal(t, readsAfterToggle, ws.permCalls, "reads after the toggle must not re-probe")
-
-	got = m.toggleMode(permission.PermissionModeYolo)
-	require.False(t, got)
-	require.Equal(t, permission.PermissionModeNormal, m.permModeCached())
-}
-
-// TestLocalYoloToggleSupersedesInFlightProbe pins the generation bump in
-// toggleMode: a busy/permission probe dispatched before the toggle carries
-// the old generation. Without advancing busyFetchGen its stale result would
-// land with a still-matching generation and clobber the just-toggled value.
-func TestLocalYoloToggleSupersedesInFlightProbe(t *testing.T) {
-	pinTTLs(t)
-
-	ws := &countingWorkspace{ready: true, permMode: permission.PermissionModeNormal}
-	m := newBusyUI(ws)
-	warmCaches(m, false)
-
-	// A busy/permission probe carrying the pre-toggle generation is in flight.
-	m.busyFetchInFlight = true
-	staleGen := m.busyFetchGen
-
-	require.True(t, m.toggleMode(permission.PermissionModeYolo))
-	require.NotEqual(t, staleGen, m.busyFetchGen,
-		"toggle must advance the busy generation to supersede in-flight probes")
-	require.Equal(t, permission.PermissionModeYolo, m.permModeCached(), "toggle must write the new value through the cache")
-
-	// The stale probe (old generation, old mode=normal) lands.
-	m.busyFetchInFlight = true
-	cmds := m.applyBusyState(busyStateMsg{gen: staleGen, permMode: permission.PermissionModeNormal})
-	require.Equal(t, permission.PermissionModeYolo, m.permModeCached(),
-		"stale probe must not overwrite the freshly toggled value")
-	require.NotEmpty(t, cmds, "stale probe must re-dispatch an authoritative refresh")
-	require.True(t, m.busyFetchInFlight, "re-dispatched refresh must be in flight")
-}
-
 // TestSendMessageSetsOptimisticBusy pins the esc-after-enter behavior:
 // submitting a prompt optimistically marks the agent busy so an immediate
 // esc routes to cancelAgent instead of reading a stale idle value and doing

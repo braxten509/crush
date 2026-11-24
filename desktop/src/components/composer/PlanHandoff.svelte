@@ -1,7 +1,7 @@
 <script>
   // The ready plan's form in the slot (TYPE-052 to TYPE-060; a port of
   // internal/ui/dialog/questionform/plan_handoff_inline.go): "Ready to start
-  // coding?" with Start coding, Code with YOLO and Revise plan. Revise opens
+  // coding?" with Start coding and Revise plan. Revise opens
   // "What should change?", a field of at most 1,000 characters, 3 to 8 lines
   // tall. With focus elsewhere the buttons stay, inactive. The keys are the
   // slot scope's while the form is mounted.
@@ -13,15 +13,14 @@
   // The terminal's buttons and underlined letters (plan_handoff_inline.go:252-275).
   const CHOICES = [
     { label: "Start coding", underline: 6 },
-    { label: "Code with YOLO", underline: 10 },
     { label: "Revise plan", underline: 10 },
   ];
-  const REVISE = 2;
+  const REVISE = 1;
   const MAX_FEEDBACK = 1000;
   const MIN_LINES = 3;
   const MAX_LINES = 8;
   // ShortHelp (plan_handoff_inline.go:393-398).
-  const CHOOSING_HINT = "←/→ switch · enter confirm · c start coding · y yolo coding · n revise plan";
+  const CHOOSING_HINT = "←/→ switch · enter confirm · c start coding · n revise plan";
   const EDITING_HINT = "enter confirm · ctrl+j newline · esc exit";
 
   let root = $state(null);
@@ -42,7 +41,7 @@
     if (!root) return;
     const unbind = [
       ...["Escape", "Enter", "Shift+Enter", "Ctrl+J"].map((combo) => bindKey("slot", combo, () => key(combo))),
-      ...["ArrowLeft", "ArrowRight", "h", "l", "H", "L", "c", "C", "y", "Y", "n", "N"].map((combo) => bindKey("slot", combo, () => key(combo))),
+      ...["ArrowLeft", "ArrowRight", "h", "l", "H", "L", "c", "C", "n", "N"].map((combo) => bindKey("slot", combo, () => key(combo))),
     ];
     const detach = attachSlot(() => (editing ? editor : root)?.focus({ preventScroll: true }));
     setFocus("slot");
@@ -117,10 +116,6 @@
       case "C":
         choose(0);
         return true;
-      case "y":
-      case "Y":
-        choose(1);
-        return true;
       case "n":
       case "N":
         choose(REVISE);
@@ -141,7 +136,7 @@
     if (confirming) return;
     confirming = true;
     try {
-      await confirmPlan(index === 1);
+      await confirmPlan();
     } finally {
       confirming = false;
     }

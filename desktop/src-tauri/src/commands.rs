@@ -147,18 +147,13 @@ pub fn probe_eval(window: WebviewWindow, state: State<AppState>) -> Result<(), S
 pub async fn engine_open(
     app: AppHandle,
     window: Window,
-    state: State<'_, AppState>,
     cwd: String,
 ) -> AppResult<OpenResult> {
     if let Some(fixture) = app.try_state::<Fixture>() {
-        let sent_yolo = state
-            .launch
-            .yolo
-            .unwrap_or_else(|| state.settings.lock().unwrap().yolo);
         if let Some(wait) = fixture.delay("GET", "engine_open") {
             tokio::time::sleep(wait).await;
         }
-        return fixture.open(&app, window.label(), &cwd, sent_yolo);
+        return fixture.open(&app, window.label(), &cwd);
     }
     connection::open(&app, window.label(), &cwd).await
 }

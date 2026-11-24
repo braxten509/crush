@@ -1,6 +1,5 @@
 // The palette's own entries (desktop-design-5-6 2.2 below the table, 2.24):
-// Summarize Session, Toggle Yolo Mode (silent here, unlike Ctrl+Y's banner),
-// Initialize Project, and Quit (the window closes at once, no sheet).
+// Summarize Session, Initialize Project, and Quit.
 import { windowBusy } from "../busy.js";
 import { closeWindow } from "../closing.js";
 import { api, uuid } from "../engine/api.js";
@@ -21,16 +20,6 @@ export async function summarize() {
   if (!sid) return;
   try {
     await api.summarize(sid, uuid());
-  } catch (error) {
-    notify("error", errorText(error));
-  }
-}
-
-// CMD-035: GET then POST …/permissions/skip; no banner.
-export async function toggleYolo() {
-  try {
-    const now = await api.permissionsSkip();
-    await api.setPermissionsSkip(!(now?.skip === true));
   } catch (error) {
     notify("error", errorText(error));
   }

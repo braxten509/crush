@@ -39,7 +39,7 @@ function own(id, label, run, { shortcut = "", aliases = [], when = () => true } 
 
 // PAL's own entries (2.2 below the table) come from lib/palette/actions.js;
 // they are passed in so this list stays a plain table.
-export function systemEntries({ summarize, toggleYolo, initProject }) {
+export function systemEntries({ summarize, initProject }) {
   return [
     action("new_session", "New chat", "chat.new", { shortcut: "ctrl+n", aliases: ["clear"] }),
     sheet("switch_session", "Chats", "sessions", { shortcut: "ctrl+s" }),
@@ -81,7 +81,6 @@ export function systemEntries({ summarize, toggleYolo, initProject }) {
     action("disable_docker_mcp", "Disable Docker MCP catalog", "docker.disable", { when: () => actionEnabled("docker.disable") }),
     sheet("toggle_mcps", "Toggle MCPs", "mcp_toggles", { when: () => Object.keys(ws.config?.mcp ?? {}).length > 0 }),
     sheet("select_notifications", "Notification style", "notifications"),
-    own("toggle_yolo", "Toggle Yolo mode", toggleYolo, { shortcut: "ctrl+y" }),
     action("toggle_help", "Toggle help", "help.toggle", { shortcut: "ctrl+g" }),
     own("init", "Initialize project", initProject),
     action("save_project", "Save project", "project.save"),

@@ -460,10 +460,6 @@ func (m *UI) handlePaletteAction(action dialog.Action) (cmd tea.Cmd, ok bool) {
 func (m *UI) handlePaletteToggle(action dialog.Action) (cmd tea.Cmd, ok bool) {
 	var toggle func() tea.Cmd
 	switch action.(type) {
-	case dialog.ActionToggleYoloMode:
-		toggle = m.toggleYoloCommand
-	case dialog.ActionToggleSysadminMode:
-		toggle = m.toggleSysadminCommand
 	case dialog.ActionToggleHelp:
 		toggle = func() tea.Cmd {
 			m.status.ToggleHelp()

@@ -186,6 +186,7 @@ type permissionService struct {
 	allowedTools          []string
 	observer              PromptObserver
 	mode                  PermissionMode
+	fixedNoPrompt         bool
 	modeMu                sync.RWMutex
 
 	// used to make sure we only process one request at a time
@@ -465,6 +466,9 @@ func (s *permissionService) SubscribeNotifications(ctx context.Context) <-chan p
 }
 
 func (s *permissionService) SetPermissionMode(mode PermissionMode) {
+	if s.fixedNoPrompt {
+		return
+	}
 	s.modeMu.Lock()
 	s.mode = mode
 	s.modeMu.Unlock()
@@ -482,6 +486,19 @@ func (s *permissionService) PermissionMode() PermissionMode {
 }
 
 func NewPermissionService(workingDir string, allowedTools []string, observer PromptObserver) Service {
+	return newPermissionService(workingDir, allowedTools, observer, false)
+}
+
+// NewNoPromptService is the fixed approval policy for Crush workspaces.
+func NewNoPromptService(workingDir string) Service {
+	return newPermissionService(workingDir, nil, nil, true)
+}
+
+func newPermissionService(workingDir string, allowedTools []string, observer PromptObserver, fixedNoPrompt bool) *permissionService {
+	mode := PermissionModeNormal
+	if fixedNoPrompt {
+		mode = PermissionModeYolo
+	}
 	return &permissionService{
 		Broker:              pubsub.NewBroker[PermissionRequest](),
 		notificationBroker:  pubsub.NewBroker[PermissionNotification](),
@@ -489,7 +506,8 @@ func NewPermissionService(workingDir string, allowedTools []string, observer Pro
 		workingDir:          workingDir,
 		sessionPermissions:  csync.NewMap[PermissionKey, bool](),
 		autoApproveSessions: make(map[string]bool),
-		mode:                PermissionModeNormal,
+		mode:                mode,
+		fixedNoPrompt:       fixedNoPrompt,
 		allowedTools:        allowedTools,
 		pendingRequests:     csync.NewMap[string, pendingRequest](),
 		observer:            observer,

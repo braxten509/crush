@@ -641,7 +641,6 @@ func (s *Server) handleCommand(w http.ResponseWriter, r *http.Request) {
 		"think":     ActThink,
 		"fast":      ActFast,
 		"ultracode": ActUltracode,
-		"yolo":      ActYolo,
 		"mode":      ActMode,
 	}
 	kind, known := kinds[req.Command]

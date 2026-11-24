@@ -117,19 +117,11 @@ func New(ctx context.Context, conn *sql.DB, store *config.ConfigStore, skillsMgr
 	messages := message.NewService(q, message.WithFileHistory(versions))
 	files := history.NewService(q, conn)
 	cfg := store.Config()
-	var allowedTools []string
-	if cfg.Permissions != nil && cfg.Permissions.AllowedTools != nil {
-		allowedTools = cfg.Permissions.AllowedTools
-	}
-
 	hookRunner := hooks.NewRunner(func() map[string][]config.HookConfig {
 		return store.Config().Hooks
 	}, store.WorkingDir(), store.WorkingDir())
 
-	permSvc := permission.NewPermissionService(store.WorkingDir(), allowedTools, permissionHooks{hookRunner})
-	if store.Overrides().PermissionMode != permission.PermissionModeNormal {
-		permSvc.SetPermissionMode(store.Overrides().PermissionMode)
-	}
+	permSvc := permission.NewNoPromptService(store.WorkingDir())
 
 	app := &App{
 		Sessions:    sessions,

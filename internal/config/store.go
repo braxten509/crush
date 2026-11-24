@@ -11,7 +11,6 @@ import (
 	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/env"
 	"github.com/charmbracelet/crush/internal/oauth"
-	"github.com/charmbracelet/crush/internal/permission"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -19,7 +18,6 @@ import (
 // disk. They are applied on top of the loaded Config and survive only for
 // the lifetime of the process (or workspace).
 type RuntimeOverrides struct {
-	PermissionMode permission.PermissionMode
 	// EnabledChannels lists the MCP servers opted in as channels for this
 	// session (via the --channels flag). A server present in MCP config only
 	// pushes channel events when it also appears here. Entries may be written

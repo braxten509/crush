@@ -35,9 +35,8 @@ Engine run, on the fresh /tmp/home/proj: tests/check.sh p3_start.py
   START-017     each chat owns its model: a new folder's landing page shows the
                 last pick, not a model the folder's crush.json names.
   START-019     the old "theme" setting reaches options.tui.active_theme.
-  START-012     a fresh folder opened with --yolo=false (the first window on
-                it, so its value holds): the engine asks before tools, and a
-                prompt whose reply calls bash opens the permission slot.
+  START-012     a fresh folder opened with the retired --yolo=false flag
+                still runs the reply's ordinary Bash command without prompting.
   START-018     the desktop saves Customize Composer (from the meters' detail)
                 while this driver, another client, posts a config/set of
                 another key: both values are kept.
@@ -640,23 +639,19 @@ def engine_run():
             path = pc.make_project(os.path.join(HOMEDIR, "proj-ask"), port)
             app = AppRun("ask", out_dir, path, args=["--yolo=false"])
             extra.append(app)
-            check(joined(app), "a window with --yolo=false on a fresh folder joins (the first on it, so its value holds)")
+            check(joined(app), "a window with the old --yolo=false flag joins")
             check(answer_no(app), "its init prompt is answered (No)")
-            ok, comp = wait_on(app, "composer", lambda c: c.get("yolo") is False, 10)
-            check(ok, f"the engine asks before tools (composer.yolo {comp.get('yolo')})")
             focus(app)
-            ok, comp = wait_on(app, "composer", lambda c: c.get("focused") is True, 5)
+            ok, _ = wait_on(app, "composer", lambda c: c.get("focused") is True, 5)
             if check(ok, "the typing box has the keyboard"):
                 type_text("START-012 permission check")
                 ok, _ = wait_on(app, "composer", lambda c: c.get("value") == "START-012 permission check", 5)
                 check(ok, "the prompt is typed")
                 key("Return")
-                ok, comp = wait_on(app, "composer", lambda c: (c.get("slot") or {}).get("kind") == "permission", 20)
-                shot(out_dir, "START-012")
-                check(ok, f"the reply's bash call opens the permission slot ({comp.get('slot')}; screen {section(app, 'start').get('screen')}, shown {selected(app)}, main slot {(section(main, 'composer').get('slot') or {}).get('kind')}, engine {ask_state(app, path)})")
-                buttons = [b.get("label") for b in (comp.get("slot") or {}).get("buttons") or []]
-                check(buttons == ["Allow", "Allow for session", "Deny"], f"with Allow, Allow for session and Deny ({buttons})")
-                check(not os.path.exists(os.path.join(path, "start-012.txt")), "and the command has not run")
+                target = os.path.join(path, "start-012.txt")
+                ok, comp = wait_on(app, "composer", lambda c: os.path.isfile(target), 20)
+                check(ok, f"the reply's Bash command ran ({ask_state(app, path)})")
+                check((comp.get("slot") or {}).get("kind") != "permission", "no permission slot opened")
             close(app)
 
         with step("START-018", out_dir):

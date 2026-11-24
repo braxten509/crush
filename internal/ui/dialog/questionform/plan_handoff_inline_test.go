@@ -193,7 +193,7 @@ func TestPlanHandoffMouseRequestChanges(t *testing.T) {
 	scr := uv.NewScreenBuffer(80, 10)
 	p.Draw(scr, image.Rect(0, 0, 80, 10))
 
-	x, y := planHandoffButtonPoint(t, p, 2)
+	x, y := planHandoffButtonPoint(t, p, choiceRevisePlan)
 	done, handled := p.HandleMouseClick(x, y)
 	require.False(t, done)
 	require.True(t, handled)
@@ -237,8 +237,7 @@ func TestPlanHandoffStartCoding(t *testing.T) {
 
 	p := newTestPlanHandoff()
 	confirmed := 0
-	p.OnConfirm = func(yolo bool) tea.Cmd {
-		require.False(t, yolo)
+	p.OnConfirm = func() tea.Cmd {
 		return func() tea.Msg {
 			confirmed++
 			return nil
@@ -258,12 +257,9 @@ func TestPlanHandoffCodingKeys(t *testing.T) {
 	tests := []struct {
 		name string
 		key  tea.KeyPressMsg
-		yolo bool
 	}{
-		{"coding lowercase", tea.KeyPressMsg{Code: 'c', Text: "c"}, false},
-		{"coding uppercase", tea.KeyPressMsg{Code: 'C', Text: "C"}, false},
-		{"yolo lowercase", tea.KeyPressMsg{Code: 'y', Text: "y"}, true},
-		{"yolo uppercase", tea.KeyPressMsg{Code: 'Y', Text: "Y"}, true},
+		{"coding lowercase", tea.KeyPressMsg{Code: 'c', Text: "c"}},
+		{"coding uppercase", tea.KeyPressMsg{Code: 'C', Text: "C"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -271,8 +267,7 @@ func TestPlanHandoffCodingKeys(t *testing.T) {
 
 			p := newTestPlanHandoff()
 			confirmed := false
-			p.OnConfirm = func(yolo bool) tea.Cmd {
-				require.Equal(t, tt.yolo, yolo)
+			p.OnConfirm = func() tea.Cmd {
 				confirmed = true
 				return nil
 			}
@@ -288,13 +283,11 @@ func TestPlanHandoffShortHelpShowsCodingKeys(t *testing.T) {
 	t.Parallel()
 
 	p := newTestPlanHandoff()
-	var coding, yolo bool
+	var coding bool
 	for _, binding := range p.ShortHelp() {
 		coding = coding || slices.Contains(binding.Keys(), "c")
-		yolo = yolo || slices.Contains(binding.Keys(), "y")
 	}
 	require.True(t, coding, "the help lists the coding key")
-	require.True(t, yolo, "the help lists the YOLO key")
 }
 
 func planHandoffButtonPoint(t *testing.T, p *PlanHandoffInline, index int) (int, int) {
@@ -310,37 +303,11 @@ func planHandoffButtonPoint(t *testing.T, p *PlanHandoffInline, index int) (int,
 	return 0, 0
 }
 
-func TestPlanHandoffYOLO(t *testing.T) {
-	t.Parallel()
-	for _, mouse := range []bool{false, true} {
-		p := newTestPlanHandoff()
-		confirmed := false
-		p.OnConfirm = func(yolo bool) tea.Cmd {
-			require.True(t, yolo)
-			confirmed = true
-			return nil
-		}
-		if mouse {
-			scr := uv.NewScreenBuffer(24, p.Height(24))
-			p.Draw(scr, image.Rect(0, 0, 24, p.Height(24)))
-			x, y := planHandoffButtonPoint(t, p, 1)
-			done, handled := p.HandleMouseClick(x, y)
-			require.True(t, done)
-			require.True(t, handled)
-		} else {
-			p.HandleKey(tea.KeyPressMsg{Code: tea.KeyRight})
-			done, _ := p.HandleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
-			require.True(t, done)
-		}
-		require.True(t, confirmed)
-	}
-}
-
 func TestPlanHandoffChoiceWrapAndBottomGap(t *testing.T) {
 	t.Parallel()
 	p := newTestPlanHandoff()
 	p.HandleKey(tea.KeyPressMsg{Code: tea.KeyLeft})
-	require.Equal(t, 2, p.selectedChoice)
+	require.Equal(t, choiceRevisePlan, p.selectedChoice)
 	p.HandleKey(tea.KeyPressMsg{Code: tea.KeyRight})
 	require.Equal(t, 0, p.selectedChoice)
 }

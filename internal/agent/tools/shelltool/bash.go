@@ -334,8 +334,12 @@ func (t *bashTool) run(ctx context.Context, params tools.BashParams, call fantas
 	// Check whether the command is dangerous so we can surface a
 	// warning in the permission dialog.
 	var check shell.CommandCheck
+	mode := t.permissions.PermissionMode()
 	if !safeReadOnly {
 		check = shell.CheckCommand(params.Command, blockFuncs(t.blocked))
+		if check.Matched && mode == permission.PermissionModeYolo {
+			return fantasy.NewTextErrorResponse(shell.BlockedPrefix + check.Reason), nil
+		}
 
 		p, err := t.permissions.Request(
 			ctx,
@@ -364,10 +368,9 @@ func (t *bashTool) run(ctx context.Context, params tools.BashParams, call fantas
 		}
 	}
 
-	// Re-blocking a command that was already approved would override
-	// the answer that was given, whether the user gave it at a prompt
-	// or yolo mode gave it on their behalf. That only applies when the
-	// check actually recognised a command by name, though: a warning
+	// Re-blocking a command the user explicitly approved would override
+	// their answer. Only a command matched by name can be approved that
+	// way: a warning
 	// that merely says "this could not be analysed" names nothing the
 	// user could have judged, so approving it is not approval of
 	// anything in particular and the block list stays on. Otherwise a
@@ -382,7 +385,7 @@ func (t *bashTool) run(ctx context.Context, params tools.BashParams, call fantas
 	// Sysadmin mode is the deliberate exception: it asks for nothing
 	// and blocks nothing.
 	var blocksToUse []shell.BlockFunc
-	if !check.Matched && t.permissions.PermissionMode() != permission.PermissionModeSysadmin {
+	if !check.Matched && mode != permission.PermissionModeSysadmin {
 		blocksToUse = blockFuncs(t.blocked)
 	}
 

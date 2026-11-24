@@ -144,7 +144,7 @@ impl Fixture {
     }
 
     /// `engine_open`. A second call for the same window returns the same answer.
-    pub fn open(&self, app: &AppHandle, label: &str, cwd: &str, sent_yolo: bool) -> AppResult<OpenResult> {
+    pub fn open(&self, app: &AppHandle, label: &str, cwd: &str) -> AppResult<OpenResult> {
         let player = {
             let mut players = self.players.lock().unwrap();
             if let Some(player) = players.get(label) {
@@ -178,7 +178,6 @@ impl Fixture {
                     protocol: engine.protocol,
                 },
                 engine,
-                sent_yolo,
                 cwd: cwd.to_string(),
             };
             let player = Arc::new(Player {
@@ -248,7 +247,6 @@ impl Fixture {
             workspace: folder.workspace.clone(),
             version: EngineVersion { version: folder.engine.version.clone(), protocol: folder.engine.protocol },
             engine: folder.engine.clone(),
-            sent_yolo: false,
             cwd: cwd.to_string(),
         };
         let connected = json!({

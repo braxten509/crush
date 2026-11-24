@@ -309,7 +309,8 @@ fn parse_launch(args: &[String], here: &Path, ui_debug: bool) -> Result<Launch, 
             "-D" | "--data-dir" => launch.data_dir = Some(value("--data-dir")?),
             "-d" | "--debug" => launch.debug = switch("--debug")?,
             "-H" | "--host" => launch.host = Some(value("--host")?),
-            "-y" | "--yolo" => launch.yolo = Some(switch("--yolo")?),
+            // Existing launchers may still pass the retired approval flag.
+            "-y" | "--yolo" => { let _ = switch("--yolo")?; }
             // pflag's StringSlice: repeatable, and each value may hold several, comma-separated.
             "--channels" => launch.channels.extend(
                 value("--channels")?
@@ -355,7 +356,6 @@ mod tests {
                 data_dir: Some("/data".into()),
                 debug: true,
                 host: Some("unix:///s".into()),
-                yolo: Some(false),
                 channels: vec!["a:b".into(), "c:d".into(), "e:f".into()],
                 ui_debug: false,
                 launch_id: None,
@@ -365,10 +365,9 @@ mod tests {
         let launch = parse(&["--cwd=/abs", "-C", "-y", "--session-less"]).unwrap();
         assert_eq!(launch.cwd, PathBuf::from("/abs"));
         assert!(launch.continue_last);
-        assert_eq!(launch.yolo, Some(true));
         assert_eq!(parse(&["-c/glued"]).unwrap().cwd, PathBuf::from("/glued"));
         let launch = parse(&[]).unwrap();
-        assert_eq!((launch.cwd, launch.yolo), (PathBuf::from("/work"), None));
+        assert_eq!(launch.cwd, PathBuf::from("/work"));
     }
 
     #[test]

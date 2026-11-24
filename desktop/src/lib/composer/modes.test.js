@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   BANG_PLACEHOLDER,
   BUSY_SWITCH,
-  CODE_INFO,
   PLAN_PLACEHOLDER,
   YOLO_PLACEHOLDER,
   cycleSteps,
@@ -37,15 +36,9 @@ describe("markOf (TYPE-002)", () => {
 });
 
 describe("cycleSteps (TYPE-023, input_mode.go:16-36)", () => {
-  it("goes code → plan → code with YOLO → code, turning off only the YOLO it turned on", () => {
-    expect(cycleSteps({ plan: false, skip: false, cycleYolo: false })).toEqual({ switchTo: "plan" });
-    expect(cycleSteps({ plan: true, skip: false, cycleYolo: false })).toEqual({ yoloOn: true, claim: true, switchTo: "code" });
-    expect(cycleSteps({ plan: false, skip: true, cycleYolo: true })).toEqual({ yoloOff: true, info: CODE_INFO });
-  });
-
-  it("leaves a YOLO the user turned on alone", () => {
-    expect(cycleSteps({ plan: true, skip: true, cycleYolo: false })).toEqual({ yoloOn: false, claim: false, switchTo: "code" });
-    expect(cycleSteps({ plan: false, skip: true, cycleYolo: false })).toEqual({ switchTo: "plan" });
+  it("switches between planning and coding", () => {
+    expect(cycleSteps({ plan: false })).toEqual({ switchTo: "plan" });
+    expect(cycleSteps({ plan: true })).toEqual({ switchTo: "code" });
   });
 
   it("refuses while busy or switching", () => {

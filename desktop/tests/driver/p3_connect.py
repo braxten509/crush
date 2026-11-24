@@ -12,8 +12,7 @@ P3.1's rows that show at join (START-006, START-008, START-009).
                       (1.9), and they match the engine's own answers.
   connect-3-notices   a second desktop on the same folder joins and shows no
                       notice; one on sub/ shows an info notice naming the
-                      project folder; one started with --yolo=false shows an
-                      info notice (engine-design.md:545-550).
+                      project folder; an old --yolo=false flag is ignored.
   connect-4-starting  a join that starts a new engine (a fresh folder) and is
                       slowed (CRUSH_DESKTOP_CRUSH names a crush that answers
                       1.5 s late): gate.starting turns true during the join
@@ -478,8 +477,7 @@ def main():
             extra.append(nos)
             out = join_outcome(nos, 45)
             check(out["state"] == "connected", f"a desktop started with --yolo=false joins ({out['state']}, {out.get('error')})")
-            shown, notice = wait_section(nos, "notice", lambda n: n.get("kind") == "info" and bool(n.get("text")), 10)
-            check(shown is True, f"its notice line says the project keeps the first window's choice ({notice})")
+            check(no_notice(nos), "the retired flag changes neither approvals nor join notices")
             check(nos.close(), "it closes")
 
         with step("connect-4-starting", out_dir):

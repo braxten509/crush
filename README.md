@@ -632,7 +632,7 @@ When Crush is run against a shared backend (for example two TUIs talking to
 the same `crush serve`), clients are grouped into **workspaces** keyed by
 their resolved `--cwd`. Two clients with the same `--cwd` join the same
 underlying workspace, so they share the session list, message history,
-permission queue, LSP, and MCP state.
+LSP, and MCP state.
 
 Joining is implicit: pointing a second client at the same working directory
 attaches it to the existing workspace. Each new invocation, however, starts
@@ -648,9 +648,8 @@ session is "in progress" on another client and joining it will mirror that
 view live.
 
 The first client to create a workspace fixes its process-wide flags. In
-particular, `--yolo` and `--debug` follow a **first-wins** rule: later
-clients that arrive at the same `--cwd` with different values for those
-flags do not change the running workspace. A debug log line is emitted
+particular, `--debug` follows a **first-wins** rule: a later client that arrives
+at the same `--cwd` does not change the running workspace. A debug log line is emitted
 recording the mismatch, and the workspace keeps the flags it was created
 with.
 
@@ -694,22 +693,10 @@ control but don't want Crush to consider when providing context.
 The `.crushignore` file uses the same syntax as `.gitignore` and can be placed
 in the root of your project or in subdirectories.
 
-### Allowing Tools
+### Tool permissions
 
-By default, Crush will ask you for permission before running tool calls. If
-you'd like, you can allow tools to be executed without prompting you for
-permissions. Use this with care.
-
-```bash
-permissions allow view ls grep edit mcp_context7_get-library-doc
-```
-
-The `bash` tool additionally runs a small set of read-only commands (`ls`,
-`pwd`, `git status`, `git log`, …) without prompting. Crush parses the command
-to decide, so it applies only when the whole command is provably inert: a
-redirection, a variable assignment, a command substitution, a pipeline, or an
-argument that mutates state (`git branch -D`, `git remote set-url`) all fall
-back to the normal permission prompt.
+Crush skips interactive tool approval prompts. Command guards and hooks still
+enforce their rules.
 
 ### Disabling Built-In Tools
 
@@ -720,11 +707,6 @@ permissions deny bash sourcegraph
 ```
 
 To disable tools from MCP servers, see the [MCP config section](#mcps).
-
-### You only live once
-
-You can also skip all permission prompts completely by running Crush with the
-`--yolo` flag. Be very, very careful with this feature.
 
 ### Disabling Skills
 

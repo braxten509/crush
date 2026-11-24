@@ -30,7 +30,6 @@ use std::time::Duration;
 pub struct Settings {
     pub version: u32,
     pub crush_path: Option<String>,
-    pub yolo: bool,
     pub closed_chats: std::collections::BTreeMap<String, Vec<String>>,
     #[serde(flatten)]
     pub other: serde_json::Map<String, serde_json::Value>,
@@ -41,7 +40,6 @@ impl Default for Settings {
         Settings {
             version: 1,
             crush_path: None,
-            yolo: true,
             closed_chats: Default::default(),
             other: Default::default(),
         }
@@ -59,7 +57,6 @@ pub fn load() -> Settings {
     global().map(SettingsFile::load).unwrap_or_default()
 }
 
-/// Known keys only: crush_path, yolo.
 pub fn set_key(app: &crate::host::AppHandle, key: &str, value: serde_json::Value) -> AppResult<Settings> {
     let change = KeyChange::parse(key, value)?;
     let file = global().ok_or_else(no_folder)?;
@@ -139,7 +136,6 @@ fn bad_setting(message: impl Into<String>) -> AppError {
 #[derive(Debug, PartialEq)]
 enum KeyChange {
     CrushPath(Option<String>),
-    Yolo(bool),
     /// Phases 5 and 6 (desktop-design-5-6 6.1, 7.1), kept beside the others in
     /// the file: `theme` (a theme name; "" is the default, 3.3) and
     /// `list_collapsed` (2.20).
@@ -155,10 +151,6 @@ impl KeyChange {
                 Value::String(path) if path.trim().is_empty() => Ok(KeyChange::CrushPath(None)),
                 Value::String(path) => Ok(KeyChange::CrushPath(Some(path.trim().to_string()))),
                 _ => Err(bad_setting("crush_path takes the path of a crush program, or null.")),
-            },
-            "yolo" => match value {
-                Value::Bool(on) => Ok(KeyChange::Yolo(on)),
-                _ => Err(bad_setting("yolo takes true or false.")),
             },
             "theme" => match value {
                 Value::String(name) => Ok(KeyChange::Other("theme", Value::String(name.trim().to_string()))),
@@ -180,7 +172,6 @@ impl KeyChange {
     fn apply(&self, settings: &mut Settings) {
         match self {
             KeyChange::CrushPath(path) => settings.crush_path = path.clone(),
-            KeyChange::Yolo(on) => settings.yolo = *on,
             KeyChange::Other(key, value) => {
                 settings.other.insert(key.to_string(), value.clone());
             }
@@ -274,7 +265,12 @@ impl SettingsFile {
         let stamp = Stamp::of(&file.metadata()?);
         let mut text = String::new();
         let parsed = match file.read_to_string(&mut text) {
-            Ok(_) => serde_json::from_str::<Settings>(&text).map_err(|e| e.to_string()),
+            Ok(_) => serde_json::from_str::<Settings>(&text)
+                .map(|mut settings| {
+                    settings.other.remove("yolo");
+                    settings
+                })
+                .map_err(|e| e.to_string()),
             Err(e) if e.kind() == io::ErrorKind::InvalidData => Err("it is not UTF-8 text".to_string()),
             Err(e) => return Err(e),
         };
@@ -518,14 +514,14 @@ mod tests {
                     "closed_chats": {"/data/a": ["s1"]}}),
         );
         let file = SettingsFile::new(path.clone());
-        assert!(!file.load().yolo);
+        assert!(!file.load().other.contains_key("yolo"));
         let inode_before = fs::metadata(&path).unwrap().ino();
         let saved = close(&file, "/data/a", "s2");
         assert_eq!(saved.other.get("theme"), Some(&json!("edition")));
         let on_disk = raw(&path);
         assert_eq!(on_disk["theme"], json!("edition"), "an unknown key was dropped: {on_disk}");
         assert_eq!(on_disk["window"], json!({"w": 900, "h": 600}), "an unknown key was dropped: {on_disk}");
-        assert_eq!(on_disk["yolo"], json!(false));
+        assert!(on_disk.get("yolo").is_none());
         assert_eq!(on_disk["closed_chats"], json!({"/data/a": ["s1", "s2"]}));
         assert_eq!(on_disk["crush_path"], Value::Null);
         // Atomic: the old file was replaced by a rename (a new inode), not
@@ -643,19 +639,19 @@ mod tests {
         let file = SettingsFile::new(path.clone());
         assert_eq!(file.load(), Settings::default());
         fs::create_dir_all(path.parent().unwrap()).unwrap();
-        fs::write(&path, "{\"yolo\": fals").unwrap();
+        fs::write(&path, "{\"appearance\": fals").unwrap();
         let file = SettingsFile::new(path.clone());
         assert_eq!(file.load(), Settings::default());
-        let err = file.change(|s| s.yolo = false, |_| panic!("published")).unwrap_err();
+        let err = file.change(|s| s.crush_path = None, |_| panic!("published")).unwrap_err();
         assert_eq!(err.code, "settings_failed");
         assert!(err.message.contains("could not be read"), "{}", err.message);
-        assert_eq!(fs::read_to_string(&path).unwrap(), "{\"yolo\": fals", "a broken file was overwritten");
+        assert_eq!(fs::read_to_string(&path).unwrap(), "{\"appearance\": fals", "a broken file was overwritten");
         // The watcher ignores the broken file until it changes again.
         assert!(!file.poll(|_| panic!("published a broken file")));
-        write_from_outside(&path, &json!({"yolo": false}));
+        write_from_outside(&path, &json!({"appearance": "dark"}));
         let mut got = None;
         assert!(file.poll(|s| got = Some(s.clone())));
-        assert!(!got.unwrap().yolo);
+        assert_eq!(got.unwrap().other["appearance"], "dark");
         // A file deleted by hand counts as the defaults again.
         fs::remove_file(&path).unwrap();
         let mut got = None;
@@ -671,9 +667,8 @@ mod tests {
         );
         assert_eq!(KeyChange::parse("crush_path", json!(null)).unwrap(), KeyChange::CrushPath(None));
         assert_eq!(KeyChange::parse("crush_path", json!("  ")).unwrap(), KeyChange::CrushPath(None));
-        assert_eq!(KeyChange::parse("yolo", json!(false)).unwrap(), KeyChange::Yolo(false));
         assert_eq!(KeyChange::parse("appearance", json!("dark")).unwrap(), KeyChange::Other("appearance", json!("dark")));
-        for (key, value) in [("yolo", json!("no")), ("crush_path", json!(3)), ("closed_chats", json!({})), ("theme", json!(3)), ("list_collapsed", json!("yes")), ("appearance", json!("dim")), ("appearance", json!(true))] {
+        for (key, value) in [("yolo", json!(false)), ("crush_path", json!(3)), ("closed_chats", json!({})), ("theme", json!(3)), ("list_collapsed", json!("yes")), ("appearance", json!("dim")), ("appearance", json!(true))] {
             let err = KeyChange::parse(key, value).unwrap_err();
             assert_eq!(err.code, "bad_setting", "{key}");
         }
@@ -681,9 +676,9 @@ mod tests {
         let file = SettingsFile::new(dir.settings());
         let change = KeyChange::parse("crush_path", json!("/usr/local/bin/crush")).unwrap();
         file.change(|s| change.apply(s), |_| {}).unwrap();
-        let change = KeyChange::parse("yolo", json!(false)).unwrap();
+        let change = KeyChange::parse("appearance", json!("dark")).unwrap();
         let s = file.change(|s| change.apply(s), |_| {}).unwrap();
-        assert_eq!((s.crush_path.as_deref(), s.yolo), (Some("/usr/local/bin/crush"), false));
+        assert_eq!(s.crush_path.as_deref(), Some("/usr/local/bin/crush"));
         assert_eq!(raw(&dir.settings())["crush_path"], json!("/usr/local/bin/crush"));
     }
 }

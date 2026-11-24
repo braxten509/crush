@@ -490,7 +490,7 @@ describe("! commands (TYPE-020, TYPE-021)", () => {
     C.typed({ before: "", value: "!", caret: 1, data: "!" });
     expect(C.draftOf().bang).toBe(true);
     expect(C.backspaceLeavesBang()).toBe(true);
-    expect(C.currentMode()).toBe("normal");
+    expect(C.draftOf().bang).toBe(false);
   });
 });
 
@@ -523,37 +523,18 @@ describe("stopping (TYPE-046, TYPE-047)", () => {
   });
 });
 
-describe("input mode and YOLO (TYPE-023 to TYPE-025)", () => {
-  const skips = () => h.calls.filter((c) => c.path === "permissions/skip").map((c) => c.body.skip);
+describe("input mode", () => {
   const mains = () => h.calls.filter((c) => c.path === "agent/main").map((c) => c.body.agent_id);
 
-  it("cycles code → plan → code with YOLO → code, turning off only the YOLO it turned on", async () => {
+  it("cycles between planning and coding", async () => {
     show("s1");
     await C.cycleMode();
     expect(C.composer.input).toBe("plan");
-    expect(lastNotice()?.kind).toBe("plan");
-    expect(C.currentMode()).toBe("plan");
     await C.cycleMode();
     expect(C.composer.input).toBe("code");
-    expect(C.composer.yolo).toBe(true);
-    expect(C.currentMode()).toBe("yolo");
-    expect(lastNotice()?.kind).toBe("yolo");
-    await C.cycleMode();
-    expect(C.composer.yolo).toBe(false);
-    expect(lastNotice()?.kind).toBe("info");
-    expect(skips()).toEqual([true, false]);
-    expect(mains()).toEqual(["plan", "coder"]);
-  });
-
-  it("keeps YOLO the user turned on through the cycle", async () => {
-    show("s1");
-    await C.toggleYolo();
-    await C.cycleMode();
-    await C.cycleMode();
-    expect(C.composer.input).toBe("code");
-    expect(C.composer.yolo).toBe(true);
     await C.cycleMode();
     expect(C.composer.input).toBe("plan");
+    expect(mains()).toEqual(["plan", "coder", "plan"]);
   });
 
   it("refuses to switch while the chat is busy", async () => {
@@ -572,37 +553,6 @@ describe("input mode and YOLO (TYPE-023 to TYPE-025)", () => {
     expect(lastNotice()?.text).toContain("agent is busy");
   });
 
-  it("Ctrl+Y toggles YOLO with its banners, and in plan mode switches to YOLO coding (TYPE-024)", async () => {
-    show("s1");
-    await C.toggleYolo();
-    expect(lastNotice()?.kind).toBe("yolo");
-    await C.toggleYolo();
-    expect(lastNotice()?.kind).toBe("info");
-    expect(skips()).toEqual([true, false]);
-    await C.cycleMode();
-    expect(C.composer.input).toBe("plan");
-    await C.toggleYolo();
-    expect(C.composer.input).toBe("code");
-    expect(C.composer.yolo).toBe(true);
-  });
-
-  it("puts YOLO back when the engine refuses the change", async () => {
-    show("s1");
-    h.routes.set("POST permissions/skip", () => Promise.reject({ code: "internal", message: "nope", status: 500 }));
-    await C.toggleYolo();
-    expect(C.composer.yolo).toBe(false);
-  });
-
-  it("reads YOLO from the engine, and a change made here meanwhile wins", async () => {
-    show("s1");
-    const slow = later();
-    h.routes.set("GET permissions/skip", () => slow.promise);
-    const reading = C.readYolo();
-    await C.toggleYolo();
-    slow.resolve({ skip: false });
-    await reading;
-    expect(C.composer.yolo).toBe(true);
-  });
 });
 
 describe("history and the queue (TYPE-017 to TYPE-019, TYPE-050)", () => {
@@ -625,7 +575,7 @@ describe("history and the queue (TYPE-017 to TYPE-019, TYPE-050)", () => {
     expect(C.currentMode()).toBe("bang");
     C.historyDown();
     expect(C.draftOf().text).toBe("first");
-    expect(C.currentMode()).toBe("normal");
+    expect(C.draftOf().bang).toBe(false);
     expect(C.historyEscape()).toBe(true);
     expect(C.draftOf().text).toBe("draft");
   });
@@ -757,23 +707,15 @@ describe("the plan handoff (TYPE-052 to TYPE-054)", () => {
     await C.send();
     expect(C.composer.planHandoff).toEqual({ sessionId: "s1", open: true });
     h.calls.length = 0;
-    await C.confirmPlan(false);
+    await C.confirmPlan();
     await settle();
+    expect(h.calls.some(({ path }) => path === "permissions/skip")).toBe(false);
     expect(C.composer.input).toBe("code");
     expect(C.composer.planHandoff).toBe(null);
     expect(sends()).toHaveLength(1);
     expect(sends()[0].body).toMatchObject({ session_id: "s1", prompt: "Implement the plan.", hidden_user_message: true });
     expect(sends()[0].body.submission_id).toBeUndefined();
     expect(Object.keys(M.messages.pending)).toHaveLength(0);
-  });
-
-  it("Code with YOLO turns permission skipping on (TYPE-055)", async () => {
-    show("s1");
-    await C.cycleMode();
-    await deliver(ev("run_complete", "created", { session_id: "s1", run_id: "r1", message_id: "m1", text: ready }));
-    await C.confirmPlan(true);
-    expect(C.composer.yolo).toBe(true);
-    expect(C.composer.input).toBe("code");
   });
 
   it("ignores a plan run without the marker, and a new prompt clears a ready plan", async () => {

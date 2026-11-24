@@ -543,46 +543,35 @@ func TestBashTool_SafeReadOnlyPathStillEnforcesBlockList(t *testing.T) {
 	require.False(t, resp.IsError)
 }
 
-// TestBashTool_YoloModeDoesNotPromptForDangerousCommands pins the rule that
-// yolo mode means stop asking. It drives the real permission service rather
-// than a mock, because the whole behaviour under test lives there.
-func TestBashTool_YoloModeDoesNotPromptForDangerousCommands(t *testing.T) {
+// The fixed workspace approval policy must run ordinary commands and still
+// refuse commands matched by the existing guard without prompting.
+func TestBashTool_NoPromptWorkspaceKeepsGuard(t *testing.T) {
 	workingDir := t.TempDir()
-	perms := permission.NewPermissionService(workingDir, nil, nil)
-	perms.SetPermissionMode(permission.PermissionModeYolo)
-
-	// Any prompt would land here. Nothing should.
+	perms := permission.NewNoPromptService(workingDir)
 	prompts := perms.Subscribe(t.Context())
-
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	ctx = context.WithValue(ctx, tools.SessionIDContextKey, "test-session")
 	attribution := &config.Attribution{TrailerStyle: config.TrailerStyleNone}
 	tool := NewBashTool(perms, workingDir, workingDir, attribution, config.DefaultMaxBackgroundJobs, nil, nil)
-	ctx := context.WithValue(t.Context(), tools.SessionIDContextKey, "test-session")
 
-	// `ifconfig` is on the default dangerous list. In yolo it must run
-	// without asking, and without being re-blocked at exec time either.
-	// Run it off the test goroutine so a regression that reinstates the
-	// prompt fails here in a few seconds rather than hanging until the
-	// whole package times out.
-	responses := make(chan fantasy.ToolResponse, 1)
-	go func() {
-		responses <- runBashTool(t, tool, ctx, tools.BashParams{
-			Description: "dangerous command in yolo mode",
-			Command:     "ifconfig --help",
-		})
-	}()
+	ordinary := runBashTool(t, tool, ctx, tools.BashParams{
+		Description: "create a local directory",
+		Command:     "mkdir ready",
+	})
+	require.False(t, ordinary.IsError)
+	require.DirExists(t, filepath.Join(workingDir, "ready"))
 
-	var got fantasy.ToolResponse
-	select {
-	case got = <-responses:
-	case <-time.After(30 * time.Second):
-		t.Fatal("yolo mode blocked waiting for a permission prompt that should never have been raised")
-	}
-
-	require.NotContains(t, got.Content, shell.BlockedPrefix, "a dangerous command must not be blocked in yolo mode")
+	blocked := runBashTool(t, tool, ctx, tools.BashParams{
+		Description: "query a blocked command",
+		Command:     "ifconfig --help",
+	})
+	require.True(t, blocked.IsError)
+	require.Contains(t, blocked.Content, shell.BlockedPrefix)
 
 	select {
-	case p := <-prompts:
-		t.Fatalf("yolo mode must not prompt, but got a request for %q", p.Payload.Description)
+	case <-prompts:
+		t.Fatal("the workspace asked for command approval")
 	default:
 	}
 }

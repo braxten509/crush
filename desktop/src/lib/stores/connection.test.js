@@ -88,7 +88,6 @@ const opened = (extra = {}) => ({
   workspace: workspace(extra.workspace),
   engine: { address: "unix:///run/crush.sock", socket: "/run/crush.sock", protocol: 1, version: "v0.70.0", pid: 42, data_dir: "/tmp/home/proj/.crush", started: true },
   version: { version: "v0.70.0", protocol: 1 },
-  sent_yolo: true,
   cwd: "/tmp/home/proj",
   ...extra,
   ...(extra.workspace ? { workspace: workspace(extra.workspace) } : {}),
@@ -240,33 +239,6 @@ describe("the 5.2 notices (engine-design.md:545-550)", () => {
     expect(C.conn.project.path).toBe("/tmp/home/proj");
   });
 
-  it("YOLO on when this window asked for it off, and off when asked on", async () => {
-    h.open = async () => opened({ sent_yolo: false });
-    await C.start();
-    expect(h.notices.map((n) => n.kind)).toEqual(["info"]);
-  });
-
-  it("YOLO off when this window asked for it on", async () => {
-    h.open = async () => opened({ workspace: { yolo: false } });
-    await C.start();
-    expect(h.notices.map((n) => n.kind)).toEqual(["info"]);
-  });
-
-  it("both show, one after the other", async () => {
-    vi.useFakeTimers();
-    try {
-      h.info = { ...h.info, cwd: "/tmp/home/proj/sub" };
-      h.open = async () => opened({ cwd: "/tmp/home/proj/sub", sent_yolo: false });
-      await C.start();
-      expect(h.notices.map((n) => n.kind)).toEqual(["info"]);
-      expect(h.notices[0].text).toContain("/tmp/home/proj");
-      await vi.advanceTimersByTimeAsync(5000);
-      expect(h.notices.map((n) => n.kind)).toEqual(["info", "info"]);
-      expect(C.conn.notices.map((n) => n.kind)).toEqual(["info", "info"]);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
 });
 
 describe("losing the engine (SIDE-030)", () => {

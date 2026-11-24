@@ -20,7 +20,6 @@ import (
 // Indices of the handoff buttons, in render order.
 const (
 	choiceStartCoding = iota
-	choiceCodeYOLO
 	choiceRevisePlan
 	choiceCount
 )
@@ -46,10 +45,8 @@ type PlanHandoffInline struct {
 
 	heightChanged bool
 
-	// OnConfirm receives whether the user chose coding with YOLO.
-	// The returned tea.Cmd is queued by the UI to perform the switch and
-	// start the coder agent.
-	OnConfirm func(yolo bool) tea.Cmd
+	// OnConfirm starts the coder agent.
+	OnConfirm func() tea.Cmd
 	// OnRequestChanges is called with the user's feedback when they submit it.
 	OnRequestChanges func(string) tea.Cmd
 
@@ -59,7 +56,6 @@ type PlanHandoffInline struct {
 	keyEnter     key.Binding
 	keyNewline   key.Binding
 	keyCoding    key.Binding
-	keyYolo      key.Binding
 	keyNo        key.Binding
 	keyClose     key.Binding
 }
@@ -118,10 +114,6 @@ func NewPlanHandoffInline(com *common.Common) *PlanHandoffInline {
 		keyCoding: key.NewBinding(
 			key.WithKeys("c", "C"),
 			key.WithHelp("c", "start coding"),
-		),
-		keyYolo: key.NewBinding(
-			key.WithKeys("y", "Y"),
-			key.WithHelp("y", "yolo coding"),
 		),
 		keyNo: key.NewBinding(
 			key.WithKeys("n", "N"),
@@ -188,9 +180,6 @@ func (p *PlanHandoffInline) HandleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 	case key.Matches(msg, p.keyCoding):
 		p.selectedChoice = choiceStartCoding
 		return true, p.runConfirm()
-	case key.Matches(msg, p.keyYolo):
-		p.selectedChoice = choiceCodeYOLO
-		return true, p.runConfirm()
 	}
 	return false, nil
 }
@@ -208,7 +197,7 @@ func (p *PlanHandoffInline) startEditing() tea.Cmd {
 
 func (p *PlanHandoffInline) runConfirm() tea.Cmd {
 	if p.OnConfirm != nil {
-		cmd := p.OnConfirm(p.selectedChoice == choiceCodeYOLO)
+		cmd := p.OnConfirm()
 		p.pendingCmd = cmd
 		return cmd
 	}
@@ -257,14 +246,6 @@ func (p *PlanHandoffInline) choiceLayout(width int) planHandoffChoiceLayout {
 			Inactive:       inactive,
 			Padding:        3,
 			UnderlineIndex: 6,
-		},
-		{
-			Text:           "Code with YOLO",
-			Selected:       selectedChoice == choiceCodeYOLO,
-			Hovered:        hoveredBtn == choiceCodeYOLO,
-			Inactive:       inactive,
-			Padding:        3,
-			UnderlineIndex: 10,
 		},
 		{
 			Text:           "Revise plan",
@@ -394,7 +375,7 @@ func (p *PlanHandoffInline) ShortHelp() []key.Binding {
 	if p.editing {
 		return []key.Binding{p.keyEnter, p.keyNewline, p.keyClose}
 	}
-	return []key.Binding{p.keyLeftRight, p.keyEnter, p.keyCoding, p.keyYolo, p.keyNo}
+	return []key.Binding{p.keyLeftRight, p.keyEnter, p.keyCoding, p.keyNo}
 }
 
 // SetHover implements MouseClickableEditor.
@@ -408,7 +389,7 @@ func (p *PlanHandoffInline) HandleMouseClick(x, y int) (bool, bool) {
 		return false, false
 	}
 	switch idx := common.HitButtonIndex(p.compositor, x, y); idx {
-	case choiceStartCoding, choiceCodeYOLO:
+	case choiceStartCoding:
 		p.selectedChoice = idx
 		p.runConfirm()
 		return true, true

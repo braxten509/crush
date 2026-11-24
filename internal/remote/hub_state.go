@@ -390,11 +390,6 @@ func (h *hub) commandsLocked(m modelView) []commandView {
 		}
 		out = append(out, commandView{ID: "think", Label: label, Alias: "think"})
 	}
-	yolo := "Turn on YOLO mode"
-	if m.Yolo {
-		yolo = "Turn off YOLO mode"
-	}
-	out = append(out, commandView{ID: "yolo", Label: yolo, Alias: "yolo"})
 	mode := "Switch to plan mode"
 	if m.Plan {
 		mode = "Switch to code mode"

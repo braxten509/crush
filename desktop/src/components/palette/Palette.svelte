@@ -14,7 +14,7 @@
   import Sheet from "../kit/Sheet.svelte";
   import Icon from "../Icon.svelte";
   import { closeDialog, hasDialog } from "../../lib/dialogs.js";
-  import { initProject, summarize, toggleYolo } from "../../lib/palette/actions.js";
+  import { initProject, summarize } from "../../lib/palette/actions.js";
   import { entryFilter, systemEntries } from "../../lib/palette/entries.js";
   import { mcpEntries as mcpEntries_, PALETTE_ID as ID, userEntries as userEntries_ } from "../../lib/palette/run.js";
   import { cancelPrompt, palette, watchCommands } from "../../lib/palette/store.svelte.js";
@@ -22,7 +22,7 @@
 
   const CATEGORIES = ["System", "User", "MCP"];
 
-  const system = systemEntries({ summarize, toggleYolo, initProject });
+  const system = systemEntries({ summarize, initProject });
 
   let category = $state("System");
   let query = $state("");

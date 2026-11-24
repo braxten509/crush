@@ -32,7 +32,6 @@ const K = {
   less: e("ctrl+g", "less"),
   models: e("ctrl+m", "models"),
   sessions: e("ctrl+s", "sessions"),
-  yolo: e("ctrl+y", "toggle yolo"),
   shiftTab: e("shift+tab", "mode"),
   newSession: e("ctrl+n", "new chat"),
   endFollow: e("ctrl+end", "jump to the bottom and follow"),
@@ -141,14 +140,14 @@ export function helpGroups(state = {}) {
   } else if (s.screen === "chat") {
     const run = running(s);
     if (run.length > 0) groups.push({ id: "running", label: "RUNNING", entries: run });
-    const main = [tab(s), K.shiftTab, commands(s), K.models, K.sessions, K.yolo].filter(Boolean);
+    const main = [tab(s), K.shiftTab, commands(s), K.models, K.sessions].filter(Boolean);
     if (s.hasSession) main.push(K.newSession, K.endFollow);
     if (s.backgroundable) main.push(K.background);
     groups.push({ id: "chat", label: "CHAT", entries: main });
     groups.push(...focusRows(s));
   } else if (!s.hasSession) {
     // The landing page: the full help's own rows, no Tab (SIDE-035).
-    groups.push({ id: "chat", label: "CHAT", entries: [K.shiftTab, commands(s), K.models, K.sessions, K.yolo] });
+    groups.push({ id: "chat", label: "CHAT", entries: [K.shiftTab, commands(s), K.models, K.sessions] });
     groups.push(...editorRows(s));
   }
   groups.push(last());

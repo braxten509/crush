@@ -467,11 +467,6 @@ func (m *UI) runRemoteAction(a *remote.Action) (tea.Cmd, error) {
 			m.clearPromptQueue()
 		}
 		return nil, nil
-	case remote.ActYolo:
-		if m.mode == uiInputModePlan && (m.isAgentBusy() || m.modeSwitching) {
-			return nil, errAgentBusy
-		}
-		return m.toggleYoloCommand(), nil
 	}
 
 	// The rest change the model or mode, which the TUI refuses mid-turn.

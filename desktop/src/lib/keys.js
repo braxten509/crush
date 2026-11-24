@@ -178,7 +178,6 @@ export const shortcuts = [
   { keys: ["ArrowUp", "ArrowDown"], scope: "composer", action: "history; Up recalls queued prompts", row: "TYPE-017" },
   { keys: ["Tab"], scope: "composer", action: "focus the timeline's last item", row: "TYPE-022" },
   { keys: ["Shift+Tab"], scope: "composer timeline", action: "mode cycle", row: "TYPE-023" },
-  { keys: ["Ctrl+Y"], scope: "global", action: "YOLO toggle", row: "TYPE-024" },
   { keys: ["Ctrl+R"], scope: "composer", action: "attachment delete mode", row: "TYPE-038" },
   { keys: ["Home", "Ctrl+E", "End"], scope: "composer", action: "line start / line end", row: "TYPE-009" },
   { keys: ["Ctrl+A", "Ctrl+Shift+A", "Ctrl+Shift+C", "Ctrl+Shift+X"], scope: "composer", action: "select all, copy, cut", row: "TYPE-009" },

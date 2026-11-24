@@ -372,16 +372,7 @@ func (m *UI) staleWorkspaceRefreshCmds() []tea.Cmd {
 	return cmds
 }
 
-// permModeCached reports the memoized permission mode. Toggles write
-// through the cache; the Update-tail backstop keeps it bounded-stale
-// otherwise.
+// permModeCached reports the memoized permission mode.
 func (m *UI) permModeCached() permission.PermissionMode {
 	return m.permModeCache.val
-}
-
-// yoloActive reports whether the memoized permission mode skips permission
-// prompts. Sysadmin skips them too, differing from yolo only in dropping the
-// exec-time block list, which the input-mode cycle has no stake in.
-func (m *UI) yoloActive() bool {
-	return m.permModeCached() != permission.PermissionModeNormal
 }

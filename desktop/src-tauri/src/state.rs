@@ -34,8 +34,6 @@ pub struct Launch {
     pub debug: bool,
     /// -H/--host.
     pub host: Option<String>,
-    /// -y/--yolo[=false]; None when not given (the settings file decides).
-    pub yolo: Option<bool>,
     /// --channels server:name, repeatable.
     pub channels: Vec<String>,
     /// CRUSH_UI_DEBUG == "true" (PLAN.md:144).

@@ -160,7 +160,7 @@ func (m *UI) FullHelp() [][]key.Binding {
 		for _, b := range h.running() {
 			binds = append(binds, []key.Binding{b})
 		}
-		mainBinds := []key.Binding{m.tabHelp(), k.ShiftTab, h.commands(), k.Models, k.Sessions, k.ToggleYolo}
+		mainBinds := []key.Binding{m.tabHelp(), k.ShiftTab, h.commands(), k.Models, k.Sessions}
 		if m.hasSession() {
 			mainBinds = append(mainBinds, k.Chat.NewSession, k.Chat.EndFollow)
 		}
@@ -172,7 +172,7 @@ func (m *UI) FullHelp() [][]key.Binding {
 	default:
 		if m.session == nil {
 			// no session selected
-			binds = append(binds, []key.Binding{k.ShiftTab, h.commands(), k.Models, k.Sessions, k.ToggleYolo})
+			binds = append(binds, []key.Binding{k.ShiftTab, h.commands(), k.Models, k.Sessions})
 			binds = append(binds, h.editorRows()...)
 		}
 	}

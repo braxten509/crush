@@ -57,8 +57,6 @@ type (
 	ActionToggleUltracode         struct{}
 	ActionTogglePills             struct{}
 	ActionExternalEditor          struct{}
-	ActionToggleYoloMode          struct{}
-	ActionToggleSysadminMode      struct{}
 	ActionToggleNotifications     struct{}
 	ActionSelectNotificationStyle struct {
 		Style string

@@ -318,11 +318,6 @@ func (m *UI) handleEngineRemoteAction(a proto.RemoteAction) tea.Cmd {
 			}
 			return nil
 		})
-	case "yolo":
-		if m.mode == uiInputModePlan && (m.isAgentBusy() || m.modeSwitching) {
-			return fail(errAgentBusy)
-		}
-		return tea.Batch(m.toggleYoloCommand(), finish(proto.RemoteActionDone{}))
 	case "mode":
 		if m.isAgentBusy() || m.modeSwitching {
 			return fail(errAgentBusy)

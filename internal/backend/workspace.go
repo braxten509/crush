@@ -218,21 +218,11 @@ func (w *Workspace) AttachedClientsForSession(sessionID string) int {
 
 func workspaceToProto(ws *Workspace) proto.Workspace {
 	cfg := ws.Cfg.Config()
-	// Report the mode the permission service actually enforces rather
-	// than the startup override. The override is a one-shot seed that
-	// app.New reads at construction; runtime toggles reach only the
-	// service, so reporting the override would show a client "normal"
-	// while the server auto-approves everything. YOLO carries the same
-	// answer for apps that only know the on/off form.
-	mode := ws.Cfg.Overrides().PermissionMode
-	if ws.App != nil && ws.Permissions != nil {
-		mode = ws.Permissions.PermissionMode()
-	}
 	out := proto.Workspace{
 		ID:             ws.ID,
 		Path:           ws.Path,
-		PermissionMode: proto.PermissionModeToProto(mode),
-		YOLO:           mode.SkipsPrompts(),
+		PermissionMode: proto.WorkspacePermissionModeYolo,
+		YOLO:           true,
 		Channels:       ws.Cfg.Overrides().EnabledChannels,
 		DataDir:        cfg.Options.DataDirectory,
 		Debug:          cfg.Options.Debug,

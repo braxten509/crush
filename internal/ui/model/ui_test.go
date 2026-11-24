@@ -316,23 +316,11 @@ func TestToggleInputMode(t *testing.T) {
 	t.Parallel()
 	ui, ws := newPlanUI(t, "sess-1")
 	ui.mode = uiInputModeCode
-	// The Shift+Tab cycle: code -> plan -> YOLO -> sysadmin -> code. Only
-	// the two input-mode changes switch agents, so the update count stops
-	// climbing once the cycle is only moving the permission mode.
-	for _, want := range []struct {
-		mode    uiInputMode
-		perm    permission.PermissionMode
-		updates int
-	}{
-		{uiInputModePlan, permission.PermissionModeNormal, 1},
-		{uiInputModeCode, permission.PermissionModeYolo, 2},
-		{uiInputModeCode, permission.PermissionModeSysadmin, 2},
-		{uiInputModeCode, permission.PermissionModeNormal, 2},
-	} {
+	seedYolo(ui, ws, true)
+	for _, want := range []uiInputMode{uiInputModePlan, uiInputModeCode, uiInputModePlan} {
 		applyModeSwitchMsg(ui, ui.toggleInputMode())
-		require.Equal(t, want.mode, ui.mode)
-		require.Equal(t, want.perm, ws.permMode)
-		require.Equal(t, want.updates, ws.updateCalls)
+		require.Equal(t, want, ui.mode)
+		require.Equal(t, permission.PermissionModeYolo, ws.permMode)
 	}
 }
 
@@ -839,6 +827,7 @@ func TestPlanHandoffConfirm_ClearsPendingAndSwitchesMode(t *testing.T) {
 	t.Parallel()
 	u, ws := newPlanUI(t, "sess-1")
 	ws.agentReady = true
+	seedYolo(u, ws, true)
 	u.handlePlanHandoff(notify.RunComplete{
 		SessionID: "sess-1",
 		Text:      "plan\n<!-- CRUSH_PLAN_READY -->",
@@ -846,13 +835,14 @@ func TestPlanHandoffConfirm_ClearsPendingAndSwitchesMode(t *testing.T) {
 	inline, ok := u.activeInline.(*questionform.PlanHandoffInline)
 	require.True(t, ok)
 
-	cmd := inline.OnConfirm(false)
+	cmd := inline.OnConfirm()
 	require.NotNil(t, cmd)
 	// The switch is async: the mode only changes once the backend settles.
 	require.Equal(t, uiInputModePlan, u.mode)
 	cmds := applyModeSwitchMsg(u, cmd)
 	require.Equal(t, uiInputModeCode, u.mode)
 	require.Equal(t, config.AgentCoder, ws.setMainCalledWith)
+	require.Equal(t, permission.PermissionModeYolo, ws.permMode)
 	require.Empty(t, u.planReadySessionID)
 
 	// The confirmed plan continues with a hidden implement prompt.
@@ -910,22 +900,6 @@ func TestResetPlanModeState_NoopInCodeMode(t *testing.T) {
 	require.Empty(t, ws.setMainCalledWith)
 }
 
-func TestPlanHandoffExplicitPermissionMode(t *testing.T) {
-	t.Parallel()
-	for _, yolo := range []bool{false, true} {
-		u, ws := newPlanUI(t, "sess-1")
-		seedYolo(u, ws, !yolo)
-		u.openPlanHandoff()
-		inline := u.activeInline.(*questionform.PlanHandoffInline)
-		cmd := inline.OnConfirm(yolo)
-		require.Equal(t, yolo, ws.permMode != permission.PermissionModeNormal)
-		require.Empty(t, ws.runPrompts, "wait for the coder model to finish switching")
-		switched := cmd().(modeSwitchedMsg)
-		require.NoError(t, switched.err)
-		require.Equal(t, "sess-1", switched.continueSessionID)
-	}
-}
-
 func TestPlanPromptIgnoresYOLO(t *testing.T) {
 	t.Parallel()
 	u, _ := newPlanUI(t, "sess-1")
@@ -950,54 +924,6 @@ func TestGeneratedPlanContinuationIsHidden(t *testing.T) {
 	}
 	require.Equal(t, []bool{true, false}, ws.runHidden)
 	require.Equal(t, []string{"Implement the plan.", "Implement the plan."}, ws.runPrompts)
-}
-
-// A permissive mode the user chose himself is part of the ring like any
-// other: the cycle picks up where the badge says it is and closes.
-func TestToggleInputModeCycleCompletesFromExplicitYolo(t *testing.T) {
-	t.Parallel()
-	u, ws := newPlanUI(t, "sess-1")
-	u.mode = uiInputModeCode
-	seedYolo(u, ws, true)
-
-	for _, want := range []struct {
-		mode uiInputMode
-		perm permission.PermissionMode
-	}{
-		{uiInputModeCode, permission.PermissionModeSysadmin},
-		{uiInputModeCode, permission.PermissionModeNormal},
-		{uiInputModePlan, permission.PermissionModeNormal},
-		{uiInputModeCode, permission.PermissionModeYolo},
-	} {
-		applyModeSwitchMsg(u, u.toggleInputMode())
-		require.Equal(t, want.mode, u.mode)
-		require.Equal(t, want.perm, ws.permMode)
-	}
-}
-
-// Leaving plan mode pulls the user into YOLO coding, but a session already
-// on the sysadmin rung keeps it rather than being knocked down to YOLO.
-func TestToggleInputModeKeepsSysadminLeavingPlan(t *testing.T) {
-	t.Parallel()
-	u, ws := newPlanUI(t, "sess-1")
-	u.setPermissionMode(permission.PermissionModeSysadmin)
-
-	applyModeSwitchMsg(u, u.toggleInputMode())
-	require.Equal(t, uiInputModeCode, u.mode)
-	require.Equal(t, permission.PermissionModeSysadmin, ws.permMode)
-}
-
-func TestSwitchPlanToYolo(t *testing.T) {
-	t.Parallel()
-	for _, carriedYolo := range []bool{false, true} {
-		u, ws := newPlanUI(t, "sess-1")
-		seedYolo(u, ws, carriedYolo)
-
-		applyModeSwitchMsg(u, u.switchPlanToYolo())
-		require.Equal(t, uiInputModeCode, u.mode, "activating YOLO leaves plan mode")
-		require.Equal(t, permission.PermissionModeYolo, ws.permMode, "YOLO ends up enabled regardless of the carried state")
-		require.Equal(t, config.AgentCoder, ws.setMainCalledWith)
-	}
 }
 
 // A file list loaded for one chat is dropped when another chat is open by

@@ -14,121 +14,15 @@ import (
 	"github.com/charmbracelet/crush/internal/ui/util"
 )
 
-// setPermissionMode writes mode to the workspace and through the
-// permission-mode cache (no re-probe needed), then refreshes the editor
-// prompt. Every permission-mode write goes through here, so the cache is
-// never left trailing the workspace.
-func (m *UI) setPermissionMode(mode permission.PermissionMode) {
-	m.com.Workspace.PermissionSetMode(mode)
-	m.permModeCache.set(mode)
-	// Supersede any in-flight busy/permission probe: its result carries the
-	// old generation and would otherwise overwrite the value we just wrote.
-	// Bump the generation (rather than invalidateBusyCaches, which would
-	// clear the fresh value) so applyBusyState's guard discards and
-	// re-dispatches the stale probe.
-	m.busyFetchGen++
-	m.setEditorPrompt(mode)
-}
-
-// setYolo turns YOLO on or off. Turning it off goes all the way back to
-// normal, so a sysadmin session that declines YOLO really does get its
-// prompts back rather than landing one rung down.
-func (m *UI) setYolo(on bool) {
-	mode := permission.PermissionModeNormal
-	if on {
-		mode = permission.PermissionModeYolo
-	}
-	m.setPermissionMode(mode)
-}
-
-// toggleMode flips the permission mode between target and Normal. It reports
-// whether target is now the active mode.
-func (m *UI) toggleMode(target permission.PermissionMode) (enabled bool) {
-	mode := permission.PermissionModeNormal
-	if m.com.Workspace.PermissionMode() != target {
-		mode = target
-		enabled = true
-	}
-	m.setPermissionMode(mode)
-	return enabled
-}
-
-// permissionModeName is the human-readable name for a permission mode.
-func permissionModeName(mode permission.PermissionMode) string {
-	switch mode {
-	case permission.PermissionModeYolo:
-		return "yolo"
-	case permission.PermissionModeSysadmin:
-		return "sysadmin"
-	default:
-		return "normal"
-	}
-}
-
-// toggleModeAndReport flips the permission mode and announces where it
-// landed. Reaching a mode from the command palette shows the same badge
-// banner as reaching it from the Shift+Tab cycle, so one mode does not
-// announce itself two different ways depending on the road in. Dropping
-// back to normal names the mode rather than saying "disabled".
-func (m *UI) toggleModeAndReport(target permission.PermissionMode) tea.Cmd {
-	if !m.toggleMode(target) {
-		return util.ReportInfo("Permission mode: " + permissionModeName(permission.PermissionModeNormal))
-	}
-	switch target {
-	case permission.PermissionModeSysadmin:
-		return util.CmdHandler(util.InfoMsg{Type: util.InfoTypeSysadmin, Msg: sysadminModeBannerMsg})
-	case permission.PermissionModeYolo:
-		return util.CmdHandler(util.InfoMsg{Type: util.InfoTypeYolo, Msg: yoloModeBannerMsg})
-	default:
-		return util.ReportInfo("Permission mode: " + permissionModeName(target))
-	}
-}
-
-// toggleInputMode advances the Shift+Tab cycle by one position. The cycle is
-// a ring of four positions read straight off the current state — code ->
-// plan -> YOLO -> sysadmin -> code. Nothing is remembered between presses,
-// so the next position is always the one the badge implies, whether the
-// permission mode came from this cycle or from Ctrl+Y.
+// toggleInputMode switches between planning and coding.
 func (m *UI) toggleInputMode() tea.Cmd {
 	if m.isAgentBusy() || m.modeSwitching {
 		return util.ReportWarn("Agent is busy, please wait before switching input mode...")
 	}
 	if m.mode == uiInputModePlan {
-		// Second step: plan -> YOLO coding. A permissive mode carried into
-		// plan keeps its rung rather than being knocked down to plain YOLO.
-		if !m.yoloActive() {
-			m.setYolo(true)
-		}
 		return m.setInputMode(uiInputModeCode)
 	}
-	if m.yoloActive() {
-		if m.permModeCached() == permission.PermissionModeYolo {
-			// Third step: YOLO -> sysadmin. The banner spells out what was
-			// just given up, since this is the most permissive state the
-			// program has and it is now one keystroke away.
-			m.setPermissionMode(permission.PermissionModeSysadmin)
-			return util.CmdHandler(util.InfoMsg{Type: util.InfoTypeSysadmin, Msg: sysadminModeBannerMsg})
-		}
-		// Fourth step: sysadmin -> normal, closing the cycle.
-		m.setYolo(false)
-		return util.ReportInfo("input mode: code")
-	}
 	return m.setInputMode(uiInputModePlan)
-}
-
-// switchPlanToYolo handles activating YOLO while in plan mode: YOLO is a
-// coding concern, so instead of a "plan + yolo" state the UI switches
-// straight to the coder with YOLO enabled. Activation is idempotent: a
-// sysadmin session carried into plan mode keeps its mode rather than being
-// knocked down to plain YOLO.
-func (m *UI) switchPlanToYolo() tea.Cmd {
-	if m.isAgentBusy() || m.modeSwitching {
-		return util.ReportWarn("Agent is busy, please wait before switching input mode...")
-	}
-	if !m.yoloActive() {
-		m.setYolo(true)
-	}
-	return m.setInputMode(uiInputModeCode)
 }
 
 // Mode banner copy shown in the status bar after switching modes.
@@ -207,21 +101,6 @@ type modeSwitchedMsg struct {
 	err               error
 }
 
-// toggleYoloCommand is Toggle Yolo Mode from the command palette.
-func (m *UI) toggleYoloCommand() tea.Cmd {
-	if m.mode == uiInputModePlan {
-		// Same as Ctrl+Y in plan mode: YOLO only exists as YOLO
-		// coding, so activating it leaves plan mode.
-		return m.switchPlanToYolo()
-	}
-	return m.toggleModeAndReport(permission.PermissionModeYolo)
-}
-
-// toggleSysadminCommand is Toggle Sysadmin Mode from the command palette.
-func (m *UI) toggleSysadminCommand() tea.Cmd {
-	return m.toggleModeAndReport(permission.PermissionModeSysadmin)
-}
-
 // handlePlanHandoff checks whether a completed run in plan mode contained the
 // plan-ready sentinel marker and, if so, opens the plan handoff dialog.
 func (m *UI) handlePlanHandoff(rc notify.RunComplete) tea.Cmd {
@@ -284,12 +163,7 @@ func (m *UI) openPlanHandoff() {
 		return
 	}
 	inline := questionform.NewPlanHandoffInline(m.com)
-	inline.OnConfirm = func(yolo bool) tea.Cmd {
-		// The handoff asks a yes/no question about YOLO, so answer it
-		// literally: declining drops the session back to normal.
-		if m.yoloActive() != yolo {
-			m.setYolo(yolo)
-		}
+	inline.OnConfirm = func() tea.Cmd {
 		m.setPlanReadyPending("")
 		sessionID := m.session.ID
 		cmd := m.setInputMode(uiInputModeCode)

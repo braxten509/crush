@@ -15,7 +15,6 @@ import (
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/csync"
 	"github.com/charmbracelet/crush/internal/lsp"
-	"github.com/charmbracelet/crush/internal/permission"
 	"github.com/charmbracelet/crush/internal/skills"
 	"github.com/stretchr/testify/require"
 )
@@ -163,38 +162,10 @@ func TestCrushInfo_YoloMode(t *testing.T) {
 		Providers:   csync.NewMap[string, config.ProviderConfig](),
 		Permissions: &config.Permissions{},
 	})
-	cfg.Overrides().PermissionMode = permission.PermissionModeYolo
 
 	output := buildCrushInfo(config.SelectedModel{}, cfg, nil, nil, nil, nil)
 	require.Contains(t, output, "[permissions]")
 	require.Contains(t, output, "mode = yolo")
-}
-
-func TestCrushInfo_SysadminMode(t *testing.T) {
-	t.Parallel()
-
-	cfg := config.NewTestStore(&config.Config{
-		Providers:   csync.NewMap[string, config.ProviderConfig](),
-		Permissions: &config.Permissions{},
-	})
-	cfg.Overrides().PermissionMode = permission.PermissionModeSysadmin
-
-	output := buildCrushInfo(config.SelectedModel{}, cfg, nil, nil, nil, nil)
-	require.Contains(t, output, "[permissions]")
-	require.Contains(t, output, "mode = sysadmin")
-}
-
-func TestCrushInfo_AllowedTools(t *testing.T) {
-	t.Parallel()
-
-	cfg := config.NewTestStore(&config.Config{
-		Providers:   csync.NewMap[string, config.ProviderConfig](),
-		Permissions: &config.Permissions{AllowedTools: []string{"edit:write", "bash"}},
-	})
-
-	output := buildCrushInfo(config.SelectedModel{}, cfg, nil, nil, nil, nil)
-	require.Contains(t, output, "[permissions]")
-	require.Contains(t, output, "allowed_tools = bash, edit:write")
 }
 
 func TestCrushInfo_DisabledTools(t *testing.T) {

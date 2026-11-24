@@ -9,6 +9,8 @@ import (
 type SecureSlot interface {
 	Saved() bool
 	Available() bool
+	// Multiline: the value may hold line breaks and tabs.
+	Multiline() bool
 }
 
 // SecureBackend saves a form's secure fields: the local secure-entry form

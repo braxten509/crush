@@ -12,17 +12,32 @@ import (
 	"strings"
 	"sync"
 	"unicode"
+	"unicode/utf8"
 )
 
 const maxFileSize = 8 << 20
 
-// Spec is safe to transmit through the agent's request channel.
+// Spec is safe to transmit through the agent's request channel. A spec names
+// either a prepared File with a placeholder, or a KDE Wallet entry.
 type Spec struct {
-	File        string `json:"file"`
-	Label       string `json:"label"`
-	Placeholder string `json:"placeholder"`
-	Occurrence  int    `json:"occurrence"`
+	File        string      `json:"file"`
+	Label       string      `json:"label"`
+	Placeholder string      `json:"placeholder"`
+	Occurrence  int         `json:"occurrence"`
+	Wallet      *WalletSpec `json:"wallet,omitempty"`
 }
+
+// WalletSpec is a KDE Wallet entry a value is saved into (owner,
+// 2026-11-24). An entry that already exists is refused unless Replace.
+type WalletSpec struct {
+	Folder  string `json:"folder"`
+	Entry   string `json:"entry"`
+	Replace bool   `json:"replace,omitempty"`
+}
+
+// Multiline reports whether the value may hold line breaks and tabs: only a
+// wallet entry, which has no file format to break.
+func (spec Spec) Multiline() bool { return spec.Wallet != nil }
 
 // The only statuses that ever leave secure entry.
 const (
@@ -52,6 +67,9 @@ func (t *Target) String() string { return "secure-entry target" }
 
 // normalize checks the metadata and fills in its defaults.
 func (spec Spec) normalize() (Spec, error) {
+	if spec.Wallet != nil {
+		return spec.normalizeWallet()
+	}
 	if !filepath.IsAbs(spec.File) {
 		return spec, errors.New("the destination must be an absolute path")
 	}
@@ -85,6 +103,9 @@ func findSlot(data []byte, placeholder string, occurrence int) (int, error) {
 }
 
 func Prepare(spec Spec) (*Target, error) {
+	if spec.Wallet != nil {
+		return nil, errors.New("a KDE Wallet entry needs a question form")
+	}
 	spec, err := spec.normalize()
 	if err != nil {
 		return nil, err
@@ -150,13 +171,20 @@ func (t *Target) Close() {
 // ErrClosed is returned once the entry was saved or cancelled.
 var ErrClosed = errors.New("secure entry is closed")
 
-// checkValue returns a fixed error for values that can't be saved.
-func checkValue(value []byte) error {
+// checkValue returns a fixed error for values that can't be saved. A
+// multiline value (a wallet entry) may hold line breaks and tabs.
+func checkValue(value []byte, multiline bool) error {
 	if len(value) == 0 {
 		return errors.New("enter a value before saving")
 	}
 	if len(value) > MaxValueSize {
 		return errors.New("value exceeds 64 KiB")
+	}
+	if multiline {
+		if !utf8.Valid(value) || bytes.ContainsRune(value, 0) {
+			return errors.New("enter text without null characters")
+		}
+		return nil
 	}
 	if bytes.ContainsAny(value, "\x00\r\n") {
 		return errors.New("enter a single-line value without control characters")
@@ -175,7 +203,7 @@ func (t *Target) Save(value []byte) error {
 	if t.root == nil {
 		return ErrClosed
 	}
-	if err := checkValue(value); err != nil {
+	if err := checkValue(value, t.spec.Multiline()); err != nil {
 		return err
 	}
 	data, info, err := t.read()

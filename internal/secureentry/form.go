@@ -66,7 +66,16 @@ func (f *Field) Saved() bool {
 func (f *Field) Available() bool {
 	f.form.mu.Lock()
 	defer f.form.mu.Unlock()
-	return !f.form.closed && !f.group.written
+	return !f.form.closed && f.open()
+}
+
+// open reports whether the field can still be saved: a file slot until its
+// file was written, a wallet entry until it was saved.
+func (f *Field) open() bool {
+	if f.group == nil {
+		return !f.saved
+	}
+	return !f.group.written
 }
 
 // fileGroup is every slot of one destination file, written in one go so
@@ -163,6 +172,7 @@ func prepareForm(session string, req question.Request, specs map[string]Spec) (*
 		}
 	}()
 	groups := map[string]*fileGroup{}
+	wallets := map[string]bool{}
 	for _, q := range req.Questions {
 		if q.Type != question.TypeSecureEntry {
 			continue
@@ -174,6 +184,18 @@ func prepareForm(session string, req question.Request, specs map[string]Spec) (*
 		spec, err := spec.normalize()
 		if err != nil {
 			return nil, err
+		}
+		if spec.Wallet != nil {
+			key := spec.Wallet.key()
+			if wallets[key] {
+				return nil, errors.New("two secure entries name the same wallet entry")
+			}
+			wallets[key] = true
+			if err := checkWalletFree(*spec.Wallet); err != nil {
+				return nil, err
+			}
+			form.fields[q.ID] = &Field{Spec: spec, QuestionID: q.ID, form: form}
+			continue
 		}
 		group := groups[spec.File]
 		if group == nil {
@@ -245,6 +267,8 @@ type FieldInfo struct {
 	// Saved and Available are what [Field.Saved] and [Field.Available]
 	// report.
 	Saved, Available bool
+	// Multiline: the value may hold line breaks and tabs (a wallet entry).
+	Multiline bool
 }
 
 // Fields describes the form's secure fields, in question order.
@@ -261,7 +285,8 @@ func (f *Form) Fields() []FieldInfo {
 			QuestionID: field.QuestionID,
 			Label:      field.Label,
 			Saved:      field.saved,
-			Available:  !f.closed && !field.group.written,
+			Available:  !f.closed && field.open(),
+			Multiline:  field.Multiline(),
 		})
 	}
 	return out
@@ -295,10 +320,10 @@ func (f *Form) Submit(answers []question.Answer, values map[string][]byte) error
 		if field == nil || field.saved || len(values[q.ID]) == 0 {
 			continue
 		}
-		if field.group.written {
+		if field.group != nil && field.group.written {
 			return &FieldError{QuestionID: q.ID, Err: errors.New("this file was already saved; request this entry again")}
 		}
-		if err := checkValue(values[q.ID]); err != nil {
+		if err := checkValue(values[q.ID], field.Multiline()); err != nil {
 			return &FieldError{QuestionID: q.ID, Err: err}
 		}
 	}
@@ -328,6 +353,23 @@ func (f *Form) Submit(answers []question.Answer, values map[string][]byte) error
 			return &FieldError{QuestionID: slots[0].QuestionID, Err: err}
 		}
 		staged = append(staged, group)
+	}
+	// Wallet entries can't be staged: each is saved now, after every file
+	// is ready, and stays saved even when a later step fails.
+	for _, q := range f.Request.Questions {
+		field := f.fields[q.ID]
+		if field == nil || field.Wallet == nil || field.saved || len(values[q.ID]) == 0 {
+			continue
+		}
+		err := checkWalletFree(*field.Wallet)
+		if err == nil {
+			err = walletWrite(*field.Wallet, values[q.ID])
+		}
+		if err != nil {
+			discard(staged)
+			return &FieldError{QuestionID: q.ID, Err: err}
+		}
+		field.saved = true
 	}
 	for i, group := range staged {
 		if group.root.Rename(group.staged, group.name) != nil {

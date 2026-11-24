@@ -315,7 +315,7 @@ func secureFieldsProto(infos []secureentry.FieldInfo) []proto.SecureField {
 		case !f.Available:
 			status = secureFieldUnavailable
 		}
-		fields = append(fields, proto.SecureField{QuestionID: f.QuestionID, Label: f.Label, Status: status})
+		fields = append(fields, proto.SecureField{QuestionID: f.QuestionID, Label: f.Label, Status: status, Multiline: f.Multiline})
 	}
 	return fields
 }

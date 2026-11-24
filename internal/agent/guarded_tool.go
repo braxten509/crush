@@ -29,6 +29,9 @@ func (g guardedTool) Run(ctx context.Context, call fantasy.ToolCall) (fantasy.To
 	if secretguard.Blocks(call.Name, []byte(call.Input)) {
 		return fantasy.NewTextErrorResponse(secretguard.Reason), nil
 	}
+	if secretguard.BlocksWalletRead(call.Name, []byte(call.Input)) {
+		return fantasy.NewTextErrorResponse(secretguard.WalletReason), nil
+	}
 	if secretguard.BlocksChatFolder(call.Name, []byte(call.Input), ownChatFolder(ctx)) {
 		return fantasy.NewTextErrorResponse(secretguard.ChatFolderReason), nil
 	}

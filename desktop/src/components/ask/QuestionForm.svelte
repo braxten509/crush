@@ -28,7 +28,7 @@
   import SecureField from "./SecureField.svelte";
   import { cancelQuestions, submitAnswers } from "../../lib/ask/answers.js";
   import { CUSTOM_MAX, FREE_MAX, initialState, isAnswered, NOTE_MAX, respond, summaryLine, tabLabels, typeOf } from "../../lib/ask/form.js";
-  import { statusText, valueError } from "../../lib/ask/secure.js";
+  import { engineValue, statusText, valueError } from "../../lib/ask/secure.js";
   import { dialogs } from "../../lib/dialogs.js";
   import { bindKey, comboOf as comboFor } from "../../lib/keys.js";
   import { attachSlot, focusTimeline } from "../../lib/stores/composer.svelte.js";
@@ -80,6 +80,8 @@
   }
 
   const fieldOf = (questionId) => secure?.fields?.find((f) => f.question_id === questionId) ?? null;
+  // A KDE Wallet field takes line breaks and tabs.
+  const multilineOf = (questionId) => Boolean(fieldOf(questionId)?.multiline);
   // A secure field the engine already saved, or can no longer take: no value is asked for.
   const settled = (questionId) => ["saved", "unavailable"].includes(fieldOf(questionId)?.status);
 
@@ -132,7 +134,7 @@
     if (secure) {
       for (const it of items) {
         if (typeOf(it) !== "secure_entry" || settled(it.id)) continue;
-        const problem = valueError(secureValues[it.id]);
+        const problem = valueError(secureValues[it.id], multilineOf(it.id));
         if (problem) {
           secureErrors = { [it.id]: problem };
           active = items.indexOf(it);
@@ -148,7 +150,7 @@
         local.onSubmit($state.snapshot(answers));
       } else if (secure) {
         const values = {};
-        for (const [id, value] of Object.entries(secureValues)) if (value !== "" && !settled(id)) values[id] = value.replace(/\r?\n$/, "");
+        for (const [id, value] of Object.entries(secureValues)) if (value !== "" && !settled(id)) values[id] = engineValue(value, multilineOf(id));
         const problem = await secure.onSubmit(answers, values);
         for (const id of Object.keys(values)) values[id] = "";
         if (problem?.questionId) {
@@ -333,7 +335,7 @@
         return false;
       case "secure_entry":
         if (combo === "Enter") {
-          const problem = valueError(secureValues[item.id]);
+          const problem = valueError(secureValues[item.id], multilineOf(item.id));
           if (problem && !settled(item.id)) secureErrors = { [item.id]: problem };
           else {
             secureErrors = {};
@@ -503,7 +505,7 @@
                 <div class="free"><Area bind:value={states[i].text} minLines={1} maxLines={6} placeholder="Type your answer..." label="Your answer" /></div>
               {:else if k === "secure_entry"}
                 <div class="secure">
-                  <SecureField bind:value={secureValues[it.id]} status={statusText(fieldOf(it.id), secureValues[it.id] !== "")} locked={settled(it.id)} error={secureErrors[it.id] ?? ""} />
+                  <SecureField bind:value={secureValues[it.id]} multiline={multilineOf(it.id)} status={statusText(fieldOf(it.id), secureValues[it.id] !== "")} locked={settled(it.id)} error={secureErrors[it.id] ?? ""} />
                 </div>
               {/if}
               {#if i === active && noteKey === it.id}

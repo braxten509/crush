@@ -100,6 +100,9 @@ type SecureField struct {
 	Label string `json:"label"`
 	// Status is "open", "saved" or "unavailable".
 	Status string `json:"status"`
+	// Multiline: the value may hold line breaks and tabs (a KDE Wallet
+	// entry rather than a file slot).
+	Multiline bool `json:"multiline,omitempty"`
 }
 
 // SecureForm is a question form with secure fields, sent to the apps that

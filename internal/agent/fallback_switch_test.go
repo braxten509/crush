@@ -39,10 +39,14 @@ func fallbackCoordinator(t *testing.T, blocks []config.FallbackBlock, usage map[
 			Models: []catwalk.Model{{ID: "opus", Name: "Claude Opus"}, {ID: "gpt-5.6-sol", Name: "GPT-5.6 Sol"}}})
 	}
 	cfg.Options.Accounts = []config.Account{{ID: "claude-2", Kind: config.TypeClaudeCode}, {ID: "codex-2", Kind: config.TypeCodexCLI}}
-	// The added accounts are signed in.
-	for id, login := range map[string]string{"claude-2": ".credentials.json", "codex-2": "auth.json"} {
-		require.NoError(t, os.MkdirAll(config.AccountDir(id), 0o700))
-		require.NoError(t, os.WriteFile(filepath.Join(config.AccountDir(id), login), []byte("{}"), 0o600))
+	// Every account is signed in: the added ones and each tool's own.
+	home := os.Getenv("HOME")
+	for dir, login := range map[string]string{
+		config.AccountDir("claude-2"): ".credentials.json", config.AccountDir("codex-2"): "auth.json",
+		filepath.Join(home, ".claude"): ".credentials.json", filepath.Join(home, ".codex"): "auth.json",
+	} {
+		require.NoError(t, os.MkdirAll(dir, 0o700))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, login), []byte("{}"), 0o600))
 	}
 	cfg.Options.Fallback = &config.FallbackOrder{On: true, Blocks: blocks}
 

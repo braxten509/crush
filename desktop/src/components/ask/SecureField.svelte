@@ -8,11 +8,14 @@
   // (DLG-193, DLG-195); the form drops pastes while a sheet covers it
   // (DLG-200). A field the engine saved or can no longer take shows only its
   // status.
-  //   value (bindable), status (the status text), locked?, error?
+  // A multiline field (a KDE Wallet entry) keeps a paste's line breaks
+  // as LINE (lib/ask/secure.js), which the <input> doesn't strip.
+  //   value (bindable), status (the status text), locked?, error?, multiline?
   import { tick } from "svelte";
+  import { pastedLines } from "../../lib/ask/secure.js";
   import Field from "../kit/Field.svelte";
 
-  let { value = $bindable(""), status = "", locked = false, error = "" } = $props();
+  let { value = $bindable(""), status = "", locked = false, error = "", multiline = false } = $props();
 
   async function onpaste(event) {
     // Before Field's own paste, which would turn line breaks into spaces.
@@ -22,7 +25,8 @@
     if (locked || input?.tagName !== "INPUT") return;
     // As it is: the one trailing newline the engine allows is stripped once,
     // at validation and submit (lib/ask/secure.js).
-    const text = event.clipboardData?.getData("text/plain") ?? "";
+    const pasted = event.clipboardData?.getData("text/plain") ?? "";
+    const text = multiline ? pastedLines(pasted) : pasted;
     const start = input.selectionStart ?? value.length;
     const end = input.selectionEnd ?? value.length;
     value = value.slice(0, start) + text + value.slice(end);

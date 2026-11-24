@@ -178,14 +178,20 @@ func (s *SecureQuestion) HandlePaste(msg tea.PasteMsg) tea.Cmd {
 }
 
 // insert adds text at the cursor. One trailing line break, as copied keys
-// often have, is dropped; anything else with control characters is refused.
+// often have, is dropped; anything else with control characters is refused,
+// except line breaks and tabs in a multiline field (a KDE Wallet entry).
 func (s *SecureQuestion) insert(text []byte) {
 	if len(text) == 0 {
 		return
 	}
 	text = bytes.TrimSuffix(text, []byte("\n"))
 	text = bytes.TrimSuffix(text, []byte("\r"))
-	if !utf8.Valid(text) || bytes.IndexFunc(text, unicode.IsControl) >= 0 {
+	refused := unicode.IsControl
+	if s.field != nil && s.field.Multiline() {
+		text = bytes.ReplaceAll(text, []byte("\r\n"), []byte("\n"))
+		refused = func(r rune) bool { return unicode.IsControl(r) && r != '\n' && r != '\t' }
+	}
+	if !utf8.Valid(text) || bytes.IndexFunc(text, refused) >= 0 {
 		s.errorText = "Use a single-line value without control characters."
 		return
 	}

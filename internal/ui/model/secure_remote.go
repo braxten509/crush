@@ -48,7 +48,7 @@ func (s *engineSecure) Questions() question.Request {
 func (s *engineSecure) Slot(questionID string) questionform.SecureSlot {
 	for _, f := range s.form.Fields {
 		if f.QuestionID == questionID {
-			return engineSlot{s: s, id: questionID}
+			return engineSlot{s: s, id: questionID, multiline: f.Multiline}
 		}
 	}
 	return nil
@@ -115,9 +115,12 @@ func (s *engineSecure) finish(saved bool) {
 }
 
 type engineSlot struct {
-	s  *engineSecure
-	id string
+	s         *engineSecure
+	id        string
+	multiline bool
 }
+
+func (e engineSlot) Multiline() bool { return e.multiline }
 
 func (e engineSlot) Saved() bool {
 	e.s.mu.Lock()

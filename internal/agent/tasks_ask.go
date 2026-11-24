@@ -145,6 +145,8 @@ type secureAskItem struct {
 	File        string `json:"file"`
 	Placeholder string `json:"placeholder,omitempty"`
 	Occurrence  int    `json:"occurrence,omitempty"`
+	// Wallet saves into a KDE Wallet entry instead of a file.
+	Wallet *secureentry.WalletSpec `json:"wallet,omitempty"`
 }
 
 // askQuestions turns `crush ask` input into a request, plus the destination
@@ -183,14 +185,14 @@ func askQuestions(data json.RawMessage) (question.Request, map[string]secureentr
 		decoder.DisallowUnknownFields()
 		// The decoder's own error could quote the input; report fixed text.
 		if decoder.Decode(&item) != nil {
-			return question.Request{}, nil, fmt.Errorf("question %d: secure_entry takes only type, label, question, description, file, placeholder and occurrence; never put a value in the JSON", i+1)
+			return question.Request{}, nil, fmt.Errorf("question %d: secure_entry takes only type, label, question, description, file, placeholder, occurrence and wallet; never put a value in the JSON", i+1)
 		}
-		if item.File == "" {
-			return question.Request{}, nil, fmt.Errorf("question %d: secure_entry needs the absolute path of a prepared file in \"file\"", i+1)
+		if item.File == "" && item.Wallet == nil {
+			return question.Request{}, nil, fmt.Errorf("question %d: secure_entry needs the absolute path of a prepared file in \"file\", or a KDE Wallet entry in \"wallet\"", i+1)
 		}
 		id := uuid.NewString()
 		qs[i] = question.Question{ID: id, Type: question.TypeSecureEntry, Label: item.Label, Text: item.Question, Description: item.Description}
-		specs[id] = secureentry.Spec{File: item.File, Label: cmp.Or(item.Label, item.Question), Placeholder: item.Placeholder, Occurrence: cmp.Or(item.Occurrence, 1)}
+		specs[id] = secureentry.Spec{File: item.File, Label: cmp.Or(item.Label, item.Question), Placeholder: item.Placeholder, Occurrence: cmp.Or(item.Occurrence, 1), Wallet: item.Wallet}
 	}
 	return r, specs, nil
 }

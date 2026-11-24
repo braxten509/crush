@@ -139,6 +139,10 @@ func RunHook(stdin io.Reader, stderr io.Writer) int {
 		fmt.Fprintln(stderr, Reason)
 		return 2
 	}
+	if BlocksWalletRead(event.ToolName, event.ToolInput) {
+		fmt.Fprintln(stderr, WalletReason)
+		return 2
+	}
 	if BlocksChatFolder(event.ToolName, event.ToolInput, os.Getenv(ChatFolderEnv)) {
 		fmt.Fprintln(stderr, ChatFolderReason)
 		return 2

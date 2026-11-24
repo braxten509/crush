@@ -3,6 +3,7 @@ package backend
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -12,6 +13,38 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestSaveFallbackWithUnavailableProvider(t *testing.T) {
+	t.Setenv("CRUSH_GLOBAL_CONFIG", t.TempDir())
+	t.Setenv("CRUSH_GLOBAL_DATA", t.TempDir())
+	t.Setenv("CRUSH_DISABLE_PROVIDER_AUTO_UPDATE", "1")
+	b, ws, _ := newPublishingWorkspace(t)
+	claude := config.FallbackBlock{Type: config.FallbackUse, Provider: "claude-code", Model: "opus"}
+	require.NoError(t, b.SetConfigField(ws.ID, config.ScopeGlobal, "providers.claude-code", config.ProviderConfig{
+		ID: claude.Provider, Type: config.TypeClaudeCode, Models: []catwalk.Model{{ID: claude.Model, Name: "Opus"}},
+	}))
+	kimi := config.FallbackList{Provider: "removed-kimi", Model: "k3.1-pro", Blocks: []config.FallbackBlock{claude}}
+	order := config.FallbackOrder{On: true, Lists: []config.FallbackList{
+		{Provider: claude.Provider, Model: claude.Model, Blocks: []config.FallbackBlock{claude, {Type: config.FallbackWait, Kind: config.TypeClaudeCode}}},
+		kimi,
+	}}
+	require.NoError(t, b.SetConfigField(ws.ID, config.ScopeGlobal, "options.fallback", order))
+	require.NoError(t, ws.Cfg.ReloadFromDisk(t.Context()))
+
+	edited, err := b.FallbackSettings(ws.ID)
+	require.NoError(t, err)
+	edited.Order.Lists = slices.Clone(edited.Order.Lists)
+	edited.Order.Lists[0].Blocks = edited.Order.Lists[0].Blocks[1:]
+	_, err = b.SetFallbackOrder(ws.ID, edited.Order)
+	require.NoError(t, err)
+
+	require.NoError(t, ws.Cfg.ReloadFromDisk(t.Context()))
+	saved, err := b.FallbackSettings(ws.ID)
+	require.NoError(t, err)
+	require.Len(t, saved.Order.Lists, 2)
+	require.Equal(t, order.Lists[0].Blocks[1:], saved.Order.Lists[0].Blocks)
+	require.Equal(t, kimi, saved.Order.Lists[1])
+}
 
 // An API provider's second account is a provider entry of its own: the same
 // type, endpoint and models, a name that says which account it is, and no

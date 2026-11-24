@@ -91,19 +91,33 @@ func checkFallbackOrder(cfg *config.Config, order config.FallbackOrder) error {
 	}
 	seen := map[[2]string]bool{}
 	for _, l := range order.Lists {
-		p, ok := cfg.Providers.Get(l.Provider)
-		if !ok || l.Model == "" {
-			return invalidFallback("a list for an unknown model %q of %q", l.Model, l.Provider)
-		}
 		if seen[[2]string{l.Provider, l.Model}] {
 			return invalidFallback("%s has two lists", l.Model)
 		}
 		seen[[2]string{l.Provider, l.Model}] = true
+		p, ok := cfg.Providers.Get(l.Provider)
+		if !ok || l.Model == "" {
+			// The desktop sends every list on each save. Preserve a saved
+			// list whose provider has since become unavailable.
+			if !ok && l.Provider != "" && l.Model != "" && isSavedFallbackList(cfg, l) {
+				continue
+			}
+			return invalidFallback("a list for an unknown model %q of %q", l.Model, l.Provider)
+		}
 		if err := checkFallbackBlocks(cfg, l.Blocks, fmt.Sprintf("%s %s list, ", p.Name, l.Model)); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func isSavedFallbackList(cfg *config.Config, list config.FallbackList) bool {
+	if cfg.Options == nil || cfg.Options.Fallback == nil {
+		return false
+	}
+	return slices.ContainsFunc(cfg.Options.Fallback.Lists, func(saved config.FallbackList) bool {
+		return saved.Provider == list.Provider && saved.Model == list.Model && slices.Equal(saved.Blocks, list.Blocks)
+	})
 }
 
 // checkFallbackBlocks checks one list's blocks; where names the list in

@@ -16,7 +16,7 @@ use crate::host::AppHandle;
 const TEST_PICK: &str = "CRUSH_DESKTOP_TEST_PICK_FOLDER";
 
 /// `folder_pick`: a path, or None when cancelled.
-pub fn pick(app: &AppHandle, start: &str) -> AppResult<Option<String>> {
+pub fn pick(app: &AppHandle, label: &str, start: &str) -> AppResult<Option<String>> {
     let probe = app
         .try_state::<AppState>()
         .is_some_and(|state| state.launch.probe.is_some());
@@ -25,7 +25,7 @@ pub fn pick(app: &AppHandle, start: &str) -> AppResult<Option<String>> {
     }
     let start = if Path::new(start).is_dir() { start } else { "" };
     let picked = app
-        .ask("pick-folder", serde_json::json!({"title": "Choose a folder", "start": start}), None)
+        .ask("pick-folder", serde_json::json!({"label": label, "title": "Choose a folder", "start": start}), None)
         .map_err(|e| AppError::new("folder_pick_failed", format!("The folder dialog gave no folder that can be used: {e}")))?;
     Ok(picked.as_str().filter(|path| !path.is_empty()).map(String::from))
 }

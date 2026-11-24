@@ -708,8 +708,8 @@ pub fn dir_list(path: String) -> AppResult<dirlist::DirList> {
     dirlist::list(&path)
 }
 
-pub fn folder_pick(app: AppHandle, start: String) -> AppResult<Option<String>> {
-    folderdialog::pick(&app, &start)
+pub fn folder_pick(app: AppHandle, label: &str, start: String) -> AppResult<Option<String>> {
+    folderdialog::pick(&app, label, &start)
 }
 
 #[cfg(test)]

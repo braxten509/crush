@@ -184,7 +184,7 @@ fn sync_call(app: &AppHandle, w: crate::host::Window, cmd: &str, args: &Value) -
         "remote_password_exists" => res(commands::remote_password_exists()),
         "remote_password_set" => res(commands::remote_password_set(a, arg(args, "first")?, arg(args, "second")?)),
         "dir_list" => res(commands::dir_list(arg(args, "path")?)),
-        "folder_pick" => res(commands::folder_pick(a, arg(args, "start")?)),
+        "folder_pick" => res(commands::folder_pick(a, w.label(), arg(args, "start")?)),
         _ => Err(json!(format!("Command {cmd} not found"))),
     }
 }

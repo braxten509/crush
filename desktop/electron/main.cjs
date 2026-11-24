@@ -11,6 +11,7 @@
 
 const { app, BrowserWindow, Menu, Notification, clipboard, dialog, ipcMain, protocol, session } = require("electron");
 const { execFile, spawn } = require("node:child_process");
+const { randomBytes } = require("node:crypto");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
@@ -290,12 +291,16 @@ async function answer(message) {
       showNotification(message);
       return true;
     case "pick-folder": {
-      const parent = BrowserWindow.getFocusedWindow() ?? [...windows.values()].find((win) => !win.isDestroyed());
+      const parent = message.label
+        ? windows.get(message.label)
+        : BrowserWindow.getFocusedWindow() ?? [...windows.values()].find((win) => !win.isDestroyed());
+      if (message.label && (!parent || parent.isDestroyed())) return "";
       const options = {
         title: message.title,
         defaultPath: message.start || undefined,
         properties: ["openDirectory", "createDirectory"],
       };
+      if (message.label) markPinnedPicker(parent, options);
       const picked = await (parent && !parent.isDestroyed() ? dialog.showOpenDialog(parent, options) : dialog.showOpenDialog(options));
       return picked.canceled ? "" : (picked.filePaths[0] ?? "");
     }
@@ -378,6 +383,21 @@ const pins = new WeakMap(); // BrowserWindow → pinned
 const pendingPins = new WeakSet(); // windows still to pin once they show a title
 const KWIN = process.platform === "linux" && process.env.XDG_SESSION_TYPE === "wayland" && /KDE/i.test(process.env.XDG_CURRENT_DESKTOP ?? "");
 
+// KDE's file portal can show a picker without importing its Wayland parent.
+// Variation selectors carry a per-process and per-picker token in the native
+// title without changing the visible label. Other apps' pickers have no token.
+function invisibleToken(bytes) {
+  return Array.from(randomBytes(bytes).toString("hex"), (digit) =>
+    String.fromCharCode(0xfe00 + Number.parseInt(digit, 16)),
+  ).join("");
+}
+
+const pickerToken = KWIN ? invisibleToken(12) : "";
+
+function markPinnedPicker(parent, options) {
+  if (pickerToken && pins.get(parent)) options.title += pickerToken + invisibleToken(8);
+}
+
 function pinFile() {
   return path.join(app.getPath("userData"), "window-pins.json");
 }
@@ -405,7 +425,7 @@ function savePin(label, on) {
 function setPinned(win, on) {
   pins.set(win, on);
   win.setAlwaysOnTop(on);
-  if (KWIN) kwinKeepAbove(win, on);
+  if (KWIN) kwinKeepAbove(win, on, pickerToken);
   const label = labels.get(win.webContents.id);
   if (label) savePin(label, on);
   sendState(win);
@@ -415,32 +435,32 @@ function setPinned(win, on) {
 // (the pin was just clicked there), else the one with this window's title.
 let kwinScripts = 0;
 let kwinDialogWatch = null;
-function kwinKeepAbove(win, on) {
+function kwinKeepAbove(win, on, token = "") {
   const name = `crush-desktop-pin-${process.pid}-${++kwinScripts}`;
   const file = path.join(os.tmpdir(), `${name}.js`);
   const watch = !kwinDialogWatch;
   if (watch) kwinDialogWatch = name;
   const script = `(function () {
   const pid = ${process.pid};
-  const title = ${JSON.stringify(win.getTitle())};
-  const mine = workspace.windowList().filter((w) => w.pid === pid && w.normalWindow);
-  const w = mine.length === 1 ? mine[0]
-    : mine.find((w) => w.caption === title || w.caption.startsWith(title + " <")) || mine.find((w) => w === workspace.activeWindow);
-  if (!w) throw new Error("the window to pin is missing");
-  w.keepAbove = ${on ? "true" : "false"};
-  if (!${watch}) return;
+  const pickerToken = ${JSON.stringify(token)};
+  const isOwner = (w) => w.pid === pid && w.normalWindow;
+  const isPicker = (w) => pickerToken && w.resourceClass === "org.freedesktop.impl.portal.desktop.kde" && w.caption.includes(pickerToken);
   // Portal dialogs can belong to another process. Follow the transient
   // parent chain, including confirmations opened over a file picker.
   const original = new Map();
   function sync() {
-    workspace.windowList().forEach((child) => {
+    const windows = workspace.windowList();
+    const hasPinnedOwner = windows.some((w) => isOwner(w) && w.keepAbove);
+    windows.forEach((child) => {
       const seen = new Set();
       let parent = child.transientFor;
       while (parent && parent.transientFor && !seen.has(parent)) {
         seen.add(parent);
         parent = parent.transientFor;
       }
-      if (parent && parent.pid === pid && parent.normalWindow && parent.keepAbove) {
+      const followsPin = parent && isOwner(parent) && parent.keepAbove;
+      const detachedPicker = hasPinnedOwner && isPicker(parent || child);
+      if (followsPin || detachedPicker) {
         if (!original.has(child)) original.set(child, child.keepAbove);
         child.keepAbove = true;
       } else if (original.has(child)) {
@@ -452,11 +472,19 @@ function kwinKeepAbove(win, on) {
   function added(child) {
     child.transientChanged.connect(sync);
     child.closed.connect(() => original.delete(child));
-    if (child.pid === pid && child.normalWindow) child.keepAboveChanged.connect(sync);
+    if (child.resourceClass === "org.freedesktop.impl.portal.desktop.kde") child.captionChanged.connect(sync);
+    if (isOwner(child)) child.keepAboveChanged.connect(sync);
     sync();
   }
-  workspace.windowList().forEach(added);
-  workspace.windowAdded.connect(added);
+  if (${watch}) {
+    workspace.windowList().forEach(added);
+    workspace.windowAdded.connect(added);
+  }
+  const title = ${JSON.stringify(win.getTitle())};
+  const mine = workspace.windowList().filter(isOwner);
+  const owner = mine.length === 1 ? mine[0]
+    : mine.find((w) => w.caption === title || w.caption.startsWith(title + " <")) || mine.find((w) => w === workspace.activeWindow);
+  if (owner) owner.keepAbove = ${on ? "true" : "false"};
 })();
 `;
   const gdbus = (call, ...rest) =>
@@ -574,6 +602,7 @@ ipcMain.handle("crush-invoke", (event, cmd, callArgs) => {
       try {
         const parent = BrowserWindow.fromWebContents(event.sender);
         const options = { title: "Export conversation", defaultPath: callArgs.name, filters: [{ name: "Markdown", extensions: ["md"] }] };
+        markPinnedPicker(parent, options);
         const picked = await (parent && !parent.isDestroyed() ? dialog.showSaveDialog(parent, options) : dialog.showSaveDialog(options));
         if (picked.canceled || !picked.filePath) return { ok: false };
         await fs.promises.writeFile(picked.filePath, callArgs.text, "utf8");

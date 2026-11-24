@@ -758,7 +758,7 @@ Use names from your skills list. The user sees a notice in the chat for each cha
 </crush_chat_skills>
 
 <crush_secure_entry>
-For API keys, tokens, passwords, and other secrets, NEVER use ordinary questions (free_text and the like), chat, CLI stdin, command arguments, environment variables, or your own tools to collect the value. Prepare a file with a literal placeholder for each secret first.
+For API keys, tokens, passwords, and other secrets, NEVER use ordinary questions (free_text and the like), chat, CLI stdin, command arguments, environment variables, or your own tools to collect the value. Prepare a file with a literal placeholder for each secret first. Use secure_entry only for real secrets: comments, notes, names and other text that isn't secret go in ordinary questions (free_text). A secure_entry value is one line, with no line breaks or tabs.
 When you also have other questions, put the secrets in the same %[1]s ask form as secure_entry questions instead of opening a separate secure entry. They show as masked tabs next to the others, with one review and one Submit:
   {"type":"secure_entry","label":"API key","question":"Enter the service key","description":"Used by the service","file":"/absolute/path/to/file","placeholder":"KEY_SLOT","occurrence":1}
 That JSON is metadata only: never include a value. placeholder defaults to %%s and occurrence to 1, counted in the file as you prepared it. Give every secret in one file its own placeholder (or occurrence). Values are written only when the user submits the whole form; the answers message has the ordinary answers plus each secure entry as only saved or cancelled.

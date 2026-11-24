@@ -242,6 +242,43 @@ function openChatFromToast(projectDir, sessionId) {
   send({ t: "call", id, label, cmd: "window_show_chat", args: { projectDir, sessionId: sessionId || null } });
 }
 
+// -- The Wayland clipboard through wl-clipboard (wl-copy, wl-paste). Each
+// returns null when there is no Wayland session or no such tool, so the
+// caller falls back to Electron's clipboard.
+
+function waylandTool(name) {
+  if (process.platform !== "linux" || !process.env.WAYLAND_DISPLAY) return null;
+  return found(`/usr/bin/${name}`, `/usr/local/bin/${name}`) ?? null;
+}
+
+// True once wl-copy took the text. wl-copy leaves a child behind that serves
+// the text, so only its exit is awaited, never its output pipes.
+function waylandCopy(text) {
+  const tool = waylandTool("wl-copy");
+  if (!tool) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    const args = text === "" ? ["--clear"] : ["--type", "text/plain"];
+    const child = spawn(tool, args, { stdio: ["pipe", "ignore", "ignore"] });
+    const timer = setTimeout(() => child.kill(), 5000);
+    child.on("error", () => (clearTimeout(timer), resolve(null)));
+    child.on("exit", (code) => (clearTimeout(timer), resolve(code === 0 ? true : null)));
+    child.stdin.on("error", () => {});
+    child.stdin.end(text);
+  });
+}
+
+// The clipboard's text exactly as held, "" when it holds no text, or null
+// when wl-paste is not there.
+function waylandPaste() {
+  const tool = waylandTool("wl-paste");
+  if (!tool) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    execFile(tool, ["--no-newline", "--type", "text/plain"], { timeout: 5000, maxBuffer: 64 << 20, encoding: "utf8" }, (error, out) =>
+      resolve(error ? "" : out),
+    );
+  });
+}
+
 // What the helper asks for and waits on.
 async function answer(message) {
   switch (message.op) {
@@ -263,12 +300,18 @@ async function answer(message) {
       return picked.canceled ? "" : (picked.filePaths[0] ?? "");
     }
     case "clipboard.write":
+      // On Wayland the desktop's own tool sets the clipboard: Electron's
+      // write there only reached this app, and other apps kept pasting the
+      // older text (owner, 2026-11-24).
+      if (await waylandCopy(message.text)) return message.text === "" || (await waylandPaste()) === message.text;
       // Electron's clipboard calls hand back promises (Electron 44).
       await clipboard.writeText(message.text);
       // Read back, as the terminal does, so a lost write is tried again.
       return message.text === "" || (await clipboard.readText()) === message.text;
-    case "clipboard.read":
-      return (await clipboard.readText()) || null;
+    case "clipboard.read": {
+      const text = await waylandPaste();
+      return (text ?? (await clipboard.readText())) || null;
+    }
     default:
       throw new Error(`unknown ask ${message.op}`);
   }

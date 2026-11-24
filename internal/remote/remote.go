@@ -228,6 +228,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /v1/steps/{id}", s.handleStep)
 	mux.HandleFunc("GET /v1/media/{msg}/{idx}", s.handleMedia)
 	mux.HandleFunc("GET /v1/question-image/{request}/{question}/{choice}", s.handleQuestionImage)
+	mux.HandleFunc("GET /v1/question-audio/{request}/{question}/{choice}", s.handleQuestionAudio)
 	mux.HandleFunc("POST /v1/send", s.handleSend)
 	mux.HandleFunc("POST /v1/cancel", s.simple(ActCancel))
 	mux.HandleFunc("POST /v1/interrupt", s.simple(ActInterrupt))
@@ -355,7 +356,70 @@ func (s *Server) handleMedia(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(data)
 }
 
-const maxQuestionImage = 8 << 20
+const (
+	maxQuestionImage = 8 << 20
+	maxQuestionAudio = 25 << 20
+)
+
+// handleQuestionAudio serves the audio file of a choice in the questions the
+// shared chat waits on. The path comes from the pending request only, never
+// from the phone.
+func (s *Server) handleQuestionAudio(w http.ResponseWriter, r *http.Request) {
+	notFound := func() { writeError(w, http.StatusNotFound, errors.New("no such audio")) }
+	q, ok := pendingQuestionFor(s.src, s.hub.currentSession())
+	if !ok || q.ID != r.PathValue("request") {
+		notFound()
+		return
+	}
+	var path string
+	for _, qq := range q.Questions {
+		if qq.ID != r.PathValue("question") {
+			continue
+		}
+		for _, c := range qq.Choices {
+			if c.ID == r.PathValue("choice") {
+				path = c.Audio
+			}
+		}
+	}
+	var typ string
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".mp3":
+		typ = "audio/mpeg"
+	case ".wav":
+		typ = "audio/wav"
+	case ".m4a":
+		typ = "audio/mp4"
+	case ".aac":
+		typ = "audio/aac"
+	case ".ogg":
+		typ = "audio/ogg"
+	case ".flac":
+		typ = "audio/flac"
+	}
+	if typ == "" || !filepath.IsAbs(path) {
+		notFound()
+		return
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		notFound()
+		return
+	}
+	defer f.Close()
+	if info, err := f.Stat(); err != nil || !info.Mode().IsRegular() || info.Size() > maxQuestionAudio {
+		notFound()
+		return
+	}
+	data, err := io.ReadAll(io.LimitReader(f, maxQuestionAudio+1))
+	if err != nil || len(data) > maxQuestionAudio {
+		notFound()
+		return
+	}
+	w.Header().Set("Content-Type", typ)
+	w.Header().Set("Cache-Control", "private, max-age=3600")
+	_, _ = w.Write(data)
+}
 
 // handleQuestionImage serves the sketch of a choice in the questions the
 // shared chat waits on. The path comes from the pending request only, never

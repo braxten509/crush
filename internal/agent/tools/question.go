@@ -78,6 +78,7 @@ type QuestionChoice struct {
 	Label       string `json:"label" description:"Display text for this choice"`
 	Description string `json:"description,omitempty" description:"Optional description for this choice"`
 	Image       string `json:"image,omitempty" description:"Optional absolute path to a PNG sketch of this choice, shown while it is under the cursor"`
+	Audio       string `json:"audio,omitempty" description:"Optional absolute path to an audio file (.mp3, .wav, .m4a, .aac, .ogg, or .flac) that the user can play in the form"`
 }
 
 // NewQuestionTool creates a new question tool.
@@ -154,7 +155,7 @@ func FormatAnswers(answers []question.Answer, questions []question.Question) str
 func convertChoices(in []QuestionChoice) []question.Choice {
 	out := make([]question.Choice, len(in))
 	for i, c := range in {
-		out[i] = question.Choice{ID: c.ID, Label: c.Label, Description: c.Description, Image: c.Image}
+		out[i] = question.Choice{ID: c.ID, Label: c.Label, Description: c.Description, Image: c.Image, Audio: c.Audio}
 	}
 	return out
 }

@@ -1,10 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const state = vi.hoisted(() => ({ writes: [], notifications: [] }));
+const state = vi.hoisted(() => ({ writes: [], notifications: [], updated: 0 }));
 
-vi.mock("../busy.js", () => ({ windowBusy: () => false }));
+vi.mock("../busy.js", () => ({ windowBusy: () => true }));
 vi.mock("../engine/api.js", () => ({
-  api: { setConfig: async (...args) => state.writes.push(args), setCpuAffinity: async () => ({ cpus: "0" }) },
+  api: {
+    setConfig: async (...args) => state.writes.push(args),
+    setCpuAffinity: async () => ({ cpus: "0" }),
+    updateAgent: async () => {
+      state.updated += 1;
+    },
+  },
   SCOPE: { global: 0 },
 }));
 vi.mock("../compaction.js", () => ({
@@ -25,6 +31,7 @@ beforeEach(async () => {
   vi.resetModules();
   state.writes = [];
   state.notifications = [];
+  state.updated = 0;
   settings = await import("./store.svelte.js");
 });
 
@@ -44,5 +51,13 @@ describe("tool-call interruption setting", () => {
     }
     expect(state.writes).toEqual([]);
     expect(state.notifications).toHaveLength(3);
+  });
+});
+
+describe("compaction limit setting", () => {
+  it("saves while the active chat is busy", async () => {
+    expect(await settings.saveAutoCompact(250000)).toBe(true);
+    expect(state.writes).toEqual([[0, "options.auto_compact_token_limit", 250000]]);
+    expect(state.updated).toBe(1);
   });
 });

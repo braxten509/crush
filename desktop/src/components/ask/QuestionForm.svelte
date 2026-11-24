@@ -23,6 +23,7 @@
   import Field from "../kit/Field.svelte";
   import MarkdownView from "../render/MarkdownView.svelte";
   import Rule from "../Rule.svelte";
+  import AudioRow from "./AudioRow.svelte";
   import Picture from "./Picture.svelte";
   import SecureField from "./SecureField.svelte";
   import { cancelQuestions, submitAnswers } from "../../lib/ask/answers.js";
@@ -48,6 +49,7 @@
   let noteKey = $state(null); // the choice id (or question id) whose note is open
   let noteText = $state("");
   let hovered = $state(-1);
+  let activeAudioKey = $state(null); // `${pageIndex}:${choice.id}` currently playing/active
   let secureValues = $state(Object.fromEntries(items.filter((i) => typeOf(i) === "secure_entry").map((i) => [i.id, ""])));
   let secureErrors = $state({});
   let root = $state(null);
@@ -101,6 +103,7 @@
     if (total === 0) return;
     snapshot();
     noteKey = null;
+    activeAudioKey = null;
     active = ((to % total) + total) % total;
     hovered = -1;
     focusActive();
@@ -125,6 +128,7 @@
 
   async function submit() {
     if (sending) return;
+    activeAudioKey = null;
     if (secure) {
       for (const it of items) {
         if (typeOf(it) !== "secure_entry" || settled(it.id)) continue;
@@ -161,6 +165,7 @@
   }
 
   function cancel() {
+    activeAudioKey = null;
     for (const id of Object.keys(secureValues)) secureValues[id] = "";
     finished = true;
     if (local) local.onCancel();
@@ -473,12 +478,16 @@
               {:else if k === "single_choice" || k === "multi_choice"}
                 <div class="choices" onmouseleave={() => (hovered = -1)}>
                   {#each it.choices ?? [] as choice, at (choice.id)}
-                    <div class="choice" class:cursor={at === (i === active && hovered >= 0 ? hovered : st.cursor)} onmouseenter={() => (hovered = at)} onclick={() => clickChoice(at)} role="option" aria-selected={k === "multi_choice" ? st.picked[at] : at === st.cursor} tabindex="-1">
+                    {@const audioKey = `${i}:${choice.id}`}
+                    <div class="choice" class:with-audio={Boolean(choice.audio)} class:cursor={at === (i === active && hovered >= 0 ? hovered : st.cursor)} onmouseenter={() => (hovered = at)} onclick={() => clickChoice(at)} role="option" aria-selected={k === "multi_choice" ? st.picked[at] : at === st.cursor} tabindex="-1">
                       <span class="mark" class:check={k === "multi_choice"} class:on={k === "multi_choice" ? st.picked[at] : at === st.cursor}></span>
                       <span class="choice-text">
                         <span class="label">{choice.label}</span>
                         {#if choice.description}<span class="detail">{choice.description}</span>{/if}
                       </span>
+                      {#if choice.audio}
+                        <AudioRow path={choice.audio} active={activeAudioKey === audioKey} onActivate={() => (activeAudioKey = audioKey)} />
+                      {/if}
                     </div>
                     {#if i === active && noteKey === choice.id}
                       <div class="note"><Field bind:value={noteText} placeholder="Add a note" label="Note" /></div>
@@ -682,12 +691,17 @@
     box-sizing: border-box;
     cursor: pointer;
   }
+  .choice.with-audio {
+    flex-wrap: wrap;
+    row-gap: calc(4 * var(--px));
+  }
   /* The name, then its description on its own line under it (owner,
      2026-10-25: side by side looked crammed). */
   .choice-text {
     display: flex;
     flex-direction: column;
     gap: calc(2 * var(--px));
+    flex: 1;
     min-width: 0;
   }
   .choice:hover {

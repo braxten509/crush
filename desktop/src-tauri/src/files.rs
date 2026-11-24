@@ -87,7 +87,13 @@ pub fn read(path: &str, cwd: &str, max_bytes: u64) -> AppResult<(String, String)
     if data.len() as u64 > max_bytes {
         return Err(too_big(&full, data.len() as u64, max_bytes));
     }
-    let mime = detect_content_type(&data).to_string();
+    let detected = detect_content_type(&data);
+    let mime = if detected == "application/octet-stream" {
+        extension_type(&full).unwrap_or(detected)
+    } else {
+        detected
+    }
+    .to_string();
     Ok((mime, base64::engine::general_purpose::STANDARD.encode(&data)))
 }
 
@@ -225,6 +231,7 @@ fn extension_type(path: &Path) -> Option<&'static str> {
         "ogg" => "audio/ogg",
         "flac" => "audio/flac",
         "m4a" => "audio/mp4",
+        "aac" => "audio/aac",
         "mp4" => "video/mp4",
         "webm" => "video/webm",
         "mov" => "video/quicktime",

@@ -48,6 +48,9 @@ type Choice struct {
 	// Image is an optional absolute path to a PNG or JPEG sketch of the
 	// choice, shown in the form while the choice is under the cursor.
 	Image string `json:"image,omitempty"`
+	// Audio is an optional absolute path to an audio file (.mp3, .wav,
+	// .m4a, .aac, .ogg, or .flac) that the user can play in the form.
+	Audio string `json:"audio,omitempty"`
 }
 
 // Question is a single question definition within a Request.
@@ -159,6 +162,20 @@ func (q Question) Validate() error {
 				}
 				if _, err := os.Stat(c.Image); err != nil {
 					return fmt.Errorf("%s: choice %d (%s) image can't be read: %v", label, i+1, c.ID, err)
+				}
+			}
+			if c.Audio != "" {
+				ext := strings.ToLower(filepath.Ext(c.Audio))
+				switch ext {
+				case ".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac":
+				default:
+					return fmt.Errorf("%s: choice %d (%s) audio must be an absolute path to a .mp3, .wav, .m4a, .aac, .ogg, or .flac file", label, i+1, c.ID)
+				}
+				if !filepath.IsAbs(c.Audio) {
+					return fmt.Errorf("%s: choice %d (%s) audio must be an absolute path to a .mp3, .wav, .m4a, .aac, .ogg, or .flac file", label, i+1, c.ID)
+				}
+				if _, err := os.Stat(c.Audio); err != nil {
+					return fmt.Errorf("%s: choice %d (%s) audio can't be read: %v", label, i+1, c.ID, err)
 				}
 			}
 		}

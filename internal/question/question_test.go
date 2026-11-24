@@ -2,6 +2,8 @@ package question
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -207,4 +209,30 @@ func TestSecureEntryValidationAndPrepare(t *testing.T) {
 	require.NoError(t, r.Validate())
 	r.Questions[0].Choices = []Choice{{ID: "a", Label: "A"}}
 	require.ErrorContains(t, r.Validate(), "no choices")
+}
+
+func TestChoiceAudioValidation(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	wav := filepath.Join(dir, "tap.wav")
+	require.NoError(t, os.WriteFile(wav, []byte("RIFF"), 0o600))
+	txt := filepath.Join(dir, "note.txt")
+	require.NoError(t, os.WriteFile(txt, []byte("hi"), 0o600))
+
+	q := func(audio string) Question {
+		return Question{
+			Type:        TypeSingleChoice,
+			Text:        "Pick a sound",
+			Description: "Compare the clips.",
+			Choices: []Choice{
+				{ID: "a", Label: "A", Audio: audio},
+				{ID: "b", Label: "B"},
+			},
+		}
+	}
+
+	require.NoError(t, q(wav).Validate())
+	require.ErrorContains(t, q("relative.wav").Validate(), "absolute path")
+	require.ErrorContains(t, q(txt).Validate(), ".mp3, .wav")
+	require.ErrorContains(t, q(filepath.Join(dir, "missing.mp3")).Validate(), "can't be read")
 }

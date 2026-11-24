@@ -107,6 +107,7 @@ func QuestionsFromDomain(qs []question.Question) []QuestionItem {
 				Label:       c.Label,
 				Description: c.Description,
 				Image:       c.Image,
+				Audio:       c.Audio,
 			}
 		}
 		out[i] = QuestionItem{
@@ -136,6 +137,7 @@ func QuestionsToDomain(qs []QuestionItem) []question.Question {
 				Label:       c.Label,
 				Description: c.Description,
 				Image:       c.Image,
+				Audio:       c.Audio,
 			}
 		}
 		out[i] = question.Question{

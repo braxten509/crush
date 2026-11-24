@@ -55,8 +55,9 @@ func (m *UI) handleSelectModel(msg dialog.ActionSelectModel) tea.Cmd {
 func (m *UI) selectModel(msg dialog.ActionSelectModel, copilotImported bool) tea.Cmd {
 	var cmds []tea.Cmd
 
-	// we ignore dialogs with the oauth id as they need to be able to be dismissed
-	if m.isAgentBusy() && !m.dialog.ContainsDialog(dialog.OAuthID) {
+	// we ignore dialogs with the oauth id as they need to be able to be dismissed.
+	// The helper model is set in config and leaves any running turn alone.
+	if m.isAgentBusy() && msg.ModelType != config.SelectedModelTypeSmall && !m.dialog.ContainsDialog(dialog.OAuthID) {
 		return util.ReportWarn("Agent is busy, please wait...")
 	}
 

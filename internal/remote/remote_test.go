@@ -421,6 +421,46 @@ func TestQuestionChoicePictures(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, code)
 }
 
+// TestQuestionChoiceAudio: the audio of a choice in the pending questions is
+// served; anything else (missing, wrong chat, wrong id) is not found.
+func TestQuestionChoiceAudio(t *testing.T) {
+	t.Parallel()
+
+	env := newTestEnv(t, phoneAddr)
+	env.src.setChat("s1", "Chat")
+	env.srv.SetPresence(Presence{SessionID: "s1"})
+	clip := filepath.Join(t.TempDir(), "tap.wav")
+	require.NoError(t, os.WriteFile(clip, []byte("RIFF\x24\x00\x00\x00WAVEfmt "), 0o600))
+	env.src.setQuestion(&question.Request{ID: "r1", SessionID: "s1", Questions: []question.Question{{
+		ID: "sound", Type: question.TypeSingleChoice, Text: "Which sound?",
+		Choices: []question.Choice{{ID: "a", Label: "A", Audio: clip}, {ID: "b", Label: "B"}},
+	}}})
+
+	get := func(path string) (int, string, string) {
+		resp, err := http.Get(env.url + path)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		return resp.StatusCode, resp.Header.Get("Content-Type"), string(body)
+	}
+	code, typ, body := get("/v1/question-audio/r1/sound/a")
+	require.Equal(t, http.StatusOK, code)
+	require.Equal(t, "audio/wav", typ)
+	require.Equal(t, "RIFF\x24\x00\x00\x00WAVEfmt ", body)
+
+	for _, path := range []string{"/v1/question-audio/r1/sound/b", "/v1/question-audio/r1/sound/zz", "/v1/question-audio/r1/zz/a", "/v1/question-audio/r9/sound/a"} {
+		code, _, _ = get(path)
+		require.Equal(t, http.StatusNotFound, code, path)
+	}
+
+	env.src.setQuestion(&question.Request{ID: "r2", SessionID: "s2", Questions: []question.Question{{
+		ID: "sound", Type: question.TypeSingleChoice, Text: "Which sound?",
+		Choices: []question.Choice{{ID: "a", Label: "A", Audio: clip}, {ID: "b", Label: "B"}},
+	}}})
+	code, _, _ = get("/v1/question-audio/r2/sound/a")
+	require.Equal(t, http.StatusNotFound, code)
+}
+
 // testEnv runs a share whose requests all seem to come from one address.
 type testEnv struct {
 	t   *testing.T

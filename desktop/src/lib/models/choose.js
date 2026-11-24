@@ -52,7 +52,10 @@ function signIn(choice, reAuthenticate) {
 export async function chooseModel(choice) {
   const { provider, model, modelType, reAuthenticate = false, onboarding = false } = choice;
   // Step 1: an open sign-in sheet may still be dismissed (model_select.go:124-126).
-  if (windowBusy() && !hasDialog("oauth")) {
+  // Helper and compaction models live in global config and never interrupt a
+  // running reply, so they can be changed while a chat is busy.
+  const globalModel = modelType === "small" || modelType === "compact";
+  if (!globalModel && windowBusy() && !hasDialog("oauth")) {
     notify("warn", BUSY);
     return false;
   }

@@ -3,7 +3,6 @@
 // scope); the rows show the effective value from ws.config, which the
 // workspace store re-reads on config_changed (M3), so a change made in the
 // terminal shows here too.
-import { windowBusy } from "../busy.js";
 import { api, SCOPE } from "../engine/api.js";
 import { CODEX_API_COMPACT_BEFORE_PRICE_STEP, codexAPICompactBeforePriceStep, ZEN_FREE_DEEPSEEK_FULL_CONTEXT, zenFreeDeepSeekFullContext } from "../compaction.js";
 import { focusField } from "../stores/composer.svelte.js";
@@ -201,10 +200,6 @@ export function parseTokens(text) {
 }
 
 export async function saveAutoCompact(value) {
-  if (windowBusy()) {
-    notify("warn", "Agent is busy, please wait before saving the compaction limit");
-    return false;
-  }
   try {
     await setOption("options.auto_compact_token_limit", value);
     await api.updateAgent();

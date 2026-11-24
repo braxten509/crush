@@ -322,6 +322,9 @@ type QuestionChoice struct {
 	// Image is an absolute path to a sketch of the choice on the
 	// machine running Crush.
 	Image string `json:"image,omitempty"`
+	// Audio is an absolute path to an audio file for the choice on the
+	// machine running Crush.
+	Audio string `json:"audio,omitempty"`
 }
 
 // QuestionAnswer is the wire format for answering a batch

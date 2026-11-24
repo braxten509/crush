@@ -137,3 +137,8 @@ func TestDiscoverAnthropicModels_IncompletePaginationFails(t *testing.T) {
 	}, echoResolver{})
 	require.Error(t, err)
 }
+
+// echoResolver resolves a value to itself, as a literal API key does.
+type echoResolver struct{}
+
+func (echoResolver) ResolveValue(v string) (string, error) { return v, nil }

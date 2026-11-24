@@ -175,20 +175,10 @@ func (o Ops) CloseSessionBranch(ctx context.Context, sessionID string) (session.
 }
 
 // ProviderAvailability says, by provider id, why a provider cannot run in
-// the workspace's folder. Empty when every provider can run.
+// the workspace's folder. No provider has a folder rule since Kimi Coding
+// was removed (owner, 2026-11-24), so it is always empty.
 func (o Ops) ProviderAvailability() map[string]string {
-	dir := o.Cfg.WorkingDir()
-	ids := []string{agent.KimiProviderID}
-	for id := range o.Cfg.Config().Providers.Seq2() {
-		ids = append(ids, id)
-	}
-	out := make(map[string]string)
-	for _, id := range ids {
-		if reason := agent.KimiUnusable(id, dir); reason != "" {
-			out[id] = reason
-		}
-	}
-	return out
+	return map[string]string{}
 }
 
 // -- MCP --

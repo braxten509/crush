@@ -269,7 +269,7 @@ func (s *ConfigStore) refreshCatalogsAfterAuth(scope Scope, providerID string, i
 }
 
 // refreshDynamicProviderModels fetches the live model list for a dynamic
-// provider (such as Anthropic or Kimi) right after an API key is saved so
+// provider (such as Anthropic) right after an API key is saved so
 // the apps show its available models without a restart. Best effort: a
 // failure leaves the catalog fallback in place.
 func (s *ConfigStore) refreshDynamicProviderModels(ctx context.Context, providerID string) {

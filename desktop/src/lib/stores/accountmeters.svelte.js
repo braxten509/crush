@@ -1,8 +1,8 @@
 // Every sign-in's usage in the right panel (owner, 2026-10-21): a switch in
 // Settings > Appearance, off by default, kept in this window's local storage.
 // Every tool that reports usage is listed (owner, 2026-10-25): each Claude
-// Code, Codex and Grok login, signed in or not, and Antigravity, OpenCode and
-// Kimi, which have no sign-in list, once they have given a reading. While the
+// Code, Codex and Grok login, signed in or not, and Antigravity and OpenCode,
+// which have no sign-in list, once they have given a reading. While the
 // switch is on and the window is connected, those tools are read again on a
 // timer: Codex every minute, the others every 10 minutes, since Anthropic's
 // usage address refuses frequent reads and a refusal would also hide the main
@@ -36,7 +36,7 @@ export const accountMeters = $state({ on: readOn() });
 // The tools with sign-ins (config.AccountKinds), then those without.
 const GROK = "grok-cli";
 const SIGN_IN_KINDS = [CLAUDE, CODEX, GROK, AGY];
-const LOGINLESS_KINDS = ["opencode-cli", "kimi-coding"];
+const LOGINLESS_KINDS = ["opencode-cli"];
 const LIST_KINDS = [...SIGN_IN_KINDS, ...LOGINLESS_KINDS];
 
 const TEN_MINUTES = 10 * 60_000;
@@ -60,7 +60,6 @@ const TOOL_NAMES = {
   [GROK]: "Grok",
   "agy-cli": "Agy",
   "opencode-cli": "Opencode Go",
-  "kimi-coding": "Kimi",
 };
 
 // The columns every tool shares (owner, 2026-10-25), and the window each
@@ -80,7 +79,7 @@ export function setAccountMeters(on) {
 
 // The listed tools, in LIST_KINDS order: those with a signed-in account, and
 // those without an account list that are signed in and have a reading.
-export function listedKinds(accounts, byKind = {}, { cliSignedIn = null, providers = null } = {}) {
+export function listedKinds(accounts, byKind = {}, { cliSignedIn = null } = {}) {
   return LIST_KINDS.filter((kind) => {
     if (SIGN_IN_KINDS.includes(kind)) {
       const known = (accounts ?? []).filter((a) => a.kind === kind);
@@ -88,10 +87,6 @@ export function listedKinds(accounts, byKind = {}, { cliSignedIn = null, provide
       return kind === AGY && Boolean(readTime(byKind[kind]?.read_at));
     }
     if (kind === "opencode-cli" && cliSignedIn && cliSignedIn[kind] === false) return false;
-    if (kind === "kimi-coding" && providers?.has?.(kind)) {
-      const p = providers.get(kind);
-      if (!p?.has_api_key && !p?.has_oauth) return false;
-    }
     return Boolean(readTime(byKind[kind]?.read_at));
   });
 }
@@ -181,8 +176,8 @@ function partOf(windows, name, now) {
 // read failed), "idle" (the last read failed, so the numbers are old: an
 // unused Claude login expires until Claude Code runs on it again) or
 // "signed-out".
-export function accountGroups({ accounts = [], byKind = {}, inUse = { kind: "", account: "" }, now = Date.now(), cliSignedIn = null, providers = null } = {}) {
-  return listedKinds(accounts, byKind, { cliSignedIn, providers }).map((kind) => {
+export function accountGroups({ accounts = [], byKind = {}, inUse = { kind: "", account: "" }, now = Date.now(), cliSignedIn = null } = {}) {
+  return listedKinds(accounts, byKind, { cliSignedIn }).map((kind) => {
     const known = accounts.filter((a) => a.kind === kind);
     const logins = known.length ? known.filter((a) => a.signed_in) : [{ id: "", kind, name: TOOL_NAMES[kind], signed_in: true }];
     const tool = TOOL_NAMES[kind] ?? kind;

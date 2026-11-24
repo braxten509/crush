@@ -126,40 +126,6 @@ describe("the meters follow the shown chat's model after a change", () => {
     expect(fiveHourLeft(panel.meterNow().meters)).toBe(40);
   });
 
-
-  it("shows Moonshot AI's 5h and Monthly meters for a chat whose own model is Moonshot", async () => {
-    h.routes.set("GET config", { options: { tui: { composer_footer: ["model", "settings", "context", "limit_5h", "limit_weekly", "resets"] } }, models: {} });
-    h.routes.set("GET providers", [{ id: "kimi-coding", name: "Moonshot AI", type: "anthropic", models: [{ id: "k3.1-pro" }] }]);
-    h.routes.set("GET /v1/limits", {
-      clis: [
-        reading("claude-code", 10),
-        {
-          kind: "kimi-coding",
-          account: "",
-          state: "ready",
-          read_at: "2026-10-24T10:00:00Z",
-          windows: [
-            { name: "5h", used: 25, resets_at: "2099-01-01T00:00:00Z" },
-            { name: "Monthly", used: 15, resets_at: "2099-02-01T00:00:00Z" },
-          ],
-        },
-      ],
-    });
-    h.routes.set("GET agent", agent());
-    await workspace.loadConfig();
-    await workspace.loadProviders();
-    await workspace.loadAgent();
-    await limits.loadLimits();
-    const { sessions } = await import("../../lib/stores/sessions.svelte.js");
-    sessions.currentId = "chat-kimi";
-    sessions.byId["chat-kimi"] = { id: "chat-kimi", model: { provider: "kimi-coding", model: "k3.1-pro" } };
-    expect(panel.meterNow().meters.map((m) => [m.id, Math.round(m.left)])).toEqual([
-      ["context", 100],
-      ["limit_5h", 75],
-      ["limit_weekly", 85],
-    ]);
-  });
-
   it("an OpenCode Go account with weekly and monthly windows draws one meter per window", async () => {
     h.routes.set("GET config", { options: { tui: { composer_footer: ["model", "settings", "context", "limit_5h", "limit_weekly", "resets"] } }, models: {} });
     h.routes.set("GET providers", [{ id: "opencode-cli", name: "OpenCode Go", type: "opencode-cli", models: [{ id: "opencode-go/deepseek-v4.1-flash" }] }]);

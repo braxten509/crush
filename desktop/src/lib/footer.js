@@ -323,18 +323,12 @@ export function cliKind(agent, providers) {
   return CLI_KINDS.has(kind) ? kind : "";
 }
 
-// LIMIT_KINDS are the providers whose account reports usage windows: the
-// agent CLIs, and Moonshot AI, whose plan meters the desktop shows even
-// though it is an API provider (owner, 2026-10-24).
-export const LIMIT_KINDS = new Set([...CLI_KINDS, "kimi-coding"]);
-
-// limitKind is the kind whose usage windows apply, or "".
+// limitKind is the kind whose usage windows apply, or "": only the agent
+// CLIs report usage windows.
 export function limitKind(agent, providers) {
   const provider = agent?.model_cfg?.provider;
   if (!provider) return "";
-  // An API provider that meters its own account is keyed by its id, not
-  // by its API type (Moonshot AI: "kimi-coding", engine-side too).
-  if (LIMIT_KINDS.has(provider)) return provider;
+  if (CLI_KINDS.has(provider)) return provider;
   const kind = providerKind(provider, providers);
   return CLI_KINDS.has(kind) ? kind : "";
 }

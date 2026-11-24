@@ -401,35 +401,3 @@ describe("limitWindows (cliagent.Limits and Limit.Left)", () => {
   });
 });
 
-describe("Moonshot AI's usage windows", () => {
-  it("uses the provider kind for limits but stays an API provider everywhere else", () => {
-    const agent = { model_cfg: { provider: "kimi-coding", model: "k3.1-pro" } };
-    const providers = [{ id: "kimi-coding", name: "Moonshot AI", type: "anthropic" }];
-    expect(limitKind(agent, providers)).toBe("kimi-coding");
-    expect(cliKind(agent, providers)).toBe("");
-  });
-
-  it("shows 5h and Monthly in the meters even when 'Other usage limits' is off", () => {
-    const reading = {
-      kind: "kimi-coding",
-      read_at: "2026-10-24T12:00:00Z",
-      windows: [
-        { name: "5h", used: 40, resets_at: "2026-10-24T15:00:00Z" },
-        { name: "Monthly", used: 10, resets_at: "2026-11-25T00:00:00Z" },
-      ],
-    };
-    const now = Date.parse("2026-10-24T13:00:00Z");
-    const windows = limitWindows(reading, "k3.1-pro", now);
-    expect(windows.map((w) => [w.name, w.left])).toEqual([
-      ["5h", 60],
-      ["Monthly", 90],
-    ]);
-    const items = ["model", "settings", "context", "limit_5h", "limit_weekly", "resets"];
-    const { meters } = meterModel({ items, limits: windows });
-    expect(idsLeft(meters)).toEqual([
-      ["context", 0],
-      ["limit_5h", 60],
-      ["limit_weekly", 90],
-    ]);
-  });
-});

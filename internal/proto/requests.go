@@ -111,7 +111,7 @@ type GitBranchResponse struct {
 
 // ProviderAvailabilityResponse carries, by provider id, why a provider
 // cannot run in the workspace's folder. A provider that can run is absent
-// (owner, 2026-10-24: Moonshot AI only runs in Git projects).
+// (no provider has a folder rule now).
 type ProviderAvailabilityResponse struct {
 	Providers map[string]string `json:"providers"`
 }

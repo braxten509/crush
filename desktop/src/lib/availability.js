@@ -1,6 +1,6 @@
 // The model menu's view of the engine's provider availability
-// (providers/availability, owner 2026-10-24: Moonshot AI only runs in Git
-// projects). The store holds the folder's answer; these two read it.
+// (providers/availability: a provider with a folder rule; none has one now).
+// The store holds the folder's answer; these two read it.
 
 // unavailableReason is why a provider cannot run here, or "".
 export function unavailableReason(providerId, byProvider) {

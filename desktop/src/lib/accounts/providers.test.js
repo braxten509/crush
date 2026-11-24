@@ -13,7 +13,7 @@ const cfg = {
     provider("anthropic", { name: "Anthropic", type: "anthropic", has_api_key: true }),
     provider("my-proxy", { name: "My Proxy", type: "openai", has_api_key: true }),
     provider("openrouter", { name: "OpenRouter", type: "openrouter", disable: true }),
-    provider("kimi-coding", { name: "Moonshot AI", type: "anthropic", flat_rate: true, has_api_key: true }),
+    provider("plan-api", { name: "Plan API", type: "anthropic", flat_rate: true, has_api_key: true }),
   ]),
 };
 
@@ -24,7 +24,7 @@ const catalog = [
   { id: "hyper", name: "Hyper", type: "hyper", models: [] },
   { id: "copilot", name: "GitHub Copilot", type: "copilot", models: [] },
   { id: "openai", name: "ChatGPT", type: "openai", models: [] },
-  { id: "kimi-coding", name: "Moonshot AI", type: "anthropic", models: [] },
+  { id: "plan-api", name: "Plan API", type: "anthropic", models: [] },
 ];
 
 describe("accountGroups", () => {
@@ -33,7 +33,7 @@ describe("accountGroups", () => {
     expect(groups.map((group) => group.id)).toEqual(["clis", "plans", "api"]);
     // A paid-plan provider (flat_rate) is not billed per use, so it is not
     // listed as an API provider.
-    expect(groups[1].rows.map((row) => row.id)).toEqual(["kimi-coding"]);
+    expect(groups[1].rows.map((row) => row.id)).toEqual(["plan-api"]);
     // A CLI hidden in the config is left out.
     expect(groups[0].rows.map((row) => row.id)).toEqual(["claude-code", "codex-cli", "grok-cli"]);
     // Custom providers first, then the catalog's order; the three removed

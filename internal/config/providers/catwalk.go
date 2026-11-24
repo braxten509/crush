@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"slices"
 	"sync"
 	"sync/atomic"
 
@@ -102,22 +103,18 @@ func (s *CatwalkSync) Get(ctx context.Context) ([]catwalk.Provider, error) {
 	return patchCatalog(s.result), s.err
 }
 
-// displayNames are the catalog providers the apps show under another
-// name (owner, 2026-10-24: Kimi's plan is sold as Moonshot AI).
-var displayNames = map[catwalk.InferenceProvider]string{
-	catwalk.InferenceProvider("kimi-coding"): "Moonshot AI",
+// removedProviders are catalog providers Crush does not offer (owner,
+// 2026-11-24: Kimi Coding removed; Kimi models stay through other
+// providers).
+var removedProviders = map[catwalk.InferenceProvider]bool{
+	catwalk.InferenceKimiCoding: true,
 }
 
-// patchCatalog renames the catalog entries the apps call differently. It
-// runs on every path, fetched or cached, so the name never depends on
-// which copy answered.
+// patchCatalog drops the catalog entries Crush does not offer. It runs on
+// every path, fetched or cached, so the list never depends on which copy
+// answered.
 func patchCatalog(providers []catwalk.Provider) []catwalk.Provider {
-	for i := range providers {
-		if name, ok := displayNames[providers[i].ID]; ok && name != "" {
-			providers[i].Name = name
-		}
-	}
-	return providers
+	return slices.DeleteFunc(providers, func(p catwalk.Provider) bool { return removedProviders[p.ID] })
 }
 
 // Updated reports whether the last Get replaced the catalog with fresh

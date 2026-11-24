@@ -35,7 +35,6 @@ func (b *Backend) startLimits() {
 	limitsHooked.backends[b] = struct{}{}
 	if len(limitsHooked.backends) == 1 {
 		cliagent.SetLimitsHook(sendLimits)
-		cliagent.SetLimitProviderKeySource(b.providerAPIKey)
 	}
 	limitsHooked.Unlock()
 	if testing.Testing() && !cliagent.LimitFetchersReplaced() {
@@ -80,31 +79,7 @@ func removeLimitsHook(b *Backend) {
 	delete(limitsHooked.backends, b)
 	if len(limitsHooked.backends) == 0 {
 		cliagent.SetLimitsHook(nil)
-		cliagent.SetLimitProviderKeySource(nil)
 	}
-}
-
-// providerAPIKey is the resolved key of an API provider a workspace
-// configured, for the usage reads that belong to the account. The first
-// workspace with a usable key answers.
-func (b *Backend) providerAPIKey(provider string) string {
-	for _, ws := range b.workspaces.Seq2() {
-		if ws.Cfg == nil {
-			continue
-		}
-		cfg := ws.Cfg.Config()
-		if cfg == nil {
-			continue
-		}
-		pc, ok := cfg.Providers.Get(provider)
-		if !ok {
-			continue
-		}
-		if key, err := ws.Cfg.Resolver().ResolveValue(pc.APIKey); err == nil && key != "" {
-			return key
-		}
-	}
-	return ""
 }
 
 // sendLimits is the limits hook: every app gets the account's new state.

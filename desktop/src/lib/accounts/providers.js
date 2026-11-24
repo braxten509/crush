@@ -24,7 +24,7 @@ function row(id, name, provider, extra = {}) {
 }
 
 // → [{label, rows}] with "Agent CLIs" first, then "Subscriptions" (paid
-// plans like Kimi Coding, flat_rate in the config; owner, 2026-10-24), then
+// plans, flat_rate in the config; owner, 2026-10-24), then
 // "API providers".
 export function accountGroups(cfg, catalog) {
   const providers = cfg?.providers ?? new Map();

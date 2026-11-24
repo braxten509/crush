@@ -15,7 +15,7 @@ import (
 // Which live price applies depends on who sells the model:
 //
 //   - A provider whose own API reports prices (OpenRouter, OrcaRouter,
-//     Tinfoil, Abacus, LiteLLM, Kimi ...) already carries them: that is
+//     Tinfoil, Abacus, LiteLLM ...) already carries them: that is
 //     what it bills, so it is left alone here.
 //   - A model's maker selling it on its own API (Anthropic, Google,
 //     OpenAI, xAI, DeepSeek ...) takes the price of the maker's own

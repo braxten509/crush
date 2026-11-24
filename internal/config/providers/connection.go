@@ -140,7 +140,7 @@ func connectionTestRequest(e Endpoint, apiKey string, resolver resolve.VariableR
 		baseURL = cmp.Or(baseURL, "https://api.anthropic.com")
 		// The Messages API lists models at /v1/models. An endpoint given
 		// with its /v1 (Anthropic's v2-era catalog entry) or without it
-		// (Kimi Coding's https://api.kimi.com/coding) both land there.
+		// (other Messages-API hosts) both land there.
 		baseURL = strings.TrimSuffix(strings.TrimRight(baseURL, "/"), "/v1")
 		testURL = baseURL + "/v1/models"
 

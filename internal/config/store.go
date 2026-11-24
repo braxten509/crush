@@ -190,7 +190,7 @@ func NewTestStore(cfg *Config, loadedPaths ...string) *ConfigStore {
 }
 
 // NewTestStoreAt is NewTestStore with a working directory, for tests that
-// need a real path (Kimi runs only inside git projects).
+// need a real path.
 func NewTestStoreAt(dir string, cfg *Config, loadedPaths ...string) *ConfigStore {
 	return &ConfigStore{
 		config:      cfg,

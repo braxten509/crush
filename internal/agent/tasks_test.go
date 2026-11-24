@@ -84,7 +84,7 @@ func TestAPIProvidersAvailableForBackgroundTasks(t *testing.T) {
 		"abacus":      {ID: config.AbacusProviderID, Type: catwalk.TypeCompletions, Models: []catwalk.Model{{ID: "claude-opus-5-5-thinking"}}},
 		"gemini":      {ID: "gemini", Type: catwalk.Type("google"), Models: []catwalk.Model{{ID: "gemini-3.8-flash", Reasoning: catwalk.Reasoning{Thinking: catwalk.ThinkingToggleable, EffortLevels: catwalk.NewEffortLevels("low", "medium", "high")}}}},
 		"claude-code": {ID: "claude-code", Type: config.TypeClaudeCode, Models: []catwalk.Model{{ID: "opus"}}},
-		"kimi-coding": {ID: "kimi-coding", Type: catwalk.TypeMessages, FlatRate: true, Models: []catwalk.Model{{ID: "k3.1-pro"}}},
+		"plan-api":    {ID: "plan-api", Type: catwalk.TypeMessages, FlatRate: true, Models: []catwalk.Model{{ID: "plan-model"}}},
 		"off":         {ID: "off", Type: catwalk.TypeResponses, Disable: true, Models: []catwalk.Model{{ID: "gpt"}}},
 		"empty":       {ID: "empty", Type: catwalk.TypeResponses},
 	})})}}
@@ -92,7 +92,7 @@ func TestAPIProvidersAvailableForBackgroundTasks(t *testing.T) {
 	for _, p := range h.taskProviders() {
 		names = append(names, taskProviderName(p))
 	}
-	require.Equal(t, []string{"abacus", "claude", "gemini", "kimi-coding"}, names, "API providers join the agent CLIs; disabled and model-less ones don't")
+	require.Equal(t, []string{"abacus", "claude", "gemini", "plan-api"}, names, "API providers join the agent CLIs; disabled and model-less ones don't")
 
 	gemini, _ := h.c.cfg.Config().Providers.Get("gemini")
 	_, err := taskModel(gemini, gemini.Models[0], TaskRequest{Fast: true})

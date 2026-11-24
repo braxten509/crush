@@ -278,23 +278,10 @@ func prepareKnownProvider(p catwalk.Provider, config ProviderConfig, headers map
 	prepared.Type = p.Type
 	prepared.Models = p.Models
 	prepared.ExtraHeaders = headers
-	if planProvider(p.ID) {
-		prepared.FlatRate = true
-	}
 	if prepared.ExtraParams == nil {
 		prepared.ExtraParams = make(map[string]string)
 	}
 	return prepared
-}
-
-// kimiCodingProvider is Kimi Coding's catalog provider ID.
-const kimiCodingProvider catwalk.InferenceProvider = "kimi-coding"
-
-// planProvider lists the catalog providers sold as a paid plan, not billed
-// per use: Kimi Coding (owner, 2026-10-24). They come out flat-rate, so no
-// cost is counted and the apps don't list them as per-use APIs.
-func planProvider(id catwalk.InferenceProvider) bool {
-	return id == kimiCodingProvider
 }
 
 // resolveProviderHeaders expands every header value in place, dropping
@@ -469,12 +456,12 @@ var probeDynamicProviders = !testing.Testing()
 
 // dynamicModelProvider lists the catalog providers whose model list always
 // comes from their own API, even though the catalog carries a list for
-// them (Kimi Coding and Anthropic). Their catalog models supply the details
+// them (Anthropic). Their catalog models supply the details
 // of the ids that come back, and nothing is listed that the API does not
 // return.
 func dynamicModelProvider(id string) bool {
 	switch catwalk.InferenceProvider(id) {
-	case kimiCodingProvider, catwalk.InferenceProviderAnthropic:
+	case catwalk.InferenceProviderAnthropic:
 		return true
 	default:
 		return false

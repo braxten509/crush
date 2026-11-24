@@ -1,6 +1,6 @@
 // Why a provider cannot run in the shown folder, by provider id
-// (engine op providers/availability, owner 2026-10-24: Moonshot AI only
-// runs in Git projects). The model menu dims those rows and says why; the
+// (engine op providers/availability; no provider has a folder rule now).
+// The model menu dims those rows and says why; the
 // engine refuses the turn as well, so this is guidance, not the guard.
 import { api } from "../engine/api.js";
 

@@ -190,7 +190,7 @@ describe("the model menu (ModelMenu.svelte)", () => {
 
   it("dims a provider that cannot run in this folder", async () => {
     state.routes["GET config"] = config();
-    availabilityStore.byProvider = { anthropic: "Moonshot AI is not usable here: this folder is not a git project." };
+    availabilityStore.byProvider = { anthropic: "This provider is not usable here: this folder is not a git project." };
     state.routes["GET providers/availability"] = { providers: availabilityStore.byProvider };
     mount();
     await settle();
@@ -221,7 +221,7 @@ describe("the model menu (ModelMenu.svelte)", () => {
     const { setChatFolder } = await import("../../lib/engine/api.js");
     const { loadAvailability } = await import("../../lib/stores/availability.svelte.js");
     const { sessions } = await import("../../lib/stores/sessions.svelte.js");
-    const home = { providers: { anthropic: "Moonshot AI is not usable here: this is your home folder" } };
+    const home = { providers: { anthropic: "This provider is not usable here: this is your home folder" } };
     state.routes["GET providers/availability"] = home;
     await loadAvailability();
     let finishHome;

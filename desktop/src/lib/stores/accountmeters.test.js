@@ -29,8 +29,8 @@ describe("account meters", () => {
     expect(listedKinds(accounts, {})).toEqual(["claude-code", "codex-cli"]);
     const never = { "agy-cli": { kind: "agy-cli", state: "error", error: "agy not found", windows: [] } };
     expect(listedKinds(accounts, never)).toEqual(["claude-code", "codex-cli"]);
-    const read = { "agy-cli": reading("agy-cli", "", 0, 0), "kimi-coding": reading("kimi-coding", "", 0, 0) };
-    expect(listedKinds(accounts, read)).toEqual(["claude-code", "codex-cli", "agy-cli", "kimi-coding"]);
+    const read = { "agy-cli": reading("agy-cli", "", 0, 0) };
+    expect(listedKinds(accounts, read)).toEqual(["claude-code", "codex-cli", "agy-cli"]);
   });
 
   it("gives a tool with one sign-in one row with its parts left", () => {
@@ -136,14 +136,12 @@ describe("account meters", () => {
       "claude-code#c2": reading("claude-code", "c2", 10, 20),
       "grok-cli": reading("grok-cli", "", 15, 25),
       "opencode-cli": reading("opencode-cli", "", 0, 4, { error: "OpenCode Console is not signed in" }),
-      "kimi-coding": reading("kimi-coding", "", 0, 25),
     };
     const providers = new Map([
       ["claude-code", { id: "claude-code", name: "Claude Code", type: "claude-code", models: [{ id: "opus", name: "Opus" }] }],
       ["grok-cli", { id: "grok-cli", name: "Grok", type: "grok-cli", models: [{ id: "grok-4.7", name: "Grok 4.7" }] }],
       ["opencode-cli", { id: "opencode-cli", name: "OpenCode Go", type: "opencode-cli", models: [{ id: "opencode-go/glm-5.3", name: "GLM 5.3" }] }],
       ["opencode-zen-cli", { id: "opencode-zen-cli", name: "OpenCode Zen", type: "opencode-zen-cli", models: [{ id: "opencode/big-pickle", name: "Big Pickle" }] }],
-      ["kimi-coding", { id: "kimi-coding", name: "Kimi", type: "kimi-coding", has_api_key: false, models: [] }],
     ]);
     const cliSignedIn = { "grok-cli": false, "opencode-cli": false, "opencode-zen-cli": false };
 

@@ -499,9 +499,6 @@ func (t *turn) run() (*fantasy.AgentResult, error) {
 	if workingDir == "" && a.cfg != nil {
 		workingDir = a.cfg.WorkingDir()
 	}
-	if reason := KimiUnusable(t.chatModel.ModelCfg.Provider, workingDir); reason != "" {
-		return nil, errors.New(reason)
-	}
 	if note := a.handOverTodos(t.ctx, t.call.SessionID, t.chatModel.ModelCfg.Provider, t.chatModel.ModelCfg.Model); note != "" {
 		if t.isCLI {
 			t.call.todoHandover = note

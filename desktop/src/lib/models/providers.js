@@ -79,7 +79,7 @@ export function safeProvider(id, cfg) {
     // way too.
     cheapest_host: cfg?.cheapest_host !== false,
     quality_floor: cfg?.quality_floor !== false,
-    // A paid plan (Kimi Coding), not billed per use: Accounts lists it
+    // A paid plan, not billed per use: Accounts lists it
     // under Subscriptions, not API providers.
     flat_rate: cfg?.flat_rate === true,
     // The base URL's host alone (commands.rs redact_config), so an

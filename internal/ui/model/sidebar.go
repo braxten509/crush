@@ -86,16 +86,13 @@ func (m *UI) modelInfo(width int) string {
 	return info
 }
 
-// cliKind is the agent CLI or metered provider (Moonshot AI) behind the
+// cliKind is the agent CLI behind the
 // selected model, or "" when it reports no subscription usage.
 func (m *UI) cliKind() catwalk.Type {
 	model := m.shownChatModel()
 	cfg := m.com.Config()
 	if model == nil || cfg == nil || cfg.Providers == nil {
 		return ""
-	}
-	if catwalk.InferenceProvider(model.ModelCfg.Provider) == catwalk.InferenceKimiCoding {
-		return catwalk.Type(catwalk.InferenceKimiCoding)
 	}
 	if p, ok := cfg.Providers.Get(model.ModelCfg.Provider); ok && config.IsCLIProviderType(p.Type) {
 		return p.Type

@@ -10,6 +10,7 @@
 // read in flight, and every 1 s while it works or runs in the background (the
 // terminal's job poll, internal/ui/model/tasks.go:22).
 import { SvelteSet } from "svelte/reactivity";
+import { secureFormForChat } from "../ask/store.svelte.js";
 import { api } from "../engine/api.js";
 import { rowState } from "../listmodel.js";
 import { busy, readStart, rootOf, sessions, upsertSession } from "../stores/sessions.svelte.js";
@@ -20,9 +21,13 @@ import { openChats } from "../stores/openchats.svelte.js";
 // Chats an event brought that no read has answered yet.
 export const unknown = new SvelteSet();
 
+export function chatRowState(session, isBusy, id = session?.id) {
+  return rowState(session, isBusy, Boolean(secureFormForChat(id)));
+}
+
 // Phase 3's state of a chat: "waiting", "working", "background" or "".
 export function phase3Kind(id) {
-  return rowState(sessions.byId[id], busy(id))?.kind ?? "";
+  return chatRowState(sessions.byId[id], busy(id), id)?.kind ?? "";
 }
 
 export function chatState(id) {

@@ -6,6 +6,8 @@
 import SecureForm from "../../components/ask/SecureForm.svelte";
 import QuestionForm from "../../components/ask/QuestionForm.svelte";
 import { api } from "../engine/api.js";
+import { conn, inFolder } from "../stores/connection.svelte.js";
+import { openChats } from "../stores/openchats.svelte.js";
 import { prompts, questionNoticeCount } from "../stores/prompts.svelte.js";
 import { rootOf, sessions } from "../stores/sessions.svelte.js";
 import { closeSlot, openSlot, ui } from "../stores/ui.svelte.js";
@@ -16,11 +18,19 @@ export const ask = $state({
 
 const rootFor = (sid) => rootOf(sid) || String(sid ?? "");
 
-// The held secure form for the shown chat, oldest first.
-export function shownSecureForm() {
-  const shown = rootFor(sessions.currentId);
-  if (!shown) return null;
-  return Object.values(ask.secure).find((form) => rootFor(form.session_id) === shown) ?? null;
+// The held secure form for a chat, oldest first.
+export function secureFormForChat(sid) {
+  const root = rootFor(sid);
+  if (!root) return null;
+  return Object.values(ask.secure).find((form) => rootFor(form.session_id) === root) ?? null;
+}
+
+// The chat preview may appear before its engine becomes the active one.
+function shownChatWithEngine() {
+  const sid = sessions.currentId;
+  if (!sid || conn.state !== "connected" || conn.switching) return "";
+  const folder = openChats.list.find((chat) => chat.id === rootFor(sid))?.dir;
+  return !folder || inFolder(folder) ? sid : "";
 }
 
 // Event order (6.1): a closed form_id never comes back, and a list read that
@@ -30,39 +40,46 @@ const heldAt = new Map(); // form_id → the event count when it was held
 let events = 0;
 let readSeq = 0;
 
-// A repeat for a held form_id changes nothing (u:ask.secure_repeat).
 export function holdSecureForm(form) {
-  events += 1;
-  if (!form?.form_id || ask.secure[form.form_id] || closedIds.has(form.form_id)) return;
-  ask.secure[form.form_id] = form;
-  heldAt.set(form.form_id, events);
+  const id = form?.form_id;
+  if (!id || closedIds.has(id)) return;
+  // A replay still proves the form was open after any earlier read began.
+  heldAt.set(id, ++events);
+  if (!ask.secure[id]) ask.secure[id] = form;
 }
 
 export function dropSecureForm(formId) {
   events += 1;
   closedIds.add(formId);
+  removeHeldForm(formId);
+}
+
+function removeHeldForm(formId) {
   heldAt.delete(formId);
   if (!ask.secure[formId]) return;
   delete ask.secure[formId];
   if (ui.slot?.kind === "secure" && ui.slot.props?.form?.form_id === formId) closeSlot("secure");
 }
 
-// GET secure-forms: the open forms for this window. The newest read wins; a
-// form held after the read started stays, and a closed one is not brought
-// back (a form already held takes the new field statuses).
+// A list only speaks for this chat's engine and client. An absent form can
+// still be offered when the engine learns the window is viewing its chat.
 export async function readSecureForms() {
+  const sid = shownChatWithEngine();
+  if (!sid) return;
+  const root = rootFor(sid);
   const mine = ++readSeq;
   const startedAt = events;
   let list;
   try {
-    list = await api.secureForms();
+    list = await api.secureForms(sid);
   } catch {
     return;
   }
-  if (mine !== readSeq) return;
-  const open = new Map((Array.isArray(list) ? list : []).filter((form) => form?.form_id).map((form) => [form.form_id, form]));
-  for (const id of Object.keys(ask.secure)) {
-    if (!open.has(id) && (heldAt.get(id) ?? 0) <= startedAt) dropSecureForm(id);
+  if (mine !== readSeq || shownChatWithEngine() !== sid || !Array.isArray(list)) return;
+  const belongsToChat = (form) => rootFor(form.session_id) === root;
+  const open = new Map(list.filter((form) => form?.form_id && belongsToChat(form)).map((form) => [form.form_id, form]));
+  for (const [id, form] of Object.entries(ask.secure)) {
+    if (belongsToChat(form) && !open.has(id) && (heldAt.get(id) ?? 0) <= startedAt) removeHeldForm(id);
   }
   for (const [id, form] of open) {
     if (closedIds.has(id)) continue;
@@ -109,7 +126,7 @@ export function watchAsk() {
 
     // The shown chat's secure form, once nothing else holds the slot.
     $effect(() => {
-      const form = shownSecureForm();
+      const form = secureFormForChat(shownChatWithEngine());
       const slot = ui.slot;
       if (!form) {
         if (slot?.kind === "secure") closeSlot("secure");
@@ -129,7 +146,7 @@ export function watchAsk() {
       if (!waiting && questionRead === sid) questionRead = "";
     });
     $effect(() => {
-      if (sessions.currentId) readSecureForms();
+      readSecureForms();
     });
   });
 }

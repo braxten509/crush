@@ -10,11 +10,11 @@ import { openChats, openInFolder } from "../stores/openchats.svelte.js";
 import { parentOf } from "../stores/links.svelte.js";
 import { busy, isHelperChat, openChat, sessions } from "../stores/sessions.svelte.js";
 import { helperRows } from "../stores/helperchats.svelte.js";
-import { rowState } from "../listmodel.js";
 import { moveTab, showTerminal, terminals } from "../terminal/tabs.svelte.js";
 import { draftRow, folderGroups, listedRows, placeHelperRows } from "./openlist.js";
 import { folderKey, listFolders } from "../stores/listfolders.svelte.js";
 import { baseOf, clean, short } from "./picker.js";
+import { chatRowState } from "./states.js";
 import { leftList } from "./store.svelte.js";
 
 // This window's terminal tabs in list order: TERM's own tab order, which the
@@ -82,7 +82,7 @@ export function chatRows(now = Date.now()) {
 // its parent's row when the parent is listed, else at the end.
 function withHelpers(rows) {
   const selectedId = shownTerminal() ? "" : sessions.currentId;
-  return placeHelperRows(rows, helperRows({ here: inFolder, busy, rowState, selectedId }));
+  return placeHelperRows(rows, helperRows({ here: inFolder, busy, rowState: chatRowState, selectedId }));
 }
 
 function listedChats(now) {
@@ -95,6 +95,7 @@ function listedChats(now) {
     // A shown terminal takes the band; no chat stays marked open beside it.
     selectedId: shownTerminal() ? "" : sessions.currentId,
     busy,
+    stateOf: chatRowState,
     now,
     timeOf: (s) => Math.max(s?.updated_at ?? 0, sessions.activity[s?.id] ?? 0),
     folderOf: folderLabel,

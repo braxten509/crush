@@ -53,9 +53,9 @@ export function rowTime(at, now) {
 // LIST-012 (part): what the chat is doing, in the session host's order
 // (internal/ui/model/session_host.go:58-66): a question or a permission prompt
 // waiting for the user, then a run, then work left running in the background.
-export function rowState(session, isBusy) {
+export function rowState(session, isBusy, securePending = false) {
   if (session?.pending_prompt === "permission") return { kind: "waiting", text: "Waiting for permission" };
-  if (session?.pending_prompt === "question") return { kind: "waiting", text: "Waiting for your answer" };
+  if (session?.pending_prompt === "question" || securePending) return { kind: "waiting", text: "Waiting for your answer" };
   if (isBusy) return { kind: "working", text: "Working…" };
   if (session?.has_unfinished_work) return { kind: "background", text: "Background" };
   return null;
@@ -89,6 +89,7 @@ export function buildRows(list, options = {}) {
     isClosed = () => false,
     selectedId = "",
     busy = () => false,
+    stateOf = rowState,
     expanded = [],
     query = "",
     now = Date.now(),
@@ -131,7 +132,7 @@ export function buildRows(list, options = {}) {
   for (let id = selectedId, hops = 0; id && hops < chats.length + 1; id = parentIn(id), hops += 1) open.add(id);
 
   const row = (s, depth, kids) => {
-    const state = rowState(s, busy(s.id));
+    const state = stateOf(s, busy(s.id));
     const at = timeOf(s);
     return {
       kind: "chat",

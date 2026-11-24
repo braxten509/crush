@@ -313,7 +313,7 @@ export const api = {
   answerQuestions: (answer) => post("questions/answer", answer),
   cancelQuestions: (batchId) => post("questions/cancel", { batch_request_id: batchId }),
   pendingQuestion: (sid) => get("questions/pending", { session_id: sid }),
-  secureForms: () => get("secure-forms"),
+  secureForms: (sid) => commands.api("GET", "secure-forms", undefined, undefined, undefined, folderOf(sid)),
   cancelSecureForm: (form_id) => post(`secure-forms/${seg(form_id)}/cancel`),
 
   installedSkills: () => get("skills/installed"),

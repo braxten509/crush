@@ -58,9 +58,12 @@
   let chosenGroup = $state(untrack(() => menu.group ?? ""));
   let removing = $state(null); // {item, left, top}: the right-click's Remove
   let accountsOpen = $state(false);
-  let account = $state(null); // the account just picked, shown until the config says so
-  let cheapest = $state(null); // the switch just flipped, shown until the config says so
-  let floor = $state(null); // the FP8 floor switch just flipped
+  let savingModel = $state("");
+  let savingEffort = $state("");
+  let savingCheapest = $state(false);
+  let savingFloor = $state(false);
+  let savingAccount = $state(false);
+  let savingRemove = $state("");
   let local = $state({ state: "unloaded", model_id: "", error: "" });
   let localAction = $state(false);
   let localError = $state("");
@@ -166,15 +169,15 @@
   const levelNow = $derived(current?.reasoning_effort || coder.info?.default_reasoning_effort || "");
   const kind = $derived(kindOf(current?.provider));
   const accounts = $derived(hasAccounts(kind) ? fallback.accounts.filter((a) => a.kind === kind) : []);
-  const accountNow = $derived(account ?? current?.account ?? "");
+  const accountNow = $derived(current?.account ?? "");
   const accountShown = $derived(accounts.find((a) => a.id === accountNow) ?? accounts[0] ?? null);
   // The account belongs to the model in use, so it shows only on that
   // model's own provider, not while another one is browsed (owner,
   // 2026-10-21).
   // OpenRouter's host switches; OrcaRouter has none.
   const routeTo = $derived(!searching && hostSwitches(modelData.cfg, shownGroup?.addTo) ? shownGroup.addTo : "");
-  const cheapestNow = $derived(cheapest ?? cheapestHostOn(modelData.cfg, routeTo));
-  const floorNow = $derived(floor ?? qualityFloorOn(modelData.cfg, routeTo));
+  const cheapestNow = $derived(cheapestHostOn(modelData.cfg, routeTo));
+  const floorNow = $derived(qualityFloorOn(modelData.cfg, routeTo));
   const onCurrentGroup = $derived(!searching && shownGroup?.name === startGroup(groups, current));
 
   // The tool behind a configured provider id (its type), or "".
@@ -229,59 +232,69 @@
   // picked in one visit. The button again, Esc or a click outside closes it.
   // A choice that goes to a sign-in sheet hands the window over instead.
   async function pick(item) {
-    if (!item || isCurrent(item, current)) return;
+    if (!item || isCurrent(item, current) || savingModel) return;
     const sheetsBefore = dialogs.length;
     const model = selectedModelOf(item, modelData.cfg?.model_efforts);
     if (accountNow && kindOf(item.provider.id) === kind) model.account = accountNow;
-    await chooseModel({ provider: item.provider, model, modelType: type });
-    if (dialogs.length > sheetsBefore) close({ refocus: false });
+    savingModel = item.id;
+    try {
+      await chooseModel({ provider: item.provider, model, modelType: type });
+      if (dialogs.length > sheetsBefore) close({ refocus: false });
+    } finally {
+      savingModel = "";
+    }
   }
 
   async function pickLevel(next) {
-    if (next === levelNow) return;
+    if (next === levelNow || savingEffort) return;
+    savingEffort = next;
     try {
       await setEffort(next);
     } catch (error) {
       notify("error", error?.message ?? String(error));
+    } finally {
+      savingEffort = "";
     }
   }
 
   async function flipCheapest() {
+    if (savingCheapest) return;
     const next = !cheapestNow;
-    cheapest = next;
+    savingCheapest = true;
     try {
       await api.setConfig(SCOPE.global, `providers.${routeTo}.cheapest_host`, next);
       await refreshModels();
     } catch (error) {
       notify("error", error?.message ?? String(error));
     } finally {
-      cheapest = null;
+      savingCheapest = false;
     }
   }
 
   async function flipFloor() {
+    if (savingFloor) return;
     const next = !floorNow;
-    floor = next;
+    savingFloor = true;
     try {
       await api.setConfig(SCOPE.global, `providers.${routeTo}.quality_floor`, next);
       await refreshModels();
     } catch (error) {
       notify("error", error?.message ?? String(error));
     } finally {
-      floor = null;
+      savingFloor = false;
     }
   }
 
   async function pickAccount(next) {
     accountsOpen = false;
-    if (next.id === accountNow) return;
-    account = next.id;
+    if (next.id === accountNow || savingAccount) return;
+    savingAccount = true;
     try {
       await setAccount(next.id, next.label || next.name);
     } catch (error) {
       notify("error", error?.message ?? String(error));
     } finally {
-      account = null;
+      savingAccount = false;
     }
   }
 
@@ -302,10 +315,12 @@
 
   async function remove(item) {
     removing = null;
+    if (savingRemove) return;
     if (isCurrent(item, current)) {
       notify("warn", "This model is in use; choose another one first");
       return;
     }
+    savingRemove = item.id;
     try {
       // The saved entries as the engine holds them, prices included.
       const raw = await api.config();
@@ -314,6 +329,8 @@
       await refreshModels();
     } catch (error) {
       notify("error", error?.message ?? String(error));
+    } finally {
+      savingRemove = "";
     }
   }
 
@@ -440,25 +457,27 @@
         {@const blocked = unavailableReason(item.provider.id, byProvider)}
         {@const isLocal = item.provider.id === "local-gguf"}
         {@const localHere = isLocal && local.model_id === item.model.id}
+        {@const isSavingRow = savingModel === item.id || savingRemove === item.id}
         <div class:local-row={isLocal}>
         <button
           type="button"
           class="model"
           class:blocked={Boolean(blocked)}
+          class:saving={isSavingRow}
           role="option"
           data-stop
           data-testid="model-row"
           data-check={!blocked && checkState ? checkState : undefined}
           aria-selected={isCurrent(item, current)}
-          aria-disabled={blocked ? "true" : undefined}
-          disabled={Boolean(blocked)}
+          aria-disabled={blocked || isSavingRow ? "true" : undefined}
+          disabled={Boolean(blocked) || Boolean(savingModel) || Boolean(savingRemove)}
           title={blocked || undefined}
           onclick={() => pick(item)}
           oncontextmenu={(event) => offerRemove(event, item)}
         >
           <span class="name" title={isLocal ? item.model.name : undefined}>{isLocal ? localLabel(item)?.[1] || item.model.name || item.model.id : item.model.name || item.model.id}</span>
-          {#if isLocal}<span class="info local-size">{localLabel(item)?.[2] || ""}</span>{:else if blocked}<span class="info">{shortUnavailable(blocked)}</span>{:else if checking}<span class="info">{checking}</span>{:else if searching}<span class="info">{item.group}</span>{/if}
-          {#if isCurrent(item, current)}<span class="check" aria-hidden="true"><Icon name="check" size={14} /></span>{/if}
+          {#if isSavingRow}<span class="saving-text">Saving…</span>{:else if isLocal}<span class="info local-size">{localLabel(item)?.[2] || ""}</span>{:else if blocked}<span class="info">{shortUnavailable(blocked)}</span>{:else if checking}<span class="info">{checking}</span>{:else if searching}<span class="info">{item.group}</span>{/if}
+          {#if !isSavingRow && isCurrent(item, current)}<span class="check" aria-hidden="true"><Icon name="check" size={14} /></span>{/if}
         </button>
         {#if isLocal}
           <button
@@ -509,22 +528,24 @@
     {/if}
     {#if routeTo}
       <div class="route" data-column="route">
-        <div class="route-item">
+        <div class="route-item" class:saving={savingCheapest}>
           <span class="route-name">Cheapest</span>
-          <button type="button" class="switch" role="switch" data-stop aria-checked={cheapestNow} aria-label="Cheapest" onclick={flipCheapest}></button>
+          {#if savingCheapest}<span class="saving-text">Saving…</span>{/if}
+          <button type="button" class="switch" role="switch" data-stop disabled={savingCheapest} aria-checked={cheapestNow} aria-label="Cheapest" onclick={flipCheapest}></button>
         </div>
-        <div class="route-item">
+        <div class="route-item" class:saving={savingFloor}>
           <span class="route-name">FP8 floor</span>
-          <button type="button" class="switch" role="switch" data-stop aria-checked={floorNow} aria-label="FP8 floor" onclick={flipFloor}></button>
+          {#if savingFloor}<span class="saving-text">Saving…</span>{/if}
+          <button type="button" class="switch" role="switch" data-stop disabled={savingFloor} aria-checked={floorNow} aria-label="FP8 floor" onclick={flipFloor}></button>
         </div>
       </div>
     {/if}
     {#if levels.length > 0}
-      <div class="effort" data-column="effort">
-        <h3 class="label">Effort</h3>
+      <div class="effort" class:saving={Boolean(savingEffort)} data-column="effort">
+        <h3 class="label section-head"><span>Effort</span>{#if savingEffort}<span class="saving-text">Saving…</span>{/if}</h3>
         <div class="levels" role="radiogroup" aria-label="Effort">
           {#each levels as l (l)}
-            <button type="button" class="level" role="radio" data-stop aria-checked={l === levelNow} onclick={() => pickLevel(l)}>{levelTitle(l)}</button>
+            <button type="button" class="level" role="radio" data-stop disabled={Boolean(savingEffort)} aria-checked={l === levelNow} onclick={() => pickLevel(l)}>{levelTitle(l)}</button>
           {/each}
         </div>
       </div>
@@ -535,20 +556,20 @@
       </div>
     {/if}
     {#if accounts.length > 1 && onCurrentGroup}
-      <div class="account" data-column="account">
-        <h3 class="label">Account</h3>
+      <div class="account" class:saving={savingAccount} data-column="account">
+        <h3 class="label section-head"><span>Account</span>{#if savingAccount}<span class="saving-text">Saving…</span>{/if}</h3>
         <div class="pick">
           {#if accountsOpen}
             <div class="accounts" role="listbox" aria-label="Accounts">
               {#each accounts as a (a.id)}
-                <button type="button" class="option" role="option" data-stop aria-selected={a.id === accountShown?.id} onclick={() => pickAccount(a)}>
+                <button type="button" class="option" role="option" data-stop disabled={savingAccount} aria-selected={a.id === accountShown?.id} onclick={() => pickAccount(a)}>
                   <span class="name">{a.label || a.name}</span>
                   {#if a.id === accountShown?.id}<span class="check" aria-hidden="true"><Icon name="check" size={14} /></span>{/if}
                 </button>
               {/each}
             </div>
           {/if}
-          <button type="button" class="drop" data-stop aria-haspopup="listbox" aria-expanded={accountsOpen} onclick={() => (accountsOpen = !accountsOpen)}>
+          <button type="button" class="drop" data-stop disabled={savingAccount} aria-haspopup="listbox" aria-expanded={accountsOpen} onclick={() => (accountsOpen = !accountsOpen)}>
             <span class="name">{accountShown ? accountShown.label || accountShown.name : ""}</span>
             <Icon name="caret" size={10} />
           </button>
@@ -720,6 +741,26 @@
   .model.blocked {
     opacity: 0.45;
     cursor: not-allowed;
+  }
+  .model.saving,
+  .route-item.saving,
+  .effort.saving,
+  .account.saving {
+    opacity: 0.65;
+  }
+  .saving-text {
+    flex: none;
+    font: var(--t-small);
+    font-style: italic;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--slate);
+  }
+  .section-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: calc(8 * var(--px));
   }
   .model.blocked:hover {
     background: none;

@@ -357,6 +357,7 @@ const ROUTES: &[(&str, &str)] = &[
     ("POST", "auth/flows/{flow_id}/code"),
     ("POST", "auth/flows/{flow_id}/cancel"),
     ("GET", "auth/state"),
+    ("DELETE", "auth/cli/{kind}"),
     ("GET", "saved-sessions"),
     ("POST", "saved-sessions"),
     ("POST", "questions/answer"),
@@ -2845,7 +2846,7 @@ mod tests {
         ("GET", &["fallback", "auth/state"]),
         ("PUT", &["fallback/order", "accounts/{aid}"]),
         ("POST", &["accounts", "accounts/{aid}/login", "/v1/limits/refill"]),
-        ("DELETE", &["accounts/{aid}"]),
+        ("DELETE", &["accounts/{aid}", "auth/cli/{kind}"]),
     ];
 
     #[test]
@@ -2864,7 +2865,7 @@ mod tests {
 
     #[test]
     fn route_list_has_fallback_routes() {
-        for (method, path) in [("GET", "fallback"), ("GET", "auth/state"), ("PUT", "fallback/order"), ("POST", "accounts"), ("PUT", "accounts/claude-2"),
+        for (method, path) in [("GET", "fallback"), ("GET", "auth/state"), ("DELETE", "auth/cli/opencode-cli"), ("PUT", "fallback/order"), ("POST", "accounts"), ("PUT", "accounts/claude-2"),
             ("DELETE", "accounts/claude-2"), ("POST", "accounts/claude-2/login"), ("POST", "/v1/limits/refill")] {
             assert!(check_route(method, path).is_ok(), "{method} {path} is refused");
         }

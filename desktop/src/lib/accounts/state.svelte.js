@@ -22,6 +22,17 @@ export async function loadCLIState() {
   }
 }
 
+export async function signOutCLI(kind) {
+  const answer = await api.signOutCLI(kind);
+  if (answer) {
+    cliState.providers = answer.providers ?? {};
+    cliState.emails = answer.emails ?? {};
+    cliState.loaded = true;
+  } else {
+    await loadCLIState();
+  }
+}
+
 onEvent("config_changed", () => {
   if (cliState.loaded) loadCLIState();
 });

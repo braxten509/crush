@@ -282,7 +282,7 @@ func (m *Model) Model() string    { return m.ID }
 func (m *Model) Generate(ctx context.Context, call fantasy.Call) (*fantasy.Response, error) {
 	var text strings.Builder
 	var usage fantasy.Usage
-	t := Turn{Prompt: flattenPrompt(call.Prompt), NoTools: true}
+	t := Turn{Prompt: flattenPrompt(call.Prompt), NoTools: true, Effort: "low"}
 	if m.Kind == config.TypeClaudeCode {
 		// A short system prompt of its own keeps these requests to a few
 		// hundred tokens instead of Claude Code's whole agent setup.
@@ -305,14 +305,42 @@ func (m *Model) Generate(ctx context.Context, call fantasy.Call) (*fantasy.Respo
 		}
 		return nil
 	}
-	if err := m.Run(ctx, t); err != nil {
-		return nil, err
+	runModel := m
+	if fastID := fastAGYTitleModel(m); fastID != "" {
+		cp := *m
+		cp.ID = fastID
+		runModel = &cp
+	}
+	if err := runModel.Run(ctx, t); err != nil {
+		if runModel != m && ctx.Err() == nil {
+			text.Reset()
+			usage = fantasy.Usage{}
+			if fallbackErr := m.Run(ctx, t); fallbackErr != nil {
+				return nil, fallbackErr
+			}
+		} else {
+			return nil, err
+		}
 	}
 	return &fantasy.Response{
 		Content:      fantasy.ResponseContent{fantasy.TextContent{Text: text.String()}},
 		FinishReason: fantasy.FinishReasonStop,
 		Usage:        usage,
 	}, nil
+}
+
+// fastAGYTitleModel picks the low-effort variant of an AGY model for short
+// one-shot title/summary calls so high/xhigh models don't spend 30s thinking.
+func fastAGYTitleModel(m *Model) string {
+	if m.Kind != config.TypeAGYCLI {
+		return ""
+	}
+	for _, prefix := range []string{"gemini-4-neon-", "gemini-4-carbon-"} {
+		if strings.HasPrefix(m.ID, prefix) && m.ID != prefix+"low" {
+			return prefix + "low"
+		}
+	}
+	return ""
 }
 
 // Stream replays [Model.Generate] as a stream.

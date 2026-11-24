@@ -50,7 +50,7 @@ export function listedRows(open, options = {}) {
     records.push({
       ...state,
       id: c.id,
-      title: saved?.Title || c.title || "New Session",
+      title: state.title || saved?.Title || c.title || "New Session",
       created_at: saved?.CreatedAt ?? 0,
       updated_at: saved?.UpdatedAt ?? 0,
       lock_state: lock,

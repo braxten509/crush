@@ -15,6 +15,7 @@
 
   let text = $state("");
   let loaded = $state(false);
+  let saving = $state(false);
   let readOk = false; // never save over a file that could not be read
 
   const help = [
@@ -23,13 +24,16 @@
   ];
 
   async function save() {
-    if (!readOk) return;
+    if (!readOk || saving) return;
+    saving = true;
     try {
       await subagentInstructionsWrite(text);
       notify("info", "Sub-agent instructions saved");
       closeDialog(ID);
     } catch (e) {
       notify("error", e?.message ?? String(e));
+    } finally {
+      saving = false;
     }
   }
 
@@ -56,8 +60,8 @@
   <p class="hint">Every chat's agent follows these when it starts sub-agents.</p>
   {#if loaded}
     <Area bind:value={text} minLines={3} maxLines={14} placeholder="Which models to use for which work, when to ask first…" label="Sub-agent instructions" />
-    <div class="actions">
-      <Buttons buttons={[{ id: "save", label: "Save" }, { id: "cancel", label: "Cancel" }]} selected="save" onPress={(id) => (id === "save" ? save() : closeDialog(ID))} />
+    <div class="actions" class:saving>
+      <Buttons buttons={[{ id: "save", label: saving ? "Saving…" : "Save", disabled: saving }, { id: "cancel", label: "Cancel", disabled: saving }]} selected="save" onPress={(id) => (id === "save" ? save() : closeDialog(ID))} />
     </div>
   {/if}
 </Sheet>
@@ -71,6 +75,9 @@
   /* Save and Cancel to click, beside their keys (owner, 2026-10-20). */
   .actions {
     margin-top: calc(18 * var(--px));
+  }
+  .actions.saving {
+    opacity: 0.65;
   }
 
 </style>

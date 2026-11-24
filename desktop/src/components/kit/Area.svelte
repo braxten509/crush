@@ -165,6 +165,8 @@
     display: flex;
     flex: none;
     box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
     border: 1px solid var(--rule-control);
     background: var(--paper);
   }
@@ -175,8 +177,10 @@
   textarea {
     flex: 1;
     min-width: 0;
-    box-sizing: content-box;
-    height: calc(var(--rows) * 26 * var(--px));
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    height: calc(var(--rows) * 26 * var(--px) + 24 * var(--px));
     margin: 0;
     padding: calc(12 * var(--px)) calc(12 * var(--px)) calc(12 * var(--px)) calc(11 * var(--px));
     border: 0;

@@ -45,7 +45,7 @@ export async function loadStates() {
   for (const c of chats) {
     const s = found[c.id];
     if (!s || inFolder(c.dir)) continue;
-    states[c.id] = { is_busy: s.is_busy === true, has_unfinished_work: s.has_unfinished_work === true, pending_prompt: s.pending_prompt ?? "" };
+    states[c.id] = { is_busy: s.is_busy === true, has_unfinished_work: s.has_unfinished_work === true, pending_prompt: s.pending_prompt ?? "", title: s.title ?? "" };
     if (sessions.byId[c.id]) setChatState(c.id, states[c.id], since);
   }
   folders.states = states;
@@ -53,12 +53,15 @@ export async function loadStates() {
 
 // Between the checks, a running folder's chat state comes as its work
 // starts, ends or begins waiting (the helper's watch.rs reads the record
-// then), so the left list's dots follow at once (owner, 2026-10-22).
+// then), so the left list's dots and titles follow at once (owner, 2026-10-22).
 onFolderEvent("chat_state", (_kind, s) => {
   const listed = s?.id && openChats.list.find((c) => c.id === s.id);
   if (!listed || inFolder(listed.dir)) return;
-  const state = { is_busy: s.is_busy === true, has_unfinished_work: s.has_unfinished_work === true, pending_prompt: s.pending_prompt ?? "" };
+  const state = { is_busy: s.is_busy === true, has_unfinished_work: s.has_unfinished_work === true, pending_prompt: s.pending_prompt ?? "", title: s.title ?? "" };
   folders.states = { ...folders.states, [s.id]: state };
+  if (state.title && folders.byId[s.id] && folders.byId[s.id].Title !== state.title) {
+    folders.byId = { ...folders.byId, [s.id]: { ...folders.byId[s.id], Title: state.title } };
+  }
   if (sessions.byId[s.id]) setChatState(s.id, state);
 });
 

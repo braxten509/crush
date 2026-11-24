@@ -13,6 +13,7 @@
 
   let text = $state(String(untrack(() => autoBackgroundSeconds(options()))));
   let error = $state("");
+  let saving = $state(false);
 
   const help = [
     { key: "enter", text: "save" },
@@ -25,12 +26,18 @@
   });
 
   async function save() {
+    if (saving) return;
     const parsed = parseSeconds(text);
     if (parsed.error) {
       error = parsed.error;
       return;
     }
-    if (await saveAutoBackground(parsed.value)) closeDialog(ID);
+    saving = true;
+    try {
+      if (await saveAutoBackground(parsed.value)) closeDialog(ID);
+    } finally {
+      saving = false;
+    }
   }
 
   function onKey(event, combo) {
@@ -45,8 +52,8 @@
 <Sheet id={ID} title="Background commands after" width="small" {help} {onKey}>
   <p class="hint">A command an agent runs that is still going after this many seconds is moved to the background, so the agent can carry on while it finishes.</p>
   <Field bind:value={text} prompt="Seconds: " label="Seconds before a command is moved to the background" {error} />
-  <div class="actions">
-    <Buttons buttons={[{ id: "save", label: "Save" }, { id: "cancel", label: "Cancel" }]} selected="save" onPress={(id) => (id === "save" ? save() : closeDialog(ID))} />
+  <div class="actions" class:saving>
+    <Buttons buttons={[{ id: "save", label: saving ? "Saving…" : "Save", disabled: saving }, { id: "cancel", label: "Cancel", disabled: saving }]} selected="save" onPress={(id) => (id === "save" ? save() : closeDialog(ID))} />
   </div>
 </Sheet>
 
@@ -59,5 +66,8 @@
   /* Save and Cancel to click, beside their keys (owner, 2026-10-20). */
   .actions {
     margin-top: calc(18 * var(--px));
+  }
+  .actions.saving {
+    opacity: 0.65;
   }
 </style>

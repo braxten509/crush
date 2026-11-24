@@ -10,7 +10,7 @@
   // 2026-10-24: no subtext and no Signed in / API key set words).
   import { onMount } from "svelte";
   import { accountGroups, cliRowLabel } from "../../lib/accounts/providers.js";
-  import { cliState, loadCLIState } from "../../lib/accounts/state.svelte.js";
+  import { cliState, loadCLIState, signOutCLI } from "../../lib/accounts/state.svelte.js";
   import { openDialog } from "../../lib/dialogs.js";
   import { api, SCOPE } from "../../lib/engine/api.js";
   import { sign_in_run } from "../../lib/engine/commands.js";
@@ -22,8 +22,9 @@
   import ToolAccounts from "./ToolAccounts.svelte";
 
   let selected = $state(""); // the provider shown on the right
-  let removing = $state(""); // the API provider whose key is asked about
+  let removing = $state(""); // the provider whose sign-in or key is asked about
   let busy = $state(""); // the CLI whose sign-in runs
+  let saving = $state(""); // the row currently saving or removing
 
   const groups = $derived(accountGroups(modelData.cfg, modelData.catalog));
   const rows = $derived(groups.flatMap((group) => group.rows));
@@ -68,18 +69,37 @@
 
   async function removeKey(row) {
     removing = "";
+    saving = row.id;
     try {
-      await api.removeConfig(SCOPE.global, `providers.${row.id}.api_key`);
+      if (row.hasKey) await api.removeConfig(SCOPE.global, `providers.${row.id}.api_key`);
+      if (row.hasOAuth) await api.removeConfig(SCOPE.global, `providers.${row.id}.oauth`);
       await refreshModels();
-      notify("info", `Removed the ${row.name} key.`);
+      notify("info", `Removed the ${row.name} sign-in.`);
     } catch (error) {
-      notify("error", `Couldn't remove the key: ${errorText(error)}`);
+      notify("error", `Couldn't remove the sign-in: ${errorText(error)}`);
+    } finally {
+      saving = "";
+    }
+  }
+
+  async function removeCLISignIn(row) {
+    removing = "";
+    saving = row.id;
+    try {
+      await signOutCLI(row.id);
+      await refreshModels();
+      notify("info", `Removed the ${row.name} sign-in.`);
+    } catch (error) {
+      notify("error", `Couldn't remove the sign-in: ${errorText(error)}`);
+    } finally {
+      saving = "";
     }
   }
 
   // Another account of an API provider: the engine makes a provider entry
   // that copies this one without its key, and the key sheet fills it in.
   async function addProviderAccount(row) {
+    saving = `add:${row.id}`;
     try {
       const login = await api.addAccount(row.id);
       const account = login?.account;
@@ -88,6 +108,8 @@
       openKey(row, account.id, account.name || account.id);
     } catch (error) {
       notify("error", `Couldn't add the account: ${errorText(error)}`);
+    } finally {
+      saving = "";
     }
   }
 
@@ -142,34 +164,47 @@
           <ToolAccounts
             kind={current.id}
             name={current.name}
-            ownLogin={["grok-cli", "agy-cli"].includes(current.id) ? current.cli.login : null}
+            ownLogin={current.cli.login}
             ownSignedIn={current.id === "grok-cli" ? cliSignedIn(current) : null}
           />
         {:else}
-          <div class="row">
-            <span class="name">{cliRowLabel(current, cliSignedIn(current), cliState.emails[current.id])}</span>
-            <button type="button" class="act" disabled={busy === current.id} onclick={() => signInCLI(current)}>{cliSignedIn(current) ? "Sign in again" : "Sign in…"}</button>
-          </div>
+          {#if removing === current.id}
+            <div class="row">
+              <span class="name">Remove the {current.name} sign-in?</span>
+              <span class="value">Its saved login is deleted.</span>
+              <button type="button" class="act" onclick={() => removeCLISignIn(current)}>Yes, remove</button>
+              <button type="button" class="act" onclick={() => (removing = "")}>No</button>
+            </div>
+          {:else}
+            <div class="row" class:saving={saving === current.id || busy === current.id}>
+              <span class="name">{cliRowLabel(current, cliSignedIn(current), cliState.emails[current.id])}</span>
+              {#if saving === current.id || busy === current.id}<span class="saving-text">Saving…</span>{/if}
+              <button type="button" class="act" disabled={busy === current.id || saving === current.id} onclick={() => signInCLI(current)}>{cliSignedIn(current) ? "Sign in again" : "Sign in…"}</button>
+              {#if cliSignedIn(current)}<button type="button" class="act" disabled={busy === current.id || saving === current.id} onclick={() => (removing = current.id)}>Remove</button>{/if}
+            </div>
+          {/if}
         {/if}
       {:else}
         {#if removing === current.id}
           <div class="row">
-            <span class="name">Remove the {current.name} key?</span>
+            <span class="name">Remove the {current.name} sign-in?</span>
             <span class="value">It is deleted from the global config.</span>
             <button type="button" class="act" onclick={() => removeKey(current)}>Yes, remove</button>
             <button type="button" class="act" onclick={() => (removing = "")}>No</button>
           </div>
         {:else}
-          <div class="row">
-            <span class="name">API key</span>
-            <button type="button" class="act" data-action={current.hasKey || current.hasOAuth ? "change" : "add-key"} onclick={() => openKey(current)}>{current.hasKey || current.hasOAuth ? "Change…" : "Add key…"}</button>
-            {#if current.hasKey}<button type="button" class="act" onclick={() => (removing = current.id)}>Remove</button>{/if}
+          <div class="row" class:saving={saving === current.id}>
+            <span class="name">{current.hasOAuth && !current.hasKey ? "Sign-in" : "API key"}</span>
+            {#if saving === current.id}<span class="saving-text">Saving…</span>{/if}
+            <button type="button" class="act" disabled={saving === current.id} data-action={current.hasKey || current.hasOAuth ? "change" : "add-key"} onclick={() => openKey(current)}>{current.hasKey || current.hasOAuth ? "Change…" : "Add key…"}</button>
+            {#if current.hasKey || current.hasOAuth}<button type="button" class="act" disabled={saving === current.id} onclick={() => (removing = current.id)}>Remove</button>{/if}
           </div>
         {/if}
         {#if current.configured}
-          <div class="row">
+          <div class="row" class:saving={saving === `add:${current.id}`}>
             <span class="name quiet-name">Another {current.name} account</span>
-            <button type="button" class="act" data-action="add" onclick={() => addProviderAccount(current)}>Add…</button>
+            {#if saving === `add:${current.id}`}<span class="saving-text">Saving…</span>{/if}
+            <button type="button" class="act" disabled={saving === `add:${current.id}`} data-action="add" onclick={() => addProviderAccount(current)}>Add…</button>
           </div>
         {/if}
       {/if}
@@ -243,6 +278,15 @@
     min-height: calc(56 * var(--px));
     padding: calc(6 * var(--px)) 0;
     border-bottom: 1px solid var(--rule-control);
+  }
+  .row.saving {
+    opacity: 0.65;
+  }
+  .saving-text {
+    flex: none;
+    font: var(--t-small);
+    font-style: italic;
+    color: var(--slate);
   }
   .name {
     flex: 1;

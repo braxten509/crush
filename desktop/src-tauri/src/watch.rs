@@ -256,10 +256,21 @@ fn listen(app: AppHandle, dir: PathBuf, socket: String, workspace: String) -> Li
     Listener { task, open }
 }
 
-/// The chat whose work may have started, ended or begun waiting: a new
-/// message, an agent event, a finished run or a prompt's change. Agent tool
-/// chats ("message$$call") have no record of their own.
+/// The chat whose work or title may have changed: a new message, an agent
+/// event, a finished run, a prompt's change, or a session update (such as a
+/// generated title). Agent tool chats ("message$$call") and child sessions
+/// have no top-level list row of their own.
 fn work_changed(ev: &crate::batch::Event) -> Option<String> {
+    if ev.ty == "session" {
+        if ev.kind != crate::batch::Kind::Updated {
+            return None;
+        }
+        if ev.payload.get("parent_session_id").and_then(Value::as_str).is_some_and(|s| !s.is_empty()) {
+            return None;
+        }
+        let sid = ev.payload.get("id").and_then(Value::as_str).unwrap_or_default();
+        return (!sid.is_empty() && !sid.contains("$$")).then(|| sid.to_string());
+    }
     let starts = match ev.ty.as_str() {
         "message" => ev.kind == crate::batch::Kind::Created,
         "agent_event" | "run_complete" | "prompt_pending" => true,

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -92,9 +93,9 @@ func (a *sessionAgent) generateTitle(ctx context.Context, sessionID string, user
 	titleSaved = true
 }
 
-// streamTitle asks the helper model, then the chat's own model (owner's
-// D2a), for a title. It returns the first complete response and the model
-// that produced it, or false when every model failed or ran out of tokens.
+// streamTitle asks the chat's own model for a title, using its lowest
+// reasoning effort so titles arrive quickly. It falls back to helperModel
+// only when the chat has no built model (for unit tests with a fixed helper).
 func (a *sessionAgent) streamTitle(ctx context.Context, sessionID, userPrompt string) (*fantasy.AgentResult, Model, bool) {
 	newAgent := func(m fantasy.LanguageModel, p []byte, tok int64) fantasy.Agent {
 		return fantasy.NewAgent(
@@ -105,11 +106,13 @@ func (a *sessionAgent) streamTitle(ctx context.Context, sessionID, userPrompt st
 		)
 	}
 
-	// Each model gets the system prompt prefix its own provider asks for.
-	streamCall := func(systemPromptPrefix string) fantasy.AgentStreamCall {
+	// Each model gets the system prompt prefix its own provider asks for,
+	// with low/minimal reasoning so titles don't stall on deep thinking.
+	streamCall := func(model Model, systemPromptPrefix string) fantasy.AgentStreamCall {
 		return fantasy.AgentStreamCall{
-			Prompt:  fmt.Sprintf("Generate a concise title for the following content:\n\n%s\n <think>\n\n</think>", userPrompt),
-			Headers: sessionHeaders(sessionID),
+			Prompt:          fmt.Sprintf("Generate a concise title for the following content:\n\n%s\n <think>\n\n</think>", userPrompt),
+			Headers:         sessionHeaders(sessionID),
+			ProviderOptions: a.titleProviderOptions(model),
 			PrepareStep: func(callCtx context.Context, opts fantasy.PrepareStepFunctionOptions) (_ context.Context, prepared fantasy.PrepareStepResult, err error) {
 				prepared.Messages = opts.Messages
 				if systemPromptPrefix != "" {
@@ -127,22 +130,30 @@ func (a *sessionAgent) streamTitle(ctx context.Context, sessionID, userPrompt st
 		model func() (Model, error)
 	}
 	attempts := []modelAttempt{
-		{"helper", func() (Model, error) { return a.helperModel.Get(), nil }},
 		{"chat's own", func() (Model, error) { return a.ChatModel(ctx, sessionID) }},
+		{"helper", func() (Model, error) { return a.helperModel.Get(), nil }},
 	}
 
+	var triedKey string
 	for _, attempt := range attempts {
 		model, err := attempt.model()
 		if err != nil || model.Model == nil {
-			slog.Error("No "+attempt.name+" model for the title; trying next", "err", err)
 			continue
 		}
-		tok := int64(40)
+		key := model.ModelCfg.Provider + "\n" + model.ModelCfg.Model + "\n" + model.ModelCfg.Account
+		if key != "\n\n" && key == triedKey {
+			continue
+		}
+		triedKey = key
+		tok := int64(80)
 		if model.CatwalkCfg.CanReason() {
-			tok = model.CatwalkCfg.DefaultMaxTokens
+			tok = min(model.CatwalkCfg.DefaultMaxTokens, 512)
+			if tok < 128 {
+				tok = 512
+			}
 		}
 		agent := newAgent(model.Model, titlePrompt, tok)
-		resp, err := agent.Stream(ctx, streamCall(a.promptPrefixFor(model)))
+		resp, err := agent.Stream(ctx, streamCall(model, a.promptPrefixFor(model)))
 		if err == nil && resp.Response.FinishReason != fantasy.FinishReasonLength {
 			slog.Debug("Generated title with the " + attempt.name + " model")
 			return resp, model, true
@@ -154,6 +165,31 @@ func (a *sessionAgent) streamTitle(ctx context.Context, sessionID, userPrompt st
 		}
 	}
 	return nil, Model{}, false
+}
+
+// titleProviderOptions requests minimal/low reasoning for title calls so
+// reasoning models return a short title in seconds rather than thinking long.
+func (a *sessionAgent) titleProviderOptions(model Model) fantasy.ProviderOptions {
+	if a.cfg == nil {
+		return nil
+	}
+	providerCfg, ok := a.cfg.Config().Providers.Get(model.ModelCfg.Provider)
+	if !ok {
+		return nil
+	}
+	low := model
+	low.ModelCfg.Think = false
+	if levels := model.CatwalkCfg.ReasoningEffortLevels(); len(levels) > 0 {
+		switch {
+		case slices.Contains(levels, "minimal"):
+			low.ModelCfg.ReasoningEffort = "minimal"
+		case slices.Contains(levels, "low"):
+			low.ModelCfg.ReasoningEffort = "low"
+		default:
+			low.ModelCfg.ReasoningEffort = levels[0]
+		}
+	}
+	return getProviderOptions(low, providerCfg)
 }
 
 // cleanTitle turns a model's reply into a one-line title, falling back to

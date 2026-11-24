@@ -2,7 +2,10 @@ package cliagent
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -85,4 +88,72 @@ func LoginEmail(kind catwalk.Type) string {
 func fileHasBytes(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && info.Size() > 0
+}
+
+// SignOut removes kind's own stored sign-in on this machine: the entry in
+// OpenCode's auth.json for OpenCode Go or Zen, or the tool's own login for
+// Claude Code, Codex, Grok and Antigravity.
+func SignOut(ctx context.Context, kind catwalk.Type) error {
+	switch kind {
+	case config.TypeOpenCodeCLI:
+		return removeOpenCodeAuth("opencode-go")
+	case config.TypeOpenCodeZenCLI:
+		return removeOpenCodeAuth("opencode")
+	case config.TypeClaudeCode, config.TypeCodexCLI, config.TypeGrokCLI, config.TypeAGYCLI:
+		return accounts.SignOutOwn(ctx, kind)
+	default:
+		return fmt.Errorf("cannot sign out of %s", kind)
+	}
+}
+
+func removeOpenCodeAuth(key string) error {
+	dir := openCodeDataDir()
+	if dir == "" {
+		return errors.New("could not find OpenCode data folder")
+	}
+	path := filepath.Join(dir, "auth.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	var entries map[string]json.RawMessage
+	if err := json.Unmarshal(data, &entries); err != nil {
+		return fmt.Errorf("reading OpenCode auth.json: %w", err)
+	}
+	if _, ok := entries[key]; !ok {
+		return nil
+	}
+	delete(entries, key)
+	next, err := json.MarshalIndent(entries, "", "  ")
+	if err != nil {
+		return err
+	}
+	next = append(next, '\n')
+	tmp, err := os.CreateTemp(dir, ".auth.json.crush-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	if _, err := tmp.Write(next); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
+		return err
+	}
+	if err := tmp.Chmod(0o600); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpName)
+		return err
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		_ = os.Remove(tmpName)
+		return err
+	}
+	return nil
 }

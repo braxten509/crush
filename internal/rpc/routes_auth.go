@@ -20,4 +20,6 @@ var (
 
 	// GetAuthState says which agent CLIs hold their own login here.
 	GetAuthState = Op[Empty, proto.AuthStateResponse]{Method: get, Path: "/v1/workspaces/{id}/auth/state"}
+	// SignOutCLI removes an agent CLI's own stored login on this machine.
+	SignOutCLI = Op[Empty, proto.AuthStateResponse]{Method: del, Path: "/v1/workspaces/{id}/auth/cli/{kind}"}
 )

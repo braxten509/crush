@@ -8,15 +8,19 @@ package accounts
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
+	"testing"
+	"time"
 
 	"charm.land/catwalk/v3/pkg/catwalk"
 	"github.com/charmbracelet/crush/internal/config"
@@ -395,21 +399,117 @@ func Label(cfg *config.Config, kind catwalk.Type, id string) string {
 	return Name(cfg, kind, id)
 }
 
-// SignedIn reports whether an account folder holds a login.
+// SignedIn reports whether an account holds a login.
 func SignedIn(kind catwalk.Type, id string) bool {
 	if kind == config.TypeAGYCLI {
 		return agySignedIn(id)
 	}
 	dir := config.AccountDir(id)
 	if dir == "" {
-		return true
+		var err error
+		if dir, err = home(kind); err != nil {
+			return false
+		}
 	}
 	name := ".credentials.json"
 	if kind == config.TypeCodexCLI || kind == config.TypeGrokCLI {
 		name = "auth.json"
 	}
-	info, err := os.Stat(filepath.Join(dir, name))
-	return err == nil && info.Size() > 0
+	if info, err := os.Stat(filepath.Join(dir, name)); err == nil && info.Size() > 0 {
+		return true
+	}
+	if kind == config.TypeClaudeCode && Email(kind, id) != "" {
+		return true
+	}
+	return false
+}
+
+// SignOutOwn revokes the tool's own (account 1) sign-in on this machine.
+func SignOutOwn(ctx context.Context, kind catwalk.Type) error {
+	switch kind {
+	case config.TypeClaudeCode:
+		runBestEffortLogout(ctx, "claude", "auth", "logout")
+		if dir, err := home(kind); err == nil {
+			_ = os.Remove(filepath.Join(dir, ".credentials.json"))
+		}
+		if path, err := claudeSettingsFile(""); err == nil {
+			if err := deleteJSONField(path, "oauthAccount"); err != nil {
+				return err
+			}
+		}
+		return nil
+	case config.TypeCodexCLI:
+		runBestEffortLogout(ctx, "codex", "logout")
+		dir, err := home(kind)
+		if err != nil {
+			return err
+		}
+		if err := os.Remove(filepath.Join(dir, "auth.json")); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		return nil
+	case config.TypeGrokCLI:
+		runBestEffortLogout(ctx, "grok", "logout")
+		dir, err := home(kind)
+		if err != nil {
+			return err
+		}
+		if err := os.Remove(filepath.Join(dir, "auth.json")); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		return nil
+	case config.TypeAGYCLI:
+		if err := removeAGYLogin(""); err != nil {
+			return err
+		}
+		if h, err := os.UserHomeDir(); err == nil {
+			_ = deleteJSONField(filepath.Join(h, ".gemini", "google_accounts.json"), "active")
+		}
+		return nil
+	}
+	return fmt.Errorf("%s has no own sign-in to remove", kind)
+}
+
+func runBestEffortLogout(ctx context.Context, name string, args ...string) {
+	if testing.Testing() {
+		return
+	}
+	runCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
+	defer cancel()
+	_ = exec.CommandContext(runCtx, name, args...).Run()
+}
+
+func deleteJSONField(path, key string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	next, err := sjson.DeleteBytes(data, key)
+	if err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".crush-signout-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	if _, err := tmp.Write(next); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpName)
+		return err
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		_ = os.Remove(tmpName)
+		return err
+	}
+	return nil
 }
 
 // NewID is a fresh account ID for kind, like "claude-2".

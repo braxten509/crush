@@ -104,6 +104,8 @@
     flex: none;
     align-items: center;
     box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
     height: calc(50 * var(--px));
     padding: 0 calc(12 * var(--px)) 0 calc(11 * var(--px));
     border: 1px solid var(--rule-control);

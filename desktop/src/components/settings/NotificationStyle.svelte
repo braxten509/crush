@@ -12,6 +12,7 @@
 
   let query = $state("");
   let selected = $state(Math.max(0, NOTIFICATION_STYLES.findIndex((s) => s.id === notificationStyle())));
+  let saving = $state("");
 
   const help = [
     { key: "↑/↓", text: "choose" },
@@ -20,7 +21,13 @@
   ];
 
   async function choose(style) {
-    if (style && (await saveNotificationStyle(style.id))) closeDialog(ID);
+    if (!style || saving) return;
+    saving = style.id;
+    try {
+      if (await saveNotificationStyle(style.id)) closeDialog(ID);
+    } finally {
+      saving = "";
+    }
   }
 </script>
 
@@ -29,7 +36,7 @@
   <FilterList
     items={NOTIFICATION_STYLES}
     filterText={(style) => style.label}
-    info={(style) => (style.id === notificationStyle() ? "current" : "")}
+    info={(style) => (saving === style.id ? "Saving…" : style.id === notificationStyle() ? "current" : "")}
     detail={(style) => style.description}
     {query}
     bind:selected

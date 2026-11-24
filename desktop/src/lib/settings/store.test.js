@@ -23,7 +23,7 @@ vi.mock("../stores/ui.svelte.js", () => ({
   panelSetting: { off: false },
   setPanelShown: vi.fn(),
 }));
-vi.mock("../stores/workspace.svelte.js", () => ({ ws: { config: { options: {} } } }));
+vi.mock("../stores/workspace.svelte.js", () => ({ ws: { config: { options: {} } }, loadConfig: async () => {} }));
 
 let settings;
 

@@ -107,6 +107,18 @@ func (c *controllerV1) fallbackEndpoints() []apigen.Endpoint {
 			PathParam("id", "Workspace ID").
 			Fails(404).
 			Build(),
+
+		route(c, rpc.SignOutCLI, func(r *http.Request, _ rpc.Empty) (proto.AuthStateResponse, error) {
+			return c.backend.SignOutCLI(r.Context(), r.PathValue("id"), r.PathValue("kind"))
+		}).
+			Summary("Remove an agent CLI's own sign-in").
+			Description("Revokes the stored sign-in for OpenCode Go, OpenCode Zen, Claude Code, Codex, Grok or Antigravity "+
+				"on this machine and returns the updated CLI sign-in state.").
+			Tags("fallback").
+			PathParam("id", "Workspace ID").
+			PathParam("kind", "Agent CLI provider id").
+			Fails(400, 404, 500).
+			Build(),
 	}
 }
 

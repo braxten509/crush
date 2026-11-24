@@ -7,7 +7,7 @@ import { api, SCOPE } from "../engine/api.js";
 import { CODEX_API_COMPACT_BEFORE_PRICE_STEP, codexAPICompactBeforePriceStep, ZEN_FREE_DEEPSEEK_FULL_CONTEXT, zenFreeDeepSeekFullContext } from "../compaction.js";
 import { focusField } from "../stores/composer.svelte.js";
 import { notify, panelSetting, setPanelShown } from "../stores/ui.svelte.js";
-import { ws } from "../stores/workspace.svelte.js";
+import { loadConfig, ws } from "../stores/workspace.svelte.js";
 
 export const DEFAULT_AUTOCOMPACT = 400_000;
 export const DEFAULT_CHECK_IN = 2;
@@ -28,6 +28,7 @@ export const tui = () => options().tui ?? {};
 
 export async function setOption(key, value) {
   await api.setConfig(SCOPE.global, key, value);
+  await loadConfig().catch(() => {});
 }
 
 // -- The four toggles (config_write.go:71-199) --

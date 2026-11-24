@@ -18,7 +18,6 @@ import (
 	"github.com/charmbracelet/crush/internal/ui/dialog"
 	"github.com/charmbracelet/crush/internal/ui/dialog/internal/kit"
 	"github.com/charmbracelet/crush/internal/ui/styles"
-	"github.com/charmbracelet/crush/internal/ui/util"
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
@@ -214,17 +213,7 @@ func (m *Models) HandleMsg(msg tea.Msg) dialog.Action {
 				ReAuthenticate: isEdit,
 			}
 		case key.Matches(msg, m.keyMap.Tab):
-			if m.isOnboarding {
-				break
-			}
-			if m.modelType == ModelTypeChat {
-				m.modelType = ModelTypeHelper
-			} else {
-				m.modelType = ModelTypeChat
-			}
-			if err := m.setProviderItems(); err != nil {
-				return util.ReportError(err)
-			}
+			break
 		default:
 			prevValue := m.input.Value()
 			var cmd tea.Cmd
@@ -279,7 +268,6 @@ func (m *Models) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 
 	rc := dialog.NewRenderContext(t, width)
 	rc.Title = "Switch Model"
-	rc.TitleInfo = m.modelTypeRadioView()
 
 	if m.isOnboarding {
 		titleText := t.Dialog.PrimaryText.Render("To start, let's choose a provider and model.")
@@ -321,7 +309,6 @@ func (m *Models) ShortHelp() []key.Binding {
 	}
 	h := []key.Binding{
 		m.keyMap.UpDown,
-		m.keyMap.Tab,
 		m.keyMap.Select,
 	}
 	if m.isSelectedConfigured() {

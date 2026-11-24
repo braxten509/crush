@@ -32,12 +32,36 @@ func (m *titleFailModel) Stream(context.Context, fantasy.Call) (fantasy.StreamRe
 	return nil, errors.New("title generation failed")
 }
 
+// titleCountModel wraps a streaming model and counts title generation calls.
+type titleCountModel struct {
+	finishStreamModel
+	titleCalls atomic.Int32
+}
+
+func (m *titleCountModel) Stream(ctx context.Context, call fantasy.Call) (fantasy.StreamResponse, error) {
+	if isTitleCall(call) {
+		m.titleCalls.Add(1)
+	}
+	return m.finishStreamModel.Stream(ctx, call)
+}
+
+func isTitleCall(call fantasy.Call) bool {
+	for _, msg := range call.Prompt {
+		for _, part := range msg.Content {
+			if tp, ok := part.(fantasy.TextPart); ok && len(tp.Text) >= 24 && tp.Text[:24] == "Generate a concise title" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // The first send in a branch keeps the title the branch was made with, even
 // when titling would rename any other chat.
 func TestBranchTitleNeverAutoReplaced(t *testing.T) {
 	env := testEnv(t)
-	model := &titleFailModel{}
-	sa := testSessionAgent(env, &finishStreamModel{text: "Sure."}, model, "system").(*sessionAgent)
+	model := &titleCountModel{finishStreamModel: finishStreamModel{text: "Sure."}}
+	sa := testSessionAgent(env, model, model, "system").(*sessionAgent)
 	ctx := t.Context()
 
 	// A chat that opens with the assistant's greeting holds no user text,
@@ -87,9 +111,9 @@ func TestBranchTitleNeverAutoReplaced(t *testing.T) {
 	require.Equal(t, tried, model.titleCalls.Load())
 }
 
-// A title is asked of the helper model first; when it fails, of the chat's
-// own model, never of any other model (owner, 2026-10-24: no shared model).
-func TestTitleUsesTheHelperModel(t *testing.T) {
+// A title is asked of the chat's own model directly ("self"), never a
+// separate helper model or any other model.
+func TestTitleUsesTheChatModel(t *testing.T) {
 	env := testEnv(t)
 	ctx := t.Context()
 	other := &titleFailModel{}
@@ -107,7 +131,7 @@ func TestTitleUsesTheHelperModel(t *testing.T) {
 	sa.GenerateTitle(ctx, chat.ID, "Plan a trip to Lisbon")
 	chat, err = env.sessions.Get(ctx, chat.ID)
 	require.NoError(t, err)
-	require.Equal(t, "Trip to Lisbon", chat.Title, "the chat's own model titled it after the helper failed")
-	require.Equal(t, int32(1), helper.titleCalls.Load(), "the helper was asked first")
+	require.Equal(t, "Trip to Lisbon", chat.Title, "the chat's own model titled it directly")
+	require.Zero(t, helper.titleCalls.Load(), "the helper is not asked when the chat has its own model")
 	require.Zero(t, other.titleCalls.Load(), "no other model is asked")
 }

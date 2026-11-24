@@ -122,7 +122,7 @@ func (c *coordinator) runAgenticFetch(ctx context.Context, client *http.Client, 
 		return fantasy.NewTextErrorResponse(errMsg), nil
 	}
 
-	agent, err := c.newAgenticFetchAgent(ctx, client, tmpDir)
+	agent, err := c.newAgenticFetchAgent(ctx, validationResult.SessionID, client, tmpDir)
 	if err != nil {
 		cleanup()
 		return fantasy.ToolResponse{}, err
@@ -180,8 +180,8 @@ func agenticFetchPrompt(ctx context.Context, client *http.Client, params tools.A
 }
 
 // newAgenticFetchAgent builds the sub-agent that analyzes fetched content
-// in tmpDir, running on the helper model.
-func (c *coordinator) newAgenticFetchAgent(ctx context.Context, client *http.Client, tmpDir string) (SessionAgent, error) {
+// in tmpDir, running on the chat's own model.
+func (c *coordinator) newAgenticFetchAgent(ctx context.Context, sessionID string, client *http.Client, tmpDir string) (SessionAgent, error) {
 	promptOpts := []prompt.Option{
 		prompt.WithWorkingDir(tmpDir),
 	}
@@ -191,20 +191,27 @@ func (c *coordinator) newAgenticFetchAgent(ctx context.Context, client *http.Cli
 		return nil, fmt.Errorf("error creating prompt: %s", err)
 	}
 
-	// Web fetches run on the helper model.
-	helper, err := c.buildHelperModel(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("error building the helper model: %s", err)
+	// Web fetches run on the chat's own model (falling back to any configured
+	// helper model if the chat has none yet).
+	var model Model
+	if main := c.currentAgent(); main != nil && sessionID != "" {
+		model, err = main.ChatModel(ctx, sessionID)
+	}
+	if err != nil || model.Model == nil {
+		model, err = c.buildHelperModel(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("error building the chat model for web fetch: %s", err)
+		}
 	}
 
-	systemPrompt, err := promptTemplate.Build(ctx, helper.Model.Provider(), helper.Model.Model(), c.cfg)
+	systemPrompt, err := promptTemplate.Build(ctx, model.Model.Provider(), model.Model.Model(), c.cfg)
 	if err != nil {
 		return nil, fmt.Errorf("error building system prompt: %s", err)
 	}
 
-	helperProviderCfg, ok := c.cfg.Config().Providers.Get(helper.ModelCfg.Provider)
+	providerCfg, ok := c.cfg.Config().Providers.Get(model.ModelCfg.Provider)
 	if !ok {
-		return nil, errors.New("helper model provider not configured")
+		return nil, errors.New("chat model provider not configured")
 	}
 
 	webFetchTool := webtool.NewWebFetchTool(tmpDir, client)
@@ -224,9 +231,9 @@ func (c *coordinator) newAgenticFetchAgent(ctx context.Context, client *http.Cli
 	// the user's hooks N times per delegated turn.
 
 	return NewSessionAgent(SessionAgentOptions{
-		Model:                helper,
-		HelperModel:          helper,
-		SystemPromptPrefix:   helperProviderCfg.SystemPromptPrefix,
+		Model:                model,
+		HelperModel:          model,
+		SystemPromptPrefix:   providerCfg.SystemPromptPrefix,
 		SystemPrompt:         systemPrompt,
 		DisableAutoSummarize: c.cfg.Config().Options.DisableAutoSummarize,
 		Permissions:          c.permissions,

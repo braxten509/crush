@@ -22,10 +22,10 @@ import (
 // mid-session, such as the task subagents rebuilt on every turn, use a group
 // of their own that their caller waits on.
 func (c *coordinator) buildAgent(ctx context.Context, ready *readyGroup, prompt *prompt.Prompt, agent config.Agent, isSubAgent bool) (SessionAgent, error) {
-	helper, err := c.buildHelperModel(ctx)
-	if err != nil {
-		return nil, err
-	}
+	// Helper work (titles, branch summaries, web fetches) runs on each chat's
+	// own model; an optional configured helper model is kept only as a legacy
+	// fallback and never required to start an agent.
+	helper, _ := c.buildHelperModel(ctx)
 
 	var tasks *taskHub
 	if agent.ID == config.AgentCoder {
@@ -277,12 +277,9 @@ func (c *coordinator) UpdateModels(ctx context.Context) error {
 // updateAgentModels rebuilds the model and tool configuration for the
 // given agent from the current config.
 func (c *coordinator) updateAgentModels(ctx context.Context, agent SessionAgent, name string) error {
-	// build the helper again so we make sure we get the latest config
-	helper, err := c.buildHelperModel(ctx)
-	if err != nil {
-		return err
+	if helper, err := c.buildHelperModel(ctx); err == nil {
+		agent.SetHelperModel(helper)
 	}
-	agent.SetHelperModel(helper)
 
 	agentCfg, ok := c.cfg.Config().Agents[name]
 	if !ok {

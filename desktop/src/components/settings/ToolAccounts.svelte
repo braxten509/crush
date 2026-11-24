@@ -12,6 +12,7 @@
   // keyboard.
   //   kind, name, ownLogin? (argv), ownSignedIn? (state read by the engine)
   import { onMount, tick } from "svelte";
+  import { signOutCLI } from "../../lib/accounts/state.svelte.js";
   import { moveBlock } from "../../lib/fallback/blocks.js";
   import { addAccount, fallback, loadFallback, removeAccount, renameAccount, saveAccountOrder, signInAccount } from "../../lib/fallback/store.svelte.js";
   import { MOTION_MS, reducedMotion } from "../../lib/motion.js";
@@ -24,8 +25,9 @@
 
   let renaming = $state(""); // "kind/id" of the row being renamed
   let draft = $state("");
-  let removing = $state(""); // the account asked about
+  let removing = $state(""); // account id, or "__own__" for account 1
   let busy = $state(false);
+  let saving = $state(""); // row key ("__own__", a.id, or "add") while saving
 
   onMount(() => {
     if (!fallback.loaded) loadFallback();
@@ -140,7 +142,7 @@
     renaming = `${a.kind}/${a.id}`;
     draft = a.name;
   }
-  function finishRename(a, event) {
+  async function finishRename(a, event) {
     if (event?.key && event.key !== "Enter" && event.key !== "Escape") return;
     if (event?.key === "Escape") {
       renaming = "";
@@ -148,17 +150,65 @@
     }
     renaming = "";
     // A tool's own login goes by the tool's name.
-    if (draft.trim() !== a.name) renameAccount(a.id || a.kind, draft.trim());
+    if (draft.trim() !== a.name) {
+      const rowKey = a.id || "__own__";
+      saving = rowKey;
+      try {
+        await renameAccount(a.id || a.kind, draft.trim());
+      } finally {
+        saving = "";
+      }
+    }
+  }
+
+  async function doRemove(a) {
+    removing = "";
+    const rowKey = a.id || "__own__";
+    saving = rowKey;
+    try {
+      if (a.id) {
+        await removeAccount(a.id);
+      } else {
+        await signOutCLI(kind);
+        await loadFallback();
+        notify("info", `Removed the ${name} sign-in.`);
+      }
+    } catch (error) {
+      notify("error", `Couldn't remove the sign-in: ${error?.message ?? String(error)}`);
+    } finally {
+      saving = "";
+    }
+  }
+
+  async function doAdd() {
+    if (saving) return;
+    saving = "add";
+    try {
+      await addAccount(kind, openSignInTerminal);
+    } finally {
+      saving = "";
+    }
+  }
+
+  async function doSignInAccount(a) {
+    if (saving) return;
+    saving = a.id;
+    try {
+      await signInAccount(a.id, openSignInTerminal);
+    } finally {
+      saving = "";
+    }
   }
 
   function openSignInTerminal(argv, name) {
     return openTerminal({ cwd: projectDir(), argv, title: `Sign in to ${name}` }).exited;
   }
 
-  // Antigravity signs in from a terminal. Grok opens the browser directly.
+  // Antigravity signs in from a terminal; the others open the browser directly.
   async function signInOwn() {
-    if (busy || !ownLogin?.length) return;
+    if (busy || saving || !ownLogin?.length) return;
     busy = true;
+    saving = "__own__";
     try {
       if (kind === "agy-cli") {
         await openSignInTerminal(ownLogin, name);
@@ -171,6 +221,7 @@
       notify("error", `Couldn't start the sign-in: ${error?.message ?? String(error)}`);
     } finally {
       busy = false;
+      saving = "";
       await loadFallback();
     }
   }
@@ -178,38 +229,48 @@
 
 <div class="list" class:dragging={Boolean(drag)} bind:this={list}>
 {#each shown as a, i (a.id)}
-  <div class="row account" class:held={held?.id === a.id} data-id={a.id} data-account={`${a.kind}/${a.id}`}>
+  {@const rowKey = a.id || "__own__"}
+  {@const isSaving = saving === rowKey}
+  {@const isRenaming = renaming === `${a.kind}/${a.id}`}
+  <div class="row account" class:held={held?.id === a.id} class:saving={isSaving} data-id={a.id} data-account={`${a.kind}/${a.id}`}>
     {#if movable}
       <button type="button" class="handle" aria-label="Move {a.name}" title="Drag to move (Alt+Up/Down)" onpointerdown={(e) => grab(e, i, a.id)} onkeydown={(e) => handleKey(e, i, a.id)}><span class="grip" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span></span></button>
     {/if}
-    <span class="name" title={renaming === `${a.kind}/${a.id}` ? undefined : a.name}>
-      {#if renaming === `${a.kind}/${a.id}`}
+    <span class="name" class:editing={isRenaming} title={isRenaming ? undefined : a.name}>
+      {#if isRenaming}
         <!-- svelte-ignore a11y_autofocus -->
         <input class="rename" type="text" bind:value={draft} aria-label="Account name" autofocus onkeydown={(e) => finishRename(a, e)} onblur={() => finishRename(a)} />
       {:else}
         {a.name}
       {/if}
     </span>
-    {#if removing === a.id && a.id}
-      <span class="value">Remove {a.name}? Its sign-in is deleted.</span>
-      <button type="button" class="act" onclick={() => ((removing = ""), removeAccount(a.id))}>Yes, remove</button>
+    {#if removing === rowKey}
+      <span class="value">{a.id ? `Remove ${a.name}? Its sign-in is deleted.` : `Sign out of ${a.name}?`}</span>
+      <button type="button" class="act" onclick={() => doRemove(a)}>Yes, remove</button>
       <button type="button" class="act" onclick={() => (removing = "")}>No</button>
     {:else}
+      {#if isSaving}<span class="saving-text">Saving…</span>{/if}
       {#if a.id}
-        <button type="button" class="act" onclick={() => signInAccount(a.id, openSignInTerminal)}>{a.signed_in ? "Sign in again" : "Sign in"}</button>
-        <button type="button" class="act" onclick={() => (removing = a.id)}>Remove</button>
-      {:else if ownLogin}
-        <button type="button" class="act" disabled={busy} onclick={signInOwn}>{signedIn(a) ? "Sign in again" : "Sign in"}</button>
+        <button type="button" class="act" disabled={isSaving} onclick={() => doSignInAccount(a)}>{a.signed_in ? "Sign in again" : "Sign in"}</button>
+        <button type="button" class="act" disabled={isSaving} onclick={() => (removing = a.id)}>Remove</button>
+      {:else}
+        {#if ownLogin}
+          <button type="button" class="act" disabled={busy || isSaving} onclick={signInOwn}>{signedIn(a) ? "Sign in again" : "Sign in"}</button>
+        {/if}
+        {#if signedIn(a)}
+          <button type="button" class="act" disabled={busy || isSaving} onclick={() => (removing = "__own__")}>Remove</button>
+        {/if}
       {/if}
       <!-- Last on every row, so it keeps one place (my-ui-design). -->
-      <button type="button" class="act" onclick={() => startRename(a)}>Rename</button>
+      <button type="button" class="act" disabled={isSaving} onclick={() => startRename(a)}>Rename</button>
     {/if}
   </div>
 {/each}
 </div>
-<div class="row">
+<div class="row" class:saving={saving === "add"}>
   <span class="name quiet-name">Another {name} account</span>
-  <button type="button" class="act" onclick={() => addAccount(kind, openSignInTerminal)}>Add…</button>
+  {#if saving === "add"}<span class="saving-text">Saving…</span>{/if}
+  <button type="button" class="act" disabled={saving === "add"} onclick={doAdd}>Add…</button>
 </div>
 
 <style>
@@ -277,6 +338,18 @@
     font: var(--t-item);
     color: var(--ink);
   }
+  .name.editing {
+    overflow: visible;
+  }
+  .row.saving {
+    opacity: 0.65;
+  }
+  .saving-text {
+    flex: none;
+    font: var(--t-small);
+    font-style: italic;
+    color: var(--slate);
+  }
   .quiet-name {
     color: var(--slate);
   }
@@ -303,7 +376,9 @@
     cursor: default;
   }
   .rename {
-    width: calc(220 * var(--px));
+    box-sizing: border-box;
+    width: 100%;
+    max-width: calc(220 * var(--px));
     height: calc(36 * var(--px));
     padding: 0 calc(10 * var(--px));
     border: 1px solid var(--rule-control);

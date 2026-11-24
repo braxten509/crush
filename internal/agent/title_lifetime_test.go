@@ -1,16 +1,32 @@
 package agent
 
 import (
+	"context"
 	"sync"
 	"testing"
 	"time"
 
+	"charm.land/fantasy"
 	"github.com/stretchr/testify/require"
 )
 
-// newGatedTitleAgent returns an agent whose small (title) model blocks its
-// first Stream until release is called. Cleanup releases the gate and drains
-// titles before the test database closes.
+// titleOnlyGatedModel passes ordinary chat turns through immediately and
+// routes title calls to gated.
+type titleOnlyGatedModel struct {
+	fastModel
+	gated *gatedStreamModel
+}
+
+func (m *titleOnlyGatedModel) Stream(ctx context.Context, call fantasy.Call) (fantasy.StreamResponse, error) {
+	if isTitleCall(call) {
+		return m.gated.Stream(ctx, call)
+	}
+	return m.fastModel.Stream(ctx, call)
+}
+
+// newGatedTitleAgent returns an agent whose chat model blocks its first title
+// Stream until release is called. Cleanup releases the gate and drains titles
+// before the test database closes.
 func newGatedTitleAgent(t *testing.T) (*sessionAgent, fakeEnv, *gatedStreamModel, func()) {
 	t.Helper()
 	env := testEnv(t)
@@ -19,7 +35,8 @@ func newGatedTitleAgent(t *testing.T) (*sessionAgent, fakeEnv, *gatedStreamModel
 		gate:    make(chan struct{}),
 		entered: make(chan struct{}),
 	}
-	sa := testSessionAgent(env, fastModel{}, small, "system").(*sessionAgent)
+	chatModel := &titleOnlyGatedModel{gated: small}
+	sa := testSessionAgent(env, chatModel, small, "system").(*sessionAgent)
 	var once sync.Once
 	release := func() { once.Do(func() { close(small.gate) }) }
 	t.Cleanup(func() {

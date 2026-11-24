@@ -12,29 +12,34 @@
 
   const chosen = $derived(modelData.cfg?.models?.compact ?? null);
   const name = $derived(chosen ? modelInfo(modelData.cfg, modelData.catalog, chosen)?.name || chosen.model : "The chat's own model");
+  let saving = $state(false);
 
   $effect(() => watchModels());
 
   async function useChatModel() {
+    if (saving) return;
+    saving = true;
     try {
       await api.removeConfig(SCOPE.global, "models.compact");
       await refreshModels();
       notify("info", "API chats compact on their own model");
     } catch (error) {
       notify("error", error?.message ?? String(error));
+    } finally {
+      saving = false;
     }
   }
 </script>
 
-<div class="row">
+<div class="row" class:saving>
   <span class="name">Compaction model for API chats</span>
-  <span class="value">{name}</span>
-  {#if chosen}<button type="button" class="act" onclick={useChatModel}>Use the chat's model</button>{/if}
-  <button type="button" class="act" onclick={() => openDialog("models", { compact: true })}>Change…</button>
+  {#if saving}<span class="saving-text">Saving…</span>{:else}<span class="value">{name}</span>{/if}
+  {#if chosen}<button type="button" class="act" disabled={saving} onclick={useChatModel}>Use the chat's model</button>{/if}
+  <button type="button" class="act" disabled={saving} onclick={() => openDialog("models", { compact: true })}>Change…</button>
 </div>
 
 <style>
-  /* As the Settings page's rows (Settings.svelte), and HelperModel.svelte. */
+  /* As the Settings page's rows (Settings.svelte). */
   .row {
     display: flex;
     align-items: center;
@@ -42,6 +47,15 @@
     min-height: calc(56 * var(--px));
     padding: calc(6 * var(--px)) 0;
     border-bottom: 1px solid var(--rule-control);
+  }
+  .row.saving {
+    opacity: 0.65;
+  }
+  .saving-text {
+    flex: none;
+    font: var(--t-small);
+    font-style: italic;
+    color: var(--slate);
   }
   .name {
     flex: 1;

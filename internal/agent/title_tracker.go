@@ -6,7 +6,7 @@ import (
 )
 
 // titleTimeout bounds one title generation so a stalled request ends.
-const titleTimeout = 60 * time.Second
+const titleTimeout = 20 * time.Second
 
 // titleTracker counts in-flight title generations so shutdown can wait for
 // them before the database closes. The zero value is ready to use.

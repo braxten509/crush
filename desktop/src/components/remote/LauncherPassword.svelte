@@ -17,7 +17,7 @@
   let second = $state("");
   let error = $state("");
   let selected = $state("save");
-  let busy = false;
+  let busy = $state(false);
 
   const help = [
     { key: "tab", text: "next" },
@@ -73,11 +73,11 @@
   <Field bind:value={first} masked label="New password" />
   <label class="label" for="launcher-second">Type it again</label>
   <Field bind:value={second} masked label="Type it again" {error} />
-  <div class="buttons">
+  <div class="buttons" class:saving={busy}>
     <Buttons
       buttons={[
-        { id: "save", label: "Save", key: "s" },
-        { id: "cancel", label: "Cancel", key: "c" },
+        { id: "save", label: busy ? "Saving…" : "Save", key: "s", disabled: busy },
+        { id: "cancel", label: "Cancel", key: "c", disabled: busy },
       ]}
       bind:selected
       onPress={(id) => (id === "save" ? save() : closeDialog(ID))}
@@ -96,5 +96,8 @@
   }
   .buttons {
     margin-top: calc(18 * var(--px));
+  }
+  .buttons.saving {
+    opacity: 0.65;
   }
 </style>

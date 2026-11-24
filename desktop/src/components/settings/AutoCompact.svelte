@@ -14,6 +14,7 @@
 
   let text = $state(saved.toLocaleString("en-US"));
   let error = $state("");
+  let saving = $state(false);
 
   const help = [
     { key: "enter", text: "save" },
@@ -26,12 +27,18 @@
   });
 
   async function save() {
+    if (saving) return;
     const parsed = parseTokens(text);
     if (parsed.error) {
       error = parsed.error;
       return;
     }
-    if (await saveAutoCompact(parsed.value)) closeDialog(ID);
+    saving = true;
+    try {
+      if (await saveAutoCompact(parsed.value)) closeDialog(ID);
+    } finally {
+      saving = false;
+    }
   }
 
   function onKey(event, combo) {
@@ -46,8 +53,8 @@
 <Sheet id={ID} title="Compaction limit for API chats" width="small" {help} {onKey}>
   <p class="hint">When a chat reaches this many tokens, Crush sums it up so the chat can go on. Agents that shorten their own chats are not affected.</p>
   <Field bind:value={text} prompt="Tokens: " label="Compaction limit for API chats, in tokens" {error} />
-  <div class="actions">
-    <Buttons buttons={[{ id: "save", label: "Save" }, { id: "cancel", label: "Cancel" }]} selected="save" onPress={(id) => (id === "save" ? save() : closeDialog(ID))} />
+  <div class="actions" class:saving>
+    <Buttons buttons={[{ id: "save", label: saving ? "Saving…" : "Save", disabled: saving }, { id: "cancel", label: "Cancel", disabled: saving }]} selected="save" onPress={(id) => (id === "save" ? save() : closeDialog(ID))} />
   </div>
 </Sheet>
 
@@ -60,5 +67,8 @@
   /* Save and Cancel to click, beside their keys (owner, 2026-10-20). */
   .actions {
     margin-top: calc(18 * var(--px));
+  }
+  .actions.saving {
+    opacity: 0.65;
   }
 </style>

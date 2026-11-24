@@ -120,8 +120,8 @@ function refreshCodexOnReturn() {
 
 export function startLimitsPoll({ idle = () => true } = {}) {
   stopLimitsPoll();
-  globalThis.window?.addEventListener("focus", refreshCodexOnReturn);
-  globalThis.document?.addEventListener("visibilitychange", refreshCodexOnReturn);
+  globalThis.window?.addEventListener?.("focus", refreshCodexOnReturn);
+  globalThis.document?.addEventListener?.("visibilitychange", refreshCodexOnReturn);
   poll = setInterval(() => {
     if (globalThis.document?.visibilityState === "hidden" || !idle()) return;
     const kind = lastProvider;
@@ -141,8 +141,8 @@ export function startLimitsPoll({ idle = () => true } = {}) {
 export function stopLimitsPoll() {
   clearInterval(poll);
   poll = null;
-  globalThis.window?.removeEventListener("focus", refreshCodexOnReturn);
-  globalThis.document?.removeEventListener("visibilitychange", refreshCodexOnReturn);
+  globalThis.window?.removeEventListener?.("focus", refreshCodexOnReturn);
+  globalThis.document?.removeEventListener?.("visibilitychange", refreshCodexOnReturn);
 }
 
 // The windows that apply to a model, as cliagent.Limits does

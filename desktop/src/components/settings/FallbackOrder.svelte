@@ -720,7 +720,9 @@
     color: var(--slate);
   }
   .small {
+    box-sizing: border-box;
     width: calc(64 * var(--px));
+    max-width: 100%;
     height: calc(28 * var(--px));
     padding: 0 calc(8 * var(--px));
     border: 1px solid var(--rule-control);

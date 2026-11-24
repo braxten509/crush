@@ -17,7 +17,7 @@
   let text = $state("");
   let error = $state("");
   let status = $state(null);
-  let busy = false;
+  let busy = $state(false);
   let loaded = false; // Enter waits for the saved limit
   let touched = false; // after a failed read, only a typed value is saved
   let shown = "";
@@ -85,8 +85,8 @@
   <p class="hint">Most memory all Crush windows and everything they start may use. At the limit, the biggest program inside is stopped.</p>
   <Field bind:value={text} prompt="GB: " label="Memory limit in GB" {error} />
   <p class="usage">{usage}</p>
-  <div class="actions">
-    <Buttons buttons={[{ id: "save", label: "Save" }, { id: "cancel", label: "Cancel" }]} selected="save" onPress={(id) => (id === "save" ? save() : closeDialog(ID))} />
+  <div class="actions" class:saving={busy}>
+    <Buttons buttons={[{ id: "save", label: busy ? "Saving…" : "Save", disabled: busy }, { id: "cancel", label: "Cancel", disabled: busy }]} selected="save" onPress={(id) => (id === "save" ? save() : closeDialog(ID))} />
   </div>
 </Sheet>
 
@@ -94,6 +94,9 @@
   /* Save and Cancel to click, beside their keys (owner, 2026-10-20). */
   .actions {
     margin-top: calc(18 * var(--px));
+  }
+  .actions.saving {
+    opacity: 0.65;
   }
 
   p {

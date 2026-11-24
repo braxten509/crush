@@ -246,6 +246,7 @@ export const api = {
   addAccount: (kind) => post("accounts", { kind }),
   renameAccount: (id, name) => commands.api("PUT", `accounts/${seg(id)}`, undefined, { name }),
   removeAccount: (id) => commands.api("DELETE", `accounts/${seg(id)}`),
+  signOutCLI: (kind) => commands.api("DELETE", `auth/cli/${seg(kind)}`),
   signInAccount: (id) => post(`accounts/${seg(id)}/login`),
   useRefill: (kind, account) => post("/v1/limits/refill", { kind, account }),
   setPermissionsSkip: (skip) => post("permissions/skip", { skip }),

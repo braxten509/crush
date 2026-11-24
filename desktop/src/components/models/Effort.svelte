@@ -26,7 +26,7 @@
   let ready = $state(false);
   let ultracode = $state(null); // null without Ultracode support
   let error = $state("");
-  let saving = false;
+  let saving = $state("");
 
   const coder = $derived(coderModel(modelData));
   const levels = $derived(coder.info?.reasoning_levels ?? []);
@@ -63,14 +63,14 @@
   async function confirm() {
     const level = list?.chosen();
     if (!level || saving) return; // no selection: Enter does nothing (reasoning.go:150)
-    saving = true;
+    saving = level;
     try {
       await setEffort(level, ultracode);
       closeDialog(ID);
     } catch (e) {
       error = e?.message ?? String(e);
     } finally {
-      saving = false;
+      saving = "";
     }
   }
 
@@ -102,7 +102,7 @@
       bind:this={list}
       items={levels}
       filterText={levelTitle}
-      info={(level) => (level === currentLevel ? "current" : "")}
+      info={(level) => (saving === level ? "Saving…" : level === currentLevel ? "current" : "")}
       {query}
       bind:selected
       onChoose={() => confirm()}

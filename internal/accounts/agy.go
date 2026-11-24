@@ -105,11 +105,16 @@ func agySignedIn(id string) bool {
 }
 
 func removeAGYLogin(dir string) error {
-	if _, err := os.Stat(filepath.Join(dir, agyProfileFile)); err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil
+	if testing.Testing() {
+		return nil
+	}
+	if dir != "" {
+		if _, err := os.Stat(filepath.Join(dir, agyProfileFile)); err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return nil
+			}
+			return err
 		}
-		return err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()

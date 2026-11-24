@@ -64,3 +64,25 @@ func TestLoginEmailReadsAntigravitysActiveAccount(t *testing.T) {
 	require.Equal(t, "me@example.com", LoginEmail(config.TypeAGYCLI))
 	require.Empty(t, LoginEmail(config.TypeOpenCodeCLI))
 }
+
+// SignOut removes only the chosen OpenCode login entry and leaves the other
+// provider's entry intact.
+func TestSignOutRemovesOpenCodeEntryWithoutTouchingOther(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_DATA_HOME", filepath.Join(home, "data"))
+	t.Setenv("GROK_HOME", "")
+
+	path := filepath.Join(home, "data", "opencode", "auth.json")
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+	require.NoError(t, os.WriteFile(path, []byte(`{"opencode-go":{"type":"api","key":"go-key"},"opencode":{"type":"api","key":"zen-key"}}`), 0o600))
+	require.True(t, SignedIn(config.TypeOpenCodeCLI))
+	require.True(t, SignedIn(config.TypeOpenCodeZenCLI))
+
+	require.NoError(t, SignOut(t.Context(), config.TypeOpenCodeCLI))
+	require.False(t, SignedIn(config.TypeOpenCodeCLI))
+	require.True(t, SignedIn(config.TypeOpenCodeZenCLI), "removing OpenCode Go must keep OpenCode Zen")
+
+	require.NoError(t, SignOut(t.Context(), config.TypeOpenCodeZenCLI))
+	require.False(t, SignedIn(config.TypeOpenCodeZenCLI))
+}

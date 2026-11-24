@@ -44,7 +44,6 @@
   import { accountMeters, setAccountMeters } from "../../lib/stores/accountmeters.svelte.js";
   import CompactionModel from "./CompactionModel.svelte";
   import FallbackOrder from "./FallbackOrder.svelte";
-  import HelperModel from "./HelperModel.svelte";
   import ProviderAccounts from "./ProviderAccounts.svelte";
 
   let checkIn = $state(String(options().check_in_minutes ?? DEFAULT_CHECK_IN));
@@ -54,6 +53,19 @@
   let hasPassword = $state(false);
   let editing = $state(""); // the focused field: check-in, tool limit, stuck-reply wait, CPUs, or ""
   let atFocus = ""; // its text when it took the focus
+  let saving = $state({}); // key → true while its save is in flight
+
+  async function runSave(key, fn) {
+    if (saving[key]) return false;
+    saving = { ...saving, [key]: true };
+    try {
+      return await fn();
+    } finally {
+      const next = { ...saving };
+      delete next[key];
+      saving = next;
+    }
+  }
 
   // A field not being typed in follows the config, so leaving it untouched
   // never writes an old value over a change made elsewhere.
@@ -87,14 +99,14 @@
     editing = "";
     if (checkIn === atFocus) return; // focused but not changed: nothing to save
     if (String(options().check_in_minutes ?? DEFAULT_CHECK_IN) === checkIn.trim()) return;
-    if (!(await setCheckInMinutes(checkIn))) checkIn = String(options().check_in_minutes ?? DEFAULT_CHECK_IN);
+    if (!(await runSave("check_in", () => setCheckInMinutes(checkIn)))) checkIn = String(options().check_in_minutes ?? DEFAULT_CHECK_IN);
   }
 
   async function saveInterruptAfterToolCalls() {
     editing = "";
     if (interruptAfterToolCalls === atFocus) return;
     if (String(options().interrupt_after_tool_calls ?? DEFAULT_INTERRUPT_AFTER_TOOL_CALLS) === interruptAfterToolCalls.trim()) return;
-    if (!(await setInterruptAfterToolCalls(interruptAfterToolCalls))) {
+    if (!(await runSave("interrupt_after_tool_calls", () => setInterruptAfterToolCalls(interruptAfterToolCalls)))) {
       interruptAfterToolCalls = String(options().interrupt_after_tool_calls ?? DEFAULT_INTERRUPT_AFTER_TOOL_CALLS);
     }
   }
@@ -103,14 +115,14 @@
     editing = "";
     if (stallRetry === atFocus) return;
     if (String(options().stall_retry_seconds ?? DEFAULT_STALL_RETRY) === stallRetry.trim()) return;
-    if (!(await setStallRetrySeconds(stallRetry))) stallRetry = String(options().stall_retry_seconds ?? DEFAULT_STALL_RETRY);
+    if (!(await runSave("stall_retry", () => setStallRetrySeconds(stallRetry)))) stallRetry = String(options().stall_retry_seconds ?? DEFAULT_STALL_RETRY);
   }
 
   async function saveCpus() {
     editing = "";
     if (cpus === atFocus) return;
     if (String(options().agent_cpus ?? "") === cpus.trim()) return;
-    await setAgentCpus(cpus);
+    await runSave("cpus", () => setAgentCpus(cpus));
   }
 
   // Enter in a field saves it (the field's blur saves).
@@ -170,13 +182,15 @@
     </div>
   {/if}
   {#if section === "typing"}
-    <div class="row">
+    <div class="row" class:saving={Boolean(saving.composer_focus_only)}>
       <span class="name">Keep focus on the typing box</span>
-      <button type="button" class="switch" role="switch" aria-checked={tui().composer_focus_only === true} aria-label="Keep focus on the typing box" onclick={toggleComposerFocusOnly}></button>
+      {#if saving.composer_focus_only}<span class="saving-text">Saving…</span>{/if}
+      <button type="button" class="switch" role="switch" disabled={Boolean(saving.composer_focus_only)} aria-checked={tui().composer_focus_only === true} aria-label="Keep focus on the typing box" onclick={() => runSave("composer_focus_only", toggleComposerFocusOnly)}></button>
     </div>
-    <div class="row">
+    <div class="row" class:saving={Boolean(saving.thought_line)}>
       <span class="name">Show the model's newest thought while busy</span>
-      <button type="button" class="switch" role="switch" aria-checked={tui().thought_line !== false} aria-label="Show the model's newest thought while busy" onclick={toggleThoughtLine}></button>
+      {#if saving.thought_line}<span class="saving-text">Saving…</span>{/if}
+      <button type="button" class="switch" role="switch" disabled={Boolean(saving.thought_line)} aria-checked={tui().thought_line !== false} aria-label="Show the model's newest thought while busy" onclick={() => runSave("thought_line", toggleThoughtLine)}></button>
     </div>
     <div class="row">
       <span class="name">Composer footer</span>
@@ -191,7 +205,6 @@
     </div>
   {/if}
   {#if section === "work"}
-    <HelperModel />
     <CompactionModel />
     <div class="row">
       <span class="name">Compaction limit for API chats</span>
@@ -203,48 +216,68 @@
       <span class="value">{autoBackgroundSeconds(options())} seconds</span>
       <button type="button" class="act" onclick={() => openDialog("auto_background")}>Change…</button>
     </div>
-    <div class="row">
-      <span class="name">Codex API compacts before the price goes up</span>
-      <span class="value">at 240,000 tokens</span>
+    <div class="row" class:saving={Boolean(saving.codex_compact)}>
+      <div class="label-col">
+        <span class="name">Codex API compacts before the price goes up</span>
+        <span class="sub">At 240,000 tokens</span>
+      </div>
+      {#if saving.codex_compact}<span class="saving-text">Saving…</span>{/if}
       <button
         type="button"
         class="switch"
         role="switch"
+        disabled={Boolean(saving.codex_compact)}
         aria-checked={options().codex_api_compact_before_price_step !== false}
         aria-label="Codex API compacts before the price goes up"
-        onclick={toggleCodexAPICompactBeforePriceStep}></button>
+        onclick={() => runSave("codex_compact", toggleCodexAPICompactBeforePriceStep)}></button>
     </div>
-    <div class="row">
+    <div class="row" class:saving={Boolean(saving.zen_full)}>
       <span class="name">Free DeepSeek keeps its whole 1,000,000 tokens</span>
+      {#if saving.zen_full}<span class="saving-text">Saving…</span>{/if}
       <button
         type="button"
         class="switch"
         role="switch"
+        disabled={Boolean(saving.zen_full)}
         aria-checked={options().opencode_zen_free_deepseek_full_context === true}
         aria-label="Free DeepSeek keeps its whole 1,000,000 tokens"
-        onclick={toggleZenFreeDeepSeekFullContext}></button>
+        onclick={() => runSave("zen_full", toggleZenFreeDeepSeekFullContext)}></button>
     </div>
-    <div class="row">
-      <span class="name">Check-in messages every</span>
-      <span class="field"><input type="text" inputmode="numeric" bind:value={checkIn} onfocus={() => ((editing = "check_in"), (atFocus = checkIn))} onblur={saveCheckIn} onkeydown={fieldKey} aria-label="Check-in minutes" /> minutes</span>
+    <div class="row" class:saving={Boolean(saving.check_in)}>
+      <div class="label-col">
+        <span class="name">Check-in messages every</span>
+        <span class="sub">0 turns check-ins off</span>
+      </div>
+      {#if saving.check_in}<span class="saving-text">Saving…</span>{/if}
+      <span class="field"><input type="text" inputmode="numeric" disabled={Boolean(saving.check_in)} bind:value={checkIn} onfocus={() => ((editing = "check_in"), (atFocus = checkIn))} onblur={saveCheckIn} onkeydown={fieldKey} aria-label="Check-in minutes" /><span class="unit">minutes</span></span>
     </div>
-    <div class="row">
-      <span class="name">Interrupt after</span>
-      <span class="field"><input type="text" inputmode="numeric" bind:value={interruptAfterToolCalls} onfocus={() => ((editing = "interrupt_after_tool_calls"), (atFocus = interruptAfterToolCalls))} onblur={saveInterruptAfterToolCalls} onkeydown={fieldKey} aria-label="Tool calls without an update" /> consecutive tool calls without an update (0 disables)</span>
+    <div class="row" class:saving={Boolean(saving.interrupt_after_tool_calls)}>
+      <div class="label-col">
+        <span class="name">Interrupt after</span>
+        <span class="sub">Consecutive tool calls without an update (0 disables)</span>
+      </div>
+      {#if saving.interrupt_after_tool_calls}<span class="saving-text">Saving…</span>{/if}
+      <span class="field"><input type="text" inputmode="numeric" disabled={Boolean(saving.interrupt_after_tool_calls)} bind:value={interruptAfterToolCalls} onfocus={() => ((editing = "interrupt_after_tool_calls"), (atFocus = interruptAfterToolCalls))} onblur={saveInterruptAfterToolCalls} onkeydown={fieldKey} aria-label="Tool calls without an update" /><span class="unit">calls</span></span>
     </div>
-    <div class="row">
+    <div class="row" class:saving={Boolean(saving.interrupt_sub_agents)}>
       <span class="name">Interrupt sub-agents too</span>
+      {#if saving.interrupt_sub_agents}<span class="saving-text">Saving…</span>{/if}
       <button
         type="button"
         class="switch"
         role="switch"
+        disabled={Boolean(saving.interrupt_sub_agents)}
         aria-checked={options().interrupt_sub_agents !== false}
         aria-label="Interrupt sub-agents too"
-        onclick={toggleInterruptSubAgents}></button>
+        onclick={() => runSave("interrupt_sub_agents", toggleInterruptSubAgents)}></button>
     </div>
-    <div class="row">
-      <span class="name">Ask again when a reply is stuck after</span>
-      <span class="field"><input type="text" inputmode="numeric" bind:value={stallRetry} onfocus={() => ((editing = "stall_retry"), (atFocus = stallRetry))} onblur={saveStallRetry} onkeydown={fieldKey} aria-label="Seconds before a stuck reply is asked again" /> seconds of silence (Codex and Claude; 0 keeps each tool's own limit)</span>
+    <div class="row" class:saving={Boolean(saving.stall_retry)}>
+      <div class="label-col">
+        <span class="name">Ask again when a reply is stuck</span>
+        <span class="sub">Codex and Claude · 0 keeps each tool's own limit</span>
+      </div>
+      {#if saving.stall_retry}<span class="saving-text">Saving…</span>{/if}
+      <span class="field"><input type="text" inputmode="numeric" disabled={Boolean(saving.stall_retry)} bind:value={stallRetry} onfocus={() => ((editing = "stall_retry"), (atFocus = stallRetry))} onblur={saveStallRetry} onkeydown={fieldKey} aria-label="Seconds before a stuck reply is asked again" /><span class="unit">seconds</span></span>
     </div>
     <div class="row">
       <span class="name">Sub-agent instructions</span>
@@ -265,13 +298,18 @@
         <span class="value">{memoryText}</span>
         <button type="button" class="act" onclick={() => openDialog("memory_limit")}>Change…</button>
       </div>
-      <div class="row">
+      <div class="row" class:saving={Boolean(saving.agent_cpus_enabled)}>
         <span class="name">Run AI work on part of the CPU</span>
-        <button type="button" class="switch" role="switch" aria-checked={options().agent_cpus_enabled === true} aria-label="Run AI work on part of the CPU" onclick={toggleAgentCpus}></button>
+        {#if saving.agent_cpus_enabled}<span class="saving-text">Saving…</span>{/if}
+        <button type="button" class="switch" role="switch" disabled={Boolean(saving.agent_cpus_enabled)} aria-checked={options().agent_cpus_enabled === true} aria-label="Run AI work on part of the CPU" onclick={() => runSave("agent_cpus_enabled", toggleAgentCpus)}></button>
       </div>
-      <div class="row">
-        <span class="name">CPUs for AI work</span>
-        <span class="field"><input type="text" bind:value={cpus} onfocus={() => ((editing = "cpus"), (atFocus = cpus))} onblur={saveCpus} onkeydown={fieldKey} placeholder="detect" aria-label="CPUs for AI work" /></span>
+      <div class="row" class:saving={Boolean(saving.cpus)}>
+        <div class="label-col">
+          <span class="name">CPUs for AI work</span>
+          <span class="sub">Leave empty to pick automatically</span>
+        </div>
+        {#if saving.cpus}<span class="saving-text">Saving…</span>{/if}
+        <span class="field"><input class="wide-input" type="text" disabled={Boolean(saving.cpus)} bind:value={cpus} onfocus={() => ((editing = "cpus"), (atFocus = cpus))} onblur={saveCpus} onkeydown={fieldKey} placeholder="detect" aria-label="CPUs for AI work" /></span>
       </div>
   {/if}
   {#if section === "notifications"}
@@ -288,11 +326,12 @@
     <FallbackOrder />
   {/if}
   {#if section === "phone"}
-    <div class="row">
+    <div class="row" class:saving={Boolean(saving.launch_target)}>
       <span class="name">Phone opens new chats in</span>
+      {#if saving.launch_target}<span class="saving-text">Saving…</span>{/if}
       <span class="choices" role="radiogroup" aria-label="Phone opens new chats in">
         {#each [["terminal", "Terminal"], ["desktop", "Desktop"]] as [id, label] (id)}
-          <button type="button" class="choice" role="radio" aria-checked={(options().remote_launch_target || "terminal") === id} onclick={() => setLaunchTarget(id)}>{label}</button>
+          <button type="button" class="choice" role="radio" disabled={Boolean(saving.launch_target)} aria-checked={(options().remote_launch_target || "terminal") === id} onclick={() => runSave("launch_target", () => setLaunchTarget(id))}>{label}</button>
         {/each}
       </span>
     </div>
@@ -303,9 +342,10 @@
     </div>
   {/if}
   {#if section === "providers"}
-    <div class="row">
+    <div class="row" class:saving={Boolean(saving.providers_refresh)}>
       <span class="name">Provider list</span>
-      <button type="button" class="act" onclick={() => runAction("providers.refresh")}>Refresh</button>
+      {#if saving.providers_refresh}<span class="saving-text">Saving…</span>{/if}
+      <button type="button" class="act" disabled={Boolean(saving.providers_refresh)} onclick={() => runSave("providers_refresh", () => runAction("providers.refresh"))}>Refresh</button>
     </div>
   {/if}
       </div>
@@ -345,15 +385,39 @@
 
   .row {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: calc(16 * var(--px));
+    gap: calc(8 * var(--px)) calc(16 * var(--px));
     min-height: calc(48 * var(--px));
+  }
+  .row.saving {
+    opacity: 0.65;
+  }
+  .saving-text {
+    flex: none;
+    font: var(--t-small);
+    font-style: italic;
+    color: var(--slate);
+  }
+  .label-col {
+    flex: 1 1 calc(220 * var(--px));
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: calc(2 * var(--px));
   }
   .name {
     flex: 1;
     min-width: 0;
     font: var(--t-item);
     color: var(--ink);
+  }
+  .label-col .name {
+    flex: none;
+  }
+  .sub {
+    font: var(--t-small);
+    color: var(--slate);
   }
   .value {
     font: var(--t-small);
@@ -369,6 +433,11 @@
     font: var(--t-button);
     color: var(--ink);
     cursor: pointer;
+  }
+  .act:disabled,
+  .choice:disabled,
+  .switch:disabled {
+    cursor: default;
   }
   .act:hover,
   .choice:hover {
@@ -409,17 +478,31 @@
     background: var(--choice);
   }
   .field {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: calc(8 * var(--px));
+    max-width: 100%;
     font: var(--t-small);
     color: var(--slate);
   }
   .field input {
-    width: calc(120 * var(--px));
+    box-sizing: border-box;
+    width: calc(100 * var(--px));
+    max-width: 100%;
     height: calc(36 * var(--px));
     padding: 0 calc(10 * var(--px));
     border: 1px solid var(--rule-control);
     background: var(--paper);
     font: var(--t-field);
     color: var(--ink);
+  }
+  .field input.wide-input {
+    width: calc(172 * var(--px));
+  }
+  .unit {
+    flex: none;
+    min-width: calc(64 * var(--px));
   }
   .act:focus-visible,
   .choice:focus-visible,

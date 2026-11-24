@@ -23,21 +23,22 @@
 
   const ID = "models";
 
-  let { onboarding = false, helper = false, compact = false } = $props();
+  let { onboarding = false, compact = false } = $props();
 
   // "large" names the chats' recent list (config.SelectedModelTypeChat).
-  const type = $derived(helper ? "small" : compact ? "compact" : "large");
+  const type = $derived(compact ? "compact" : "large");
   let query = $state("");
   let selected = $state(-1);
   let selectedId = null; // the selected row's id, kept across rebuilds
   let list = $state(null);
   let firstRead = $state(false);
+  let savingId = $state("");
 
-  // The chat's own model (the last pick with no chat open), or the helper.
-  const current = $derived((type === "small" ? modelData.cfg?.models?.small : type === "compact" ? modelData.cfg?.models?.compact : coderModel(modelData).selected) ?? {});
+  // The chat's own model (the last pick with no chat open), or the compaction model.
+  const current = $derived((type === "compact" ? modelData.cfg?.models?.compact : coderModel(modelData).selected) ?? {});
   const built = $derived(modelData.cfg ? buildGroups({ catalog: modelData.catalog, cfg: modelData.cfg, type, current }) : { items: [], selectedKey: "", prunedRecent: null });
   const items = $derived(built.items);
-  const placeholder = $derived(onboarding ? "Find your fave" : helper ? "Choose the helper model for titles" : compact ? "Choose the model that compacts API chats" : "Choose a model for this chat");
+  const placeholder = $derived(onboarding ? "Find your fave" : compact ? "Choose the model that compacts API chats" : "Choose a model for this chat");
   const chosenItem = $derived(selected >= 0 ? items[selected] : null);
   const editable = $derived(Boolean(chosenItem && modelData.cfg?.providers.has(chosenItem.provider.id)));
   const help = $derived([
@@ -88,9 +89,14 @@
     api.setConfig(SCOPE.global, `recent_models.${type}`, pruned).catch((error) => notify("error", `failed to update recent models: ${error?.message ?? error}`));
   });
 
-  function choose(item, reAuthenticate = false) {
-    if (!item) return;
-    chooseModel({ provider: item.provider, model: selectedModelOf(item, modelData.cfg?.model_efforts), modelType: type, reAuthenticate, onboarding });
+  async function choose(item, reAuthenticate = false) {
+    if (!item || savingId) return;
+    savingId = item.id;
+    try {
+      await chooseModel({ provider: item.provider, model: selectedModelOf(item, modelData.cfg?.model_efforts), modelType: type, reAuthenticate, onboarding });
+    } finally {
+      savingId = "";
+    }
   }
 
   function onKey(event, combo) {
@@ -116,7 +122,7 @@
   const isCurrent = (item) => item.model.id === current.model && item.provider.id === current.provider;
 </script>
 
-<Sheet id={ID} title={helper ? "Helper model" : compact ? "Compaction model for API chats" : "Switch model"} width="standard" maxHeight={720} {help} {onKey} {onboarding}>
+<Sheet id={ID} title={compact ? "Compaction model for API chats" : "Switch model"} width="standard" maxHeight={720} {help} {onKey} {onboarding}>
   {#if onboarding}
     <p class="lead">To start, let's choose a provider and model.</p>
   {/if}
@@ -127,7 +133,7 @@
       {items}
       filterText={filterValue}
       title={(item) => item.model.name || item.model.id}
-      info={(item) => (item.recent ? item.provider.name : isCurrent(item) ? "current" : "")}
+      info={(item) => (savingId === item.id ? "Saving…" : item.recent ? item.provider.name : isCurrent(item) ? "current" : "")}
       groups={(item) => (item.configured ? `${item.group} · Configured` : item.group)}
       query={filterQuery(query)}
       bind:selected

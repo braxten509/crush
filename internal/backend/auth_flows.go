@@ -419,3 +419,17 @@ func (b *Backend) AuthState(workspaceID string) (proto.AuthStateResponse, error)
 	}
 	return out, nil
 }
+
+// SignOutCLI removes kind's own login on this machine and returns the updated
+// CLI auth state.
+func (b *Backend) SignOutCLI(ctx context.Context, workspaceID, kind string) (proto.AuthStateResponse, error) {
+	ws, err := b.GetWorkspace(workspaceID)
+	if err != nil {
+		return proto.AuthStateResponse{}, err
+	}
+	if err := cliagent.SignOut(ctx, catwalk.Type(kind)); err != nil {
+		return proto.AuthStateResponse{}, err
+	}
+	sendConfigChanged(ws)
+	return b.AuthState(workspaceID)
+}

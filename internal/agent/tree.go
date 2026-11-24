@@ -185,8 +185,17 @@ func (c *coordinator) NavigateTree(ctx context.Context, id, target string, summa
 		if len(leaving) == 0 {
 			return tree.SwitchTree(ctx, id, target)
 		}
-		// The branch summary is the helper model's work (owner's D1a).
-		model := a.helperModel.Get()
+		// The branch summary runs on the chat's own model ("self").
+		model, modelErr := a.ChatModel(ctx, id)
+		if modelErr != nil || model.Model == nil {
+			model = a.helperModel.Get()
+		}
+		if model.Model == nil {
+			if modelErr == nil {
+				modelErr = errChatHasNoModel
+			}
+			return fmt.Errorf("summary failed; stayed on the old branch: %w", modelErr)
+		}
 		genCtx, cancel := context.WithCancel(ctx)
 		defer cancel()
 		ac := &activeCancel{cancel: cancel}

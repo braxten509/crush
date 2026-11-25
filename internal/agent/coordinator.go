@@ -347,6 +347,7 @@ func (c *coordinator) BeginAccepted(sessionID string) *AcceptedRun {
 }
 
 func (c *coordinator) Cancel(sessionID string) {
+	c.cancelPendingRetry(sessionID)
 	// Detached subagents outlive the turn that started them, so cancelling
 	// the parent's turn leaves them running; they report back when they
 	// finish, like a background job. Cancelling a subagent's own session
@@ -367,12 +368,14 @@ func (c *coordinator) Cancel(sessionID string) {
 }
 
 func (c *coordinator) Interrupt(sessionID string) {
+	c.cancelPendingRetry(sessionID)
 	c.currentAgent().Interrupt(sessionID)
 }
 
 // InterruptTurn interrupts like Interrupt and returns the id of the turn
 // it stopped, or "" (see sessionScheduler.InterruptTurn).
 func (c *coordinator) InterruptTurn(sessionID string) string {
+	c.cancelPendingRetry(sessionID)
 	agent := c.currentAgent()
 	if named, ok := agent.(interface{ InterruptTurn(string) string }); ok {
 		return named.InterruptTurn(sessionID)

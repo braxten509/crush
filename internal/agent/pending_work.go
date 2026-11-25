@@ -27,6 +27,7 @@ import (
 	"github.com/charmbracelet/crush/internal/fallback"
 	"github.com/charmbracelet/crush/internal/jsonfile"
 	"github.com/charmbracelet/crush/internal/message"
+	"github.com/charmbracelet/crush/internal/openchats"
 )
 
 // savedPendingFile holds a project's pending work.
@@ -51,9 +52,10 @@ const maxSavedAttachments = 4 << 20
 
 // savedWait is a chat's planned continuation.
 type savedWait struct {
-	SessionID string `json:"session_id"`
-	At        time.Time
-	Kind      string `json:"kind"`
+	OpenChatOnly bool   `json:"open_chat_only,omitempty"`
+	SessionID    string `json:"session_id"`
+	At           time.Time
+	Kind         string `json:"kind"`
 	// Provider, Model and Account are the block a fallback wait moves the
 	// chat to; empty for the other kinds.
 	Provider string `json:"provider,omitempty"`
@@ -140,11 +142,23 @@ func (c *coordinator) updatePending(edit func(*pendingWork) bool) error {
 	return jsonfile.Update(path, edit)
 }
 
+func chatIsOpen(id string) bool {
+	list, err := openchats.Open()
+	return err == nil && slices.ContainsFunc(list.Chats(), func(chat openchats.Chat) bool { return chat.ID == id })
+}
+
+func (w savedWait) waitsForRefill() bool {
+	return w.Kind == waitKindFallback || w.Kind == waitKindLimit
+}
+
 // planWait plans the chat's continuation at w.At and saves it, so a restart
 // in between still continues the chat. The wait drops its saved entry when
 // it fires.
 func (c *coordinator) planWait(w savedWait, send func()) {
 	w.Owner = os.Getpid()
+	if w.waitsForRefill() && chatIsOpen(w.SessionID) {
+		w.OpenChatOnly = true
+	}
 	if err := c.updatePending(func(p *pendingWork) bool {
 		p.Waits = append(slices.DeleteFunc(p.Waits, sameWaitSession(w.SessionID)), w)
 		return true
@@ -156,6 +170,9 @@ func (c *coordinator) planWait(w savedWait, send func()) {
 			return // stays saved: the next engine continues it
 		}
 		c.clearWait(w.SessionID)
+		if w.OpenChatOnly && !chatIsOpen(w.SessionID) {
+			return
+		}
 		send()
 	})
 }
@@ -207,9 +224,11 @@ func (c *coordinator) claimWaits() ([]savedWait, error) {
 			switch {
 			case c.limitRetries.has(w.SessionID):
 				kept = append(kept, w) // this Crush still waits on it
-			case w.Owner != self && taskProcessAlive(w.Owner):
+			case w.Owner > 0 && w.Owner != self && taskProcessAlive(w.Owner):
 				kept = append(kept, w) // another running Crush owns it
-			case now.Sub(w.At) > resumeWindow:
+			case w.OpenChatOnly && !chatIsOpen(w.SessionID):
+				continue
+			case now.Sub(w.At) > resumeWindow && !w.OpenChatOnly:
 				slog.Info("Not continuing a chat for a wait that ended long ago", "session_id", w.SessionID, "at", w.At)
 			case !c.sessionExists(w.SessionID):
 				slog.Info("Dropping a wait whose chat is gone", "session_id", w.SessionID)

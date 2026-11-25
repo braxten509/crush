@@ -236,6 +236,7 @@ type activeCancel struct {
 }
 
 type sessionAgent struct {
+	handleQueuedAccountError func(context.Context, string, config.SelectedModel, error) bool
 	// steady keeps each API chat's system prompt steady (steady_prompt.go).
 	steady steadyPrompts
 
@@ -313,6 +314,7 @@ func (c *chatModelCache) dropStaleLocked() {
 }
 
 type SessionAgentOptions struct {
+	handleQueuedAccountError func(context.Context, string, config.SelectedModel, error) bool
 	// Model is the one model of an agent made for one model (ModelFor nil).
 	Model Model
 	// HelperModel writes titles and branch summaries.
@@ -354,6 +356,8 @@ func NewSessionAgent(
 	opts SessionAgentOptions,
 ) SessionAgent {
 	a := &sessionAgent{
+		handleQueuedAccountError: opts.handleQueuedAccountError,
+
 		model:                csync.NewValue(opts.Model),
 		helperModel:          csync.NewValue(opts.HelperModel),
 		systemPromptPrefix:   csync.NewValue(opts.SystemPromptPrefix),

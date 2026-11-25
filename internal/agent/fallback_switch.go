@@ -352,6 +352,30 @@ func (c *coordinator) fallbackBeforeTurn(ctx context.Context, sessionID string) 
 	c.applyFallback(ctx, sessionID, order, at, act, false, nil, map[fallback.Account]bool{})
 }
 
+// A queued turn can finish after its original caller returned, including
+// inside another turn's compaction. Carry its recovery decision back so
+// the outer turn cannot switch accounts or schedule a second continuation.
+type recoveredAccountError struct{ error }
+
+func (e recoveredAccountError) Unwrap() error { return e.error }
+
+func (c *coordinator) handleAccountError(ctx context.Context, sessionID string, model config.SelectedModel, err error) bool {
+	if err == nil || errors.As(err, new(recoveredAccountError)) {
+		return false
+	}
+	if c.fallbackOnOut(ctx, sessionID, err) {
+		return true
+	}
+	at := c.planLimitRetry(sessionID, err)
+	if at.IsZero() {
+		return false
+	}
+	if c.interactiveTurn(ctx) && fallbackHolds(c.cfg, model) {
+		c.fallbackNotice(ctx, sessionID, "Nothing in the fallback order has room. "+limitRetryNote(at))
+	}
+	return true
+}
+
 // fallbackOnOut handles a turn that ran out of usage on a model the order
 // steers. It reports whether the order took the chat; when it did not, the
 // plain reset retry applies.
@@ -442,9 +466,10 @@ func (c *coordinator) applyFallback(ctx context.Context, sessionID string, order
 	case fallback.Wait:
 		b := order.Blocks[act.Block]
 		to := fallback.BlockAccount(b, c.providerKind)
-		c.fallbackNotice(ctx, sessionID, fmt.Sprintf("%s %s. Waiting for %s to refill at %s.", accounts.Label(cfg, from.Kind, from.ID), why, accounts.Label(cfg, to.Kind, to.ID), act.Until.Local().Format("3:04 PM")))
+		atTime := act.Until.Add(limitRetryDelay)
+		c.fallbackNotice(ctx, sessionID, fmt.Sprintf("%s %s. Waiting for %s to refill. %s", accounts.Label(cfg, from.Kind, from.ID), why, accounts.Label(cfg, to.Kind, to.ID), limitRetryNote(atTime)))
 		c.planWait(savedWait{
-			SessionID: sessionID, At: act.Until.Add(limitRetryDelay), Kind: waitKindFallback,
+			SessionID: sessionID, At: atTime, Kind: waitKindFallback,
 			Provider: b.Provider, Model: b.Model, Account: b.Account,
 		}, func() {
 			c.waitForRoom(context.Background(), sessionID, order, at, b)

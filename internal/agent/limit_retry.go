@@ -70,8 +70,7 @@ func limitRetryTime(err error, now time.Time) (time.Time, bool) {
 	if !ok {
 		return time.Time{}, false
 	}
-	// Whole minutes, so the time shown and the time used always agree.
-	at := reset.Add(limitRetryDelay).Truncate(time.Minute)
+	at := reset.Add(limitRetryDelay)
 	// A reset time already past still waits a minute, so a provider that
 	// keeps naming one can't start a fast loop.
 	if earliest := now.Add(limitRetryDelay); at.Before(earliest) {
@@ -185,7 +184,7 @@ func clockResetTime(m []string, now time.Time) (time.Time, bool) {
 
 // limitRetryNote is the line the error box adds about the planned retry.
 func limitRetryNote(at time.Time) string {
-	return "Crush will send \"" + limitRetryPrompt + "\" at " + at.Local().Format("3:04 PM") + " when the limit resets."
+	return "Crush will send \"" + limitRetryPrompt + "\" at " + at.Local().Format("3:04 PM") + ", one minute after the limit resets."
 }
 
 // limitRetries holds each chat's planned retry after a usage limit.
@@ -222,15 +221,16 @@ func (r *limitRetries) plan(sessionID string, at time.Time, send func()) {
 		poll = limitRetryPoll
 	}
 	go func() {
-		ticker := time.NewTicker(poll)
-		defer ticker.Stop()
+		timer := time.NewTimer(0)
+		defer timer.Stop()
 		// Round(0) drops the monotonic reading, so the wait follows the
 		// wall clock across sleep.
-		for now().Round(0).Before(at) {
+		for remaining := at.Sub(now().Round(0)); remaining > 0; remaining = at.Sub(now().Round(0)) {
+			timer.Reset(min(poll, remaining))
 			select {
 			case <-stop:
 				return
-			case <-ticker.C:
+			case <-timer.C:
 			}
 		}
 		r.mu.Lock()
@@ -286,16 +286,24 @@ func (r *limitRetries) has(sessionID string) bool {
 	return ok
 }
 
+// A user stop also cancels an idle chat's planned continuation.
+func (c *coordinator) cancelPendingRetry(sessionID string) {
+	if c.limitRetries.has(sessionID) {
+		c.limitRetries.drop(sessionID)
+		c.clearWait(sessionID)
+	}
+}
+
 // planLimitRetry continues a chat whose turn failed on a usage limit that
 // names its reset time. Only interactive chats do: helpers and headless
 // runs report their failure to whoever started them instead.
-func (c *coordinator) planLimitRetry(sessionID string, err error) {
+func (c *coordinator) planLimitRetry(sessionID string, err error) time.Time {
 	if !c.interactive {
-		return
+		return time.Time{}
 	}
-	at, ok := limitRetryTime(err, time.Now())
+	at, ok := limitRetryTime(err, c.clock())
 	if !ok {
-		return
+		return time.Time{}
 	}
 	slog.Info("Usage limit hit; continuing the chat when it resets", "session_id", sessionID, "at", at)
 	c.planWait(savedWait{SessionID: sessionID, At: at, Kind: waitKindLimit}, func() {
@@ -306,4 +314,5 @@ func (c *coordinator) planLimitRetry(sessionID string, err error) {
 			slog.Warn("Continuing a chat after its usage limit reset failed", "session_id", sessionID, "error", err)
 		}
 	})
+	return at
 }

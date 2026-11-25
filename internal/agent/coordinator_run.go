@@ -248,16 +248,7 @@ func (c *coordinator) runTurn(ctx context.Context, accept *AcceptedRun, report *
 	beforeLoaded := c.skillTracker.LoadedNames()
 	result, originalErr := agent.Run(ctx, call)
 	logTurnSkillUsage(sessionID, prompt, c.activeSkills, c.skillTracker, beforeLoaded)
-	if !c.fallbackOnOut(ctx, sessionID, originalErr) {
-		c.planLimitRetry(sessionID, originalErr)
-		// The error box leaves the retry out when the order steers the
-		// chat; nothing in the order had room, so say it here.
-		if c.interactiveTurn(ctx) && fallbackHolds(c.cfg, model.ModelCfg) {
-			if at, ok := limitRetryTime(originalErr, time.Now()); ok {
-				c.fallbackNotice(ctx, sessionID, "Nothing in the fallback order has room. "+limitRetryNote(at))
-			}
-		}
-	}
+	c.handleAccountError(ctx, sessionID, model.ModelCfg, originalErr)
 
 	// Ask only if still unauthorized after retry — a successful retry
 	// means the user doesn't need to re-authenticate. AWS SSO is handled

@@ -152,7 +152,13 @@ func (a *sessionAgent) Run(ctx context.Context, call SessionAgentCall) (result *
 	t.ctx = message.WithTurnID(context.WithValue(ctx, tools.SessionIDContextKey, t.call.SessionID), t.id)
 	t.call.onQueuedInput = func(calls []SessionAgentCall) { t.consumedCalls = append(t.consumedCalls, calls...) }
 	defer t.publishOutcome(&retErr)
-	return t.run()
+	result, err := t.run()
+	if err != nil && call.batchReservation != nil && !call.NonInteractive && !a.isSubAgent && a.handleQueuedAccountError != nil {
+		if a.handleQueuedAccountError(ctx, call.SessionID, t.chatModel.ModelCfg, err) {
+			err = recoveredAccountError{err}
+		}
+	}
+	return result, err
 }
 
 // dispatchOutcome is how dispatch settled a call.

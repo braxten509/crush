@@ -2,7 +2,6 @@ package agent
 
 import (
 	"log/slog"
-	"maps"
 	"os"
 	"slices"
 	"strings"
@@ -44,11 +43,8 @@ func WaitingChats(c Coordinator) int {
 	return co.limitRetries.count()
 }
 
-// StopAllWork ends every chat turn and sub-agent of c for good, as the
-// user's stop does, before the engine exits. A shutdown saves the helpers it
-// cuts off and the chats waiting for a usage limit to reset, for the next
-// engine to continue; these are dropped instead, and no parent is told that
-// its helper ended.
+// StopAllWork ends the engine's running turns and helpers before it exits.
+// Refill waits for open chats are saved for the next engine.
 func StopAllWork(c Coordinator) {
 	if c == nil {
 		return
@@ -61,31 +57,35 @@ func StopAllWork(c Coordinator) {
 	if co.tasks != nil {
 		co.tasks.stopForGood()
 	}
+	co.releaseOpenWaits()
 	for _, id := range co.busySessions() {
 		c.Cancel(id)
 	}
-	co.dropWaits()
 }
 
-// dropWaits drops the chats' planned continuations (a usage limit's reset,
-// the fallback order's waits) and their saved entries, so no later engine
-// continues them.
-func (c *coordinator) dropWaits() {
-	c.limitRetries.mu.Lock()
-	planned := slices.Collect(maps.Keys(c.limitRetries.pending))
-	c.limitRetries.mu.Unlock()
-	for _, id := range planned {
-		c.limitRetries.drop(id)
-	}
+// Stop local timers as the engine exits. Refill waits for chats the user
+// kept open belong to the next engine. Other stopped work ends here.
+func (c *coordinator) releaseOpenWaits() {
+	c.limitRetries.stopAll()
 	self := os.Getpid()
 	err := c.updatePending(func(p *pendingWork) bool {
-		left := slices.DeleteFunc(p.Waits, func(w savedWait) bool { return w.Owner == self })
-		changed := len(left) != len(p.Waits)
-		p.Waits = left
+		changed := false
+		kept := p.Waits[:0]
+		for _, w := range p.Waits {
+			if w.Owner == self {
+				changed = true
+				if !w.waitsForRefill() || !chatIsOpen(w.SessionID) {
+					continue
+				}
+				w.Owner, w.OpenChatOnly = 0, true
+			}
+			kept = append(kept, w)
+		}
+		p.Waits = kept
 		return changed
 	})
 	if err != nil {
-		slog.Warn("Failed to drop the planned waits", "error", err)
+		slog.Warn("Failed to release planned waits", "error", err)
 	}
 }
 

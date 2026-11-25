@@ -35,6 +35,8 @@ func (c *coordinator) buildAgent(ctx context.Context, ready *readyGroup, prompt 
 	// (owner, 2026-10-24: no shared model anywhere), and the system prompt
 	// prefix comes from that model's provider (promptPrefixFor).
 	result := NewSessionAgent(SessionAgentOptions{
+		handleQueuedAccountError: c.handleAccountError,
+
 		HelperModel:          helper,
 		SystemPrompt:         "",
 		IsSubAgent:           isSubAgent,

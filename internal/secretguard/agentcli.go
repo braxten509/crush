@@ -103,20 +103,32 @@ func argsStartAgentCLI(args []string) bool {
 
 // BlocksAgentCLI reports whether a tool call's JSON input is a shell
 // command that starts an agent CLI ([StartsAgentCLI]). It reads the
-// input's "command", a string or a list of words.
+// input's "command", "cmd", or "CommandLine", a string or a list of words.
 func BlocksAgentCLI(input []byte) bool {
 	var fields struct {
-		Command json.RawMessage `json:"command"`
+		Command     json.RawMessage `json:"command"`
+		Cmd         json.RawMessage `json:"cmd"`
+		CommandLine json.RawMessage `json:"CommandLine"`
 	}
-	if json.Unmarshal(input, &fields) != nil || fields.Command == nil {
+	if json.Unmarshal(input, &fields) != nil {
+		return false
+	}
+	raw := fields.Command
+	if raw == nil {
+		raw = fields.Cmd
+	}
+	if raw == nil {
+		raw = fields.CommandLine
+	}
+	if raw == nil {
 		return false
 	}
 	var command string
-	if json.Unmarshal(fields.Command, &command) == nil {
+	if json.Unmarshal(raw, &command) == nil {
 		return StartsAgentCLI(command)
 	}
 	var words []string
-	if json.Unmarshal(fields.Command, &words) != nil || len(words) == 0 {
+	if json.Unmarshal(raw, &words) != nil || len(words) == 0 {
 		return false
 	}
 	return argsStartAgentCLI(words)

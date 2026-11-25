@@ -25,6 +25,7 @@ import (
 	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/message"
+	"github.com/charmbracelet/crush/internal/secretguard"
 )
 
 // Grok, OpenCode and AGY speak the Agent Client Protocol (agentclientprotocol.com):
@@ -944,7 +945,7 @@ func acpRequest(ctx context.Context, m *Model, t Turn, p *proc, msg rpcMessage, 
 		}
 	}
 	name, input := acpTool2Crush(tc)
-	allowed := !t.NoTools && m.approve(ctx, t.SessionID, params.ToolCall.ToolCallID, name, input)
+	allowed := !t.NoTools && !acpBlocksLaws(params.ToolCall, parts, m.Dir) && m.approve(ctx, t.SessionID, params.ToolCall.ToolCallID, name, input)
 	want := "reject_once"
 	if allowed {
 		want = "allow_once"
@@ -956,6 +957,34 @@ func acpRequest(ctx context.Context, m *Model, t Turn, p *proc, msg rpcMessage, 
 		}
 	}
 	_ = p.send(map[string]any{"jsonrpc": "2.0", "id": msg.ID, "result": map[string]any{"outcome": map[string]any{"outcome": "cancelled"}}})
+}
+
+// acpBlocksLaws checks every path and raw input in an ACP permission request,
+// including multi-file diffs and location lists that acpTool2Crush collapses.
+func acpBlocksLaws(call acpUpdate, parts []acpContent, dir string) bool {
+	for _, c := range parts {
+		if c.Type == "diff" && c.Path != "" && secretguard.IsProtectedLawPathInDir(c.Path, dir) {
+			slog.Info("Refused an ACP diff touching locked law files", "path", c.Path)
+			return true
+		}
+	}
+	kind := toolKind(call.Kind, call.Title)
+	if kind != "read" && kind != "fetch" {
+		for _, loc := range call.Locations {
+			if loc.Path != "" && secretguard.IsProtectedLawPathInDir(loc.Path, dir) {
+				slog.Info("Refused an ACP tool touching locked law files", "path", loc.Path)
+				return true
+			}
+		}
+	}
+	if len(call.RawInput) > 0 {
+		raw, err := json.Marshal(call.RawInput)
+		if err == nil && secretguard.BlocksLawsInDir(cmp.Or(call.Title, call.Kind), raw, dir) {
+			slog.Info("Refused an ACP tool input touching locked law files", "tool", cmp.Or(call.Title, call.Kind))
+			return true
+		}
+	}
+	return false
 }
 
 // agyToolUpdate handles AGY's tool updates, keeping track of its running

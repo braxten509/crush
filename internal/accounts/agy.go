@@ -186,7 +186,9 @@ func RunAGYProfile(ctx context.Context, id, name string, args []string, login bo
 		wrap = append(wrap, "--bind-try", path, path)
 	}
 	skills := filepath.Join(gemini, "skills")
-	wrap = append(wrap, "--ro-bind-try", skills, skills, "--dir", cli)
+	configDir := filepath.Join(gemini, "config")
+	hooks := filepath.Join(configDir, "hooks.json")
+	wrap = append(wrap, "--ro-bind-try", skills, skills, "--dir", configDir, "--ro-bind-try", hooks, hooks, "--dir", cli)
 	// AGY saves its settings (the terms answer too) and setup steps by
 	// replacing the file, which a shared read-only file refuses. These start
 	// as copies of account 1's; what AGY writes stays in the sandbox.

@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -15,6 +16,7 @@ import (
 	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/filechange"
+	"github.com/charmbracelet/crush/internal/secretguard"
 )
 
 // Crush runs an ACP agent's commands when the agent asks (terminal/create
@@ -142,6 +144,13 @@ func (ts *acpTerminals) handle(ctx context.Context, method string, raw json.RawM
 // create starts a command as its own watched process. A bare command line
 // runs through bash, as the agent's own shell would.
 func (ts *acpTerminals) create(command string, args, env []string, dir string, limit int) (any, error) {
+	if len(args) == 0 {
+		if secretguard.BlocksLawsCommandInDir(command, dir) {
+			return nil, errors.New(secretguard.LawsReason)
+		}
+	} else if secretguard.BlocksLawsArgsInDir(append([]string{command}, args...), dir) {
+		return nil, errors.New(secretguard.LawsReason)
+	}
 	cmd := exec.Command(command, args...)
 	if len(args) == 0 {
 		cmd = exec.Command("bash", "-c", command)

@@ -75,7 +75,9 @@ func secureEntryOnly(command string) bool {
 // contents, which never reveals a secret.
 func writesOnly(tool string) bool {
 	switch strings.ToLower(tool) {
-	case "edit", "write", "multiedit", "notebookedit", "apply_patch":
+	case "edit", "write", "multiedit", "notebookedit", "apply_patch",
+		"edit_file", "write_file", "replace_file_content",
+		"multi_replace_file_content", "write_to_file":
 		return true
 	}
 	return false
@@ -119,36 +121,72 @@ func stringsIn(value any, out []string) []string {
 	return out
 }
 
+// BlockReason returns the refusal reason when a tool call trips any guard,
+// or "" when allowed.
+func BlockReason(tool string, input []byte, ownChatFolder string) string {
+	return BlockReasonInDir(tool, input, ownChatFolder, "")
+}
+
+// BlockReasonInDir is like [BlockReason], resolving relative law-file paths
+// against dir.
+func BlockReasonInDir(tool string, input []byte, ownChatFolder, dir string) string {
+	switch {
+	case Blocks(tool, input):
+		return Reason
+	case BlocksWalletRead(tool, input):
+		return WalletReason
+	case BlocksChatFolder(tool, input, ownChatFolder):
+		return ChatFolderReason
+	case BlocksLawsInDir(tool, input, dir):
+		return LawsReason
+	case BlocksAgentCLI(input):
+		return AgentCLIReason
+	default:
+		return ""
+	}
+}
+
 // RunHook reads a PreToolUse hook event (the JSON Crush, Claude Code and
 // Codex send on stdin) and returns the hook's exit code: 2 blocks the call,
 // with the reason on stderr.
 func RunHook(stdin io.Reader, stderr io.Writer) int {
+	return RunHookIO(stdin, io.Discard, stderr)
+}
+
+// RunHookIO handles PreToolUse hook events from Crush, Claude Code, Codex,
+// and Antigravity. Antigravity sends a camelCase toolCall object and reads a
+// JSON decision from stdout; the other CLIs read stderr and exit code 2.
+func RunHookIO(stdin io.Reader, stdout, stderr io.Writer) int {
 	var event struct {
+		CWD       string          `json:"cwd"`
 		ToolName  string          `json:"tool_name"`
 		ToolInput json.RawMessage `json:"tool_input"`
+		ToolCall  *struct {
+			Name string          `json:"name"`
+			Args json.RawMessage `json:"args"`
+		} `json:"toolCall"`
 	}
 	data, err := io.ReadAll(stdin)
 	if err != nil {
 		return 0
 	}
-	if json.Unmarshal(data, &event) != nil || event.ToolInput == nil {
+	own := os.Getenv(ChatFolderEnv)
+	if json.Unmarshal(data, &event) == nil && event.ToolCall != nil {
+		reason := BlockReasonInDir(event.ToolCall.Name, event.ToolCall.Args, own, event.CWD)
+		reply := map[string]string{"decision": "allow"}
+		if reason != "" {
+			reply["decision"] = "deny"
+			reply["reason"] = reason
+		}
+		_ = json.NewEncoder(stdout).Encode(reply)
+		return 0
+	}
+	if event.ToolInput == nil {
 		// Unknown shapes are checked whole rather than let through.
 		event.ToolInput = data
 	}
-	if Blocks(event.ToolName, event.ToolInput) {
-		fmt.Fprintln(stderr, Reason)
-		return 2
-	}
-	if BlocksWalletRead(event.ToolName, event.ToolInput) {
-		fmt.Fprintln(stderr, WalletReason)
-		return 2
-	}
-	if BlocksChatFolder(event.ToolName, event.ToolInput, os.Getenv(ChatFolderEnv)) {
-		fmt.Fprintln(stderr, ChatFolderReason)
-		return 2
-	}
-	if BlocksAgentCLI(event.ToolInput) {
-		fmt.Fprintln(stderr, AgentCLIReason)
+	if reason := BlockReasonInDir(event.ToolName, event.ToolInput, own, event.CWD); reason != "" {
+		fmt.Fprintln(stderr, reason)
 		return 2
 	}
 	return 0

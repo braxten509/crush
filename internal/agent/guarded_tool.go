@@ -25,6 +25,12 @@ func guardTools(tools []fantasy.AgentTool) []fantasy.AgentTool {
 	return out
 }
 
+type guardedWorkDirKey struct{}
+
+func withGuardedWorkDir(ctx context.Context, dir string) context.Context {
+	return context.WithValue(ctx, guardedWorkDirKey{}, dir)
+}
+
 func (g guardedTool) Run(ctx context.Context, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
 	if secretguard.Blocks(call.Name, []byte(call.Input)) {
 		return fantasy.NewTextErrorResponse(secretguard.Reason), nil
@@ -34,6 +40,9 @@ func (g guardedTool) Run(ctx context.Context, call fantasy.ToolCall) (fantasy.To
 	}
 	if secretguard.BlocksChatFolder(call.Name, []byte(call.Input), ownChatFolder(ctx)) {
 		return fantasy.NewTextErrorResponse(secretguard.ChatFolderReason), nil
+	}
+	if secretguard.BlocksLawsInDir(call.Name, []byte(call.Input), ownWorkDir(ctx)) {
+		return fantasy.NewTextErrorResponse(secretguard.LawsReason), nil
 	}
 	if call.Name == tools.BashToolName && secretguard.BlocksAgentCLI([]byte(call.Input)) {
 		return fantasy.NewTextErrorResponse(secretguard.AgentCLIReason), nil
@@ -45,4 +54,12 @@ func (g guardedTool) Run(ctx context.Context, call fantasy.ToolCall) (fantasy.To
 // "" when the turn has none.
 func ownChatFolder(ctx context.Context) string {
 	return envValue(tools.GetContextValue(ctx, tools.ShellEnvContextKey, []string(nil)), secretguard.ChatFolderEnv)
+}
+
+// ownWorkDir is the directory the guarded command or tool runs in, when known.
+func ownWorkDir(ctx context.Context) string {
+	if dir, ok := ctx.Value(guardedWorkDirKey{}).(string); ok && dir != "" {
+		return dir
+	}
+	return envValue(tools.GetContextValue(ctx, tools.ShellEnvContextKey, []string(nil)), TasksDirEnv)
 }

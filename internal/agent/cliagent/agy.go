@@ -1,6 +1,7 @@
 package cliagent
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -8,9 +9,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
+	"syscall"
 
 	"github.com/charmbracelet/crush/internal/accounts"
 	"github.com/charmbracelet/crush/internal/agent/tools"
+	"github.com/charmbracelet/crush/internal/secretguard"
 )
 
 // agyBin finds the real agy binary; shells often wrap it in a function
@@ -25,6 +29,11 @@ func agyBin() string {
 // turn at the model's next step (agy 1.5.11). Print-mode conversations
 // open with session/resume, so older chats carry on.
 func runAGY(ctx context.Context, m *Model, t Turn) error {
+	if !t.NoTools {
+		if err := ensureAGYGuardHook(); err != nil {
+			return fmt.Errorf("installing AGY guard hook: %w", err)
+		}
+	}
 	args := []string{"acp"}
 	name := agyBin()
 	if m.Guarded && !m.ReadOnly && !t.NoTools {
@@ -70,6 +79,97 @@ func diskMetadata(name, input, output string) string {
 		return ""
 	}
 	return resultMetadata(name, input, output)
+}
+
+var agyHooksMu sync.Mutex
+
+// ensureAGYGuardHook keeps Crush's guard hook registered in Antigravity's
+// global hooks.json without removing any other hooks the user configured.
+func ensureAGYGuardHook() error {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return fmt.Errorf("resolving home directory: %w", err)
+	}
+	return ensureAGYGuardHookAt(filepath.Join(home, ".gemini", "config", "hooks.json"), secretguard.HookCommand())
+}
+
+func ensureAGYGuardHookAt(path, command string) error {
+	agyHooksMu.Lock()
+	defer agyHooksMu.Unlock()
+
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	lockFile, err := os.OpenFile(path+".lock", os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return err
+	}
+	defer lockFile.Close()
+	if err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX); err != nil {
+		return err
+	}
+	defer func() { _ = syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN) }()
+
+	hooks := map[string]any{}
+	old, err := os.ReadFile(path)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if len(bytes.TrimSpace(old)) > 0 {
+		if err := json.Unmarshal(old, &hooks); err != nil {
+			return fmt.Errorf("parsing existing AGY hooks.json at %s: %w", path, err)
+		}
+		if hooks == nil {
+			hooks = map[string]any{}
+		}
+	}
+	hooks["crush-secrets-guard"] = map[string]any{
+		"PreToolUse": []any{
+			map[string]any{
+				"matcher": "*",
+				"hooks": []any{
+					map[string]any{
+						"type":    "command",
+						"command": command,
+						"timeout": 10,
+					},
+				},
+			},
+		},
+	}
+	data, err := json.MarshalIndent(hooks, "", "  ")
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+	if bytes.Equal(old, data) {
+		return nil
+	}
+	tmp, err := os.CreateTemp(dir, "hooks-*.json")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	if err := tmp.Chmod(0o600); err != nil {
+		tmp.Close()
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	return nil
 }
 
 func clipBytes(b []byte, max int) string {

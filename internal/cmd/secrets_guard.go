@@ -17,7 +17,7 @@ Exits 2 with a reason on stderr when the tool call would read a secrets folder
 it to the CLI agents it starts; it can also be listed as a hook by hand.`,
 	Args: cobra.NoArgs,
 	Run: func(cmd *cobra.Command, _ []string) {
-		os.Exit(secretguard.RunHook(cmd.InOrStdin(), cmd.ErrOrStderr()))
+		os.Exit(secretguard.RunHookIO(cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr()))
 	},
 }
 

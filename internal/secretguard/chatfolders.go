@@ -58,7 +58,7 @@ func BlocksChatFolder(tool string, input []byte, own string) bool {
 	if fields, ok := value.(map[string]any); ok && writesOnly(tool) {
 		stops = "\n"
 		var paths []any
-		for _, key := range []string{"file_path", "path", "notebook_path"} {
+		for _, key := range []string{"file_path", "filePath", "target_file", "path", "absolute_path", "notebook_path", "Path", "TargetFile", "AbsolutePath"} {
 			if path, ok := fields[key].(string); ok {
 				paths = append(paths, path)
 			}

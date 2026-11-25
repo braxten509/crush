@@ -175,6 +175,10 @@ func (m *Model) approve(ctx context.Context, sessionID, callID, name, input stri
 		slog.Info("Refused an agent CLI started by command", "command", str("command"))
 		return false
 	}
+	if secretguard.BlocksLawsInDir(name, []byte(input), m.Dir) {
+		slog.Info("Refused a tool call touching locked law files", "tool", name)
+		return false
+	}
 	if m.Guarded {
 		if name == tools.BashToolName && shelltool.CommandBlocked(str("command")) {
 			slog.Info("Blocked a sub-agent command", "command", str("command"))

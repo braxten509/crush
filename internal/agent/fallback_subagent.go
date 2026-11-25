@@ -36,6 +36,13 @@ type subAgentNext struct {
 // there. It waits for a refill when the order says so.
 func (h *taskHub) subAgentFallback(ctx context.Context, t *Task, start, cur config.SelectedModel, err error) (subAgentNext, bool) {
 	c := h.c
+	if agyNeedsSignIn(err) {
+		b, line, ok := c.nextAfterSignIn(ctx, start, cur)
+		if !ok {
+			return subAgentNext{}, false
+		}
+		return h.subAgentOn(ctx, t, b, line)
+	}
 	if !isUsageLimit(err) {
 		return subAgentNext{}, false
 	}

@@ -356,12 +356,26 @@ func (c *coordinator) fallbackBeforeTurn(ctx context.Context, sessionID string) 
 // steers. It reports whether the order took the chat; when it did not, the
 // plain reset retry applies.
 func (c *coordinator) fallbackOnOut(ctx context.Context, sessionID string, err error) bool {
-	if !c.interactiveTurn(ctx) || !isUsageLimit(err) {
+	needsSignIn := agyNeedsSignIn(err)
+	if !c.interactiveTurn(ctx) || (!needsSignIn && !isUsageLimit(err)) {
 		return false
 	}
 	cur, ok := c.chatSelection(ctx, sessionID)
 	if !ok {
 		return false
+	}
+	if needsSignIn {
+		b, line, ok := c.nextAfterSignIn(ctx, cur, cur)
+		if !ok {
+			return false
+		}
+		if err := c.switchModel(ctx, sessionID, fallback.Model(b)); err != nil {
+			slog.Warn("Could not switch after AGY requested sign-in", "error", err)
+			return false
+		}
+		c.fallbackNotice(ctx, sessionID, line)
+		c.continueChat(sessionID, c.fallback.clock())
+		return true
 	}
 	order, ok := c.fallbackOrder(cur)
 	if !ok {

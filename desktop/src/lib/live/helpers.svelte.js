@@ -12,7 +12,7 @@ import { untrack } from "svelte";
 import { createSubscriber, SvelteMap } from "svelte/reactivity";
 import { closeDialog, openDialog } from "../dialogs.js";
 import { api } from "../engine/api.js";
-import { onEvent, onResync } from "../engine/events.js";
+import { onEvent, onFolderEvent, onResync } from "../engine/events.js";
 import { limitKind } from "../footer.js";
 import { refreshCapabilities } from "../models/capabilities.svelte.js";
 import { modelData, shownAgent } from "../models/store.svelte.js";
@@ -20,6 +20,7 @@ import { helperChats } from "../stores/helperchats.svelte.js";
 import { agentProviderChanged } from "../stores/limits.svelte.js";
 import { ws } from "../stores/workspace.svelte.js";
 import { focusField } from "../stores/composer.svelte.js";
+import { messages } from "../stores/messages.svelte.js";
 import { sessions } from "../stores/sessions.svelte.js";
 import { notify, ui } from "../stores/ui.svelte.js";
 import { traySections, traySelected } from "../tray.js";
@@ -30,12 +31,13 @@ const READ_EVERY_MS = 1000;
 // after the engine answered the stop (then a row still listed comes back).
 const HOLD_AFTER_ANSWER_MS = 5000;
 
-class HelperList {
-  sid = $state(""); // the chat these records belong to ("" on the start screen)
-  byId = new SvelteMap(); // helper id → proto.Helper, as the engine last sent it
+class ChatHelpers {
+  byId = new SvelteMap();
+  held = new SvelteMap(); // helper id → ms the engine answered its stop (0 while on its way)
+  eventAt = new Map(); // helper id → sequence of the last event during a read
 }
 
-export const helpers = new HelperList();
+export const helpers = $state({ sid: "", records: new ChatHelpers() });
 
 // The open sheet and helper view report themselves here for the probe
 // (plugins/live.js): each sets a function while it is mounted.
@@ -155,8 +157,8 @@ export function trayHint(id) {
 
 // -- The list --
 
-const held = new SvelteMap(); // helper id → ms the engine answered its stop (0 while on its way)
-const eventAt = new Map(); // helper id → ms of its last helper event (a read older than it keeps it)
+const saved = new WeakMap(); // loaded chat → its helpers, including updates received while away
+let eventSeq = 0;
 let readTurn = 0;
 let reading = false;
 let timer = null;
@@ -172,25 +174,25 @@ export function runningHelpers() {
   const sid = helpers.sid;
   if (!sid || sid !== pickedSid()) return [];
   const out = [];
-  for (const h of helpers.byId.values()) {
-    if (h.session_id === sid && h.status === "running" && !held.has(h.id)) out.push(h);
+  for (const h of helpers.records.byId.values()) {
+    if (h.session_id === sid && h.status === "running" && !helpers.records.held.has(h.id)) out.push(h);
   }
   return out.sort((a, b) => (timeOf(a.started) || 0) - (timeOf(b.started) || 0));
 }
 
 export function helperById(id) {
-  return helpers.byId.get(id) ?? null;
+  return helpers.records.byId.get(id) ?? null;
 }
 
 function anyRunning() {
-  for (const h of helpers.byId.values()) if (h.status === "running") return true;
+  for (const h of helpers.records.byId.values()) if (h.status === "running") return true;
   return false;
 }
 
-function schedule() {
+function schedule(retry = false) {
   clearTimeout(timer);
   timer = null;
-  if (helpers.sid && anyRunning()) timer = setTimeout(read, READ_EVERY_MS);
+  if (helpers.sid && (retry || anyRunning())) timer = setTimeout(read, READ_EVERY_MS);
 }
 
 async function read() {
@@ -199,7 +201,7 @@ async function read() {
   const sid = helpers.sid;
   if (!sid) return;
   const turn = ++readTurn;
-  const startedAt = Date.now();
+  const startedAt = eventSeq;
   reading = true;
   let list = null;
   try {
@@ -210,44 +212,46 @@ async function read() {
   if (turn !== readTurn) return; // a newer read or another chat took over
   reading = false;
   if (Array.isArray(list)) replaceAll(list, startedAt);
-  schedule();
+  schedule(!Array.isArray(list));
 }
 
 // A read replaces the records, except those a helper event changed after the
 // read started: the event is newer than what the engine read.
 function replaceAll(list, startedAt) {
+  const { byId, eventAt } = helpers.records;
   const fresh = new Map();
   for (const h of list) if (h?.id) fresh.set(h.id, h);
-  for (const id of [...helpers.byId.keys()]) {
-    if (!fresh.has(id) && !((eventAt.get(id) ?? 0) > startedAt)) helpers.byId.delete(id);
+  for (const id of [...byId.keys()]) {
+    if (!fresh.has(id) && !((eventAt.get(id) ?? 0) > startedAt)) byId.delete(id);
   }
   for (const [id, h] of fresh) {
     if ((eventAt.get(id) ?? 0) > startedAt) continue;
-    helpers.byId.set(id, h);
+    byId.set(id, h);
   }
-  prune();
+  eventAt.clear();
+  prune(helpers.records);
 }
 
 // Stopped rows come back to the list once the engine no longer runs them,
 // or HOLD_AFTER_ANSWER_MS after it answered.
-function prune(now = Date.now()) {
+function prune({ byId, held }, now = Date.now()) {
   for (const [id, answeredAt] of held) {
-    const h = helpers.byId.get(id);
+    const h = byId.get(id);
     if (!h || h.status !== "running" || (answeredAt > 0 && now - answeredAt >= HOLD_AFTER_ANSWER_MS)) held.delete(id);
   }
 }
 
-// Another chat shows (or none): everything starts again (2.15 State).
+// Restore the selected chat before its refresh arrives.
 function showChat(sid) {
   if (sid === helpers.sid) return;
   readTurn += 1;
   reading = false;
   clearTimeout(timer);
   timer = null;
+  const previous = messages.bySession[helpers.sid];
+  if (previous) saved.set(previous, helpers.records);
   helpers.sid = sid;
-  helpers.byId.clear();
-  eventAt.clear();
-  held.clear();
+  helpers.records = saved.get(messages.bySession[sid]) ?? new ChatHelpers();
   if (sid) read();
 }
 
@@ -259,6 +263,7 @@ function showChat(sid) {
 export async function stopHelper(h) {
   const sid = helpers.sid;
   if (!sid || !h?.id) return false;
+  const { held } = helpers.records;
   held.set(h.id, 0);
   try {
     await api.stopHelper(sid, h.id);
@@ -280,19 +285,27 @@ export function startHelpers() {
   if (started) return;
   started = true;
   $effect.root(() => {
-    $effect(() => {
+    $effect.pre(() => {
       const sid = pickedSid();
       untrack(() => showChat(sid));
     });
   });
-  onEvent("helper", (_kind, h) => {
-    if (!h?.id || !helpers.sid || h.session_id !== helpers.sid) return;
-    eventAt.set(h.id, Date.now());
-    helpers.byId.set(h.id, h);
-    prune();
-    if (h.status === "running" && !timer && !reading) schedule();
-  });
+  onEvent("helper", updateHelper);
+  onFolderEvent("helper", updateHelper);
   onResync(() => read());
+}
+
+function updateHelper(_kind, h) {
+  if (!h?.id || !h.session_id) return;
+  const shown = h.session_id === helpers.sid;
+  const chat = messages.bySession[h.session_id];
+  if (!shown && !chat) return;
+  const records = shown ? helpers.records : (saved.get(chat) ?? new ChatHelpers());
+  if (!shown) saved.set(chat, records);
+  if (shown && reading) records.eventAt.set(h.id, ++eventSeq);
+  records.byId.set(h.id, h);
+  prune(records);
+  if (shown && h.status === "running" && !timer && !reading) schedule();
 }
 
 let watching = false;

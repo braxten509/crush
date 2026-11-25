@@ -99,7 +99,7 @@ probeSection(
       tray_focused: ui.focus === "tray",
       tray_selected: ui.focus === "tray" ? traySelected() : null,
       helpers: runningHelpers().map((h) => ({ id: h.id, name: h.name, status: h.status, child_session_id: h.child_session_id ?? "" })),
-      helper_records: [...helpers.byId.values()].map((h) => ({ id: h.id, name: h.name, status: h.status })),
+      helper_records: [...helpers.records.byId.values()].map((h) => ({ id: h.id, name: h.name, status: h.status })),
       helper_chats: Object.values(helperChats.byId).map((c) => ({ id: c.id, parent: c.parent, running: c.running })),
       jobs: trayJobs().map((job) => ({ job_id: job.job_id ?? "", pid: job.pid ?? 0, command: job.command ?? "" })),
       server_jobs: serverJobs().map((job) => ({ job_id: job.job_id ?? "", pid: job.pid ?? 0 })),

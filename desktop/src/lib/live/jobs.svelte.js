@@ -9,6 +9,7 @@ import { untrack } from "svelte";
 import { SvelteMap } from "svelte/reactivity";
 import { api } from "../engine/api.js";
 import { onResync } from "../engine/events.js";
+import { messages } from "../stores/messages.svelte.js";
 import { sessions } from "../stores/sessions.svelte.js";
 import { notify } from "../stores/ui.svelte.js";
 import { since, timeOf } from "./helpers.svelte.js";
@@ -47,7 +48,9 @@ function isServer(job, servers) {
   return servers.some((s) => (job.job_id && s.job_id === job.job_id) || (job.pid && s.pid === job.pid));
 }
 
-const held = new SvelteMap(); // job key → ms the engine answered its kill (0 while on its way)
+// Keep job rows for as long as the desktop keeps the chat loaded.
+const saved = new WeakMap();
+let held = new SvelteMap(); // job key → ms the engine answered its kill (0 while on its way)
 let readTurn = 0;
 let timer = null;
 
@@ -113,10 +116,14 @@ function showChat(sid) {
   readTurn += 1;
   clearTimeout(timer);
   timer = null;
+  const previous = messages.bySession[jobs.sid];
+  if (previous && jobs.list.length) saved.set(previous, { list: jobs.list, servers: jobs.servers, held });
+  else if (previous) saved.delete(previous);
+  const snapshot = saved.get(messages.bySession[sid]);
   jobs.sid = sid;
-  jobs.list = [];
-  jobs.servers = [];
-  held.clear();
+  jobs.list = snapshot?.list ?? [];
+  jobs.servers = snapshot?.servers ?? [];
+  held = snapshot?.held ?? new SvelteMap();
   if (sid) read();
 }
 
@@ -127,15 +134,16 @@ export async function killJob(job) {
   const sid = jobs.sid;
   if (!sid || !job) return false;
   const key = jobKey(job);
-  held.set(key, 0);
+  const chatHeld = held;
+  chatHeld.set(key, 0);
   try {
     await api.killJob(sid, job.job_id ? { job_id: job.job_id } : { pid: job.pid });
   } catch (error) {
-    held.delete(key);
+    chatHeld.delete(key);
     notify("error", error?.message ?? String(error));
     return false;
   }
-  if (held.has(key)) held.set(key, Date.now());
+  if (chatHeld.has(key)) chatHeld.set(key, Date.now());
   notify("info", `Killed ${job.command}`);
   return true;
 }
@@ -146,7 +154,7 @@ export function startJobs() {
   if (started) return;
   started = true;
   $effect.root(() => {
-    $effect(() => {
+    $effect.pre(() => {
       const sid = pickedSid();
       untrack(() => showChat(sid));
     });

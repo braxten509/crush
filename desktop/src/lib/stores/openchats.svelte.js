@@ -21,6 +21,7 @@ export const openChats = $state({ list: [], loaded: false });
 const POLL_MS = 1500;
 let seq = 0;
 let seenShown = ""; // the shown chat, once a read has listed it
+const removing = new Set(); // local removals the shared list has yet to save
 
 const sameChats = (a, b) =>
   a.length === b.length &&
@@ -38,7 +39,7 @@ async function read() {
   }
   if (mine !== seq) return;
   const before = openChats.list;
-  const next = Array.isArray(list) ? list : [];
+  const next = Array.isArray(list) ? list.filter((c) => !removing.has(c.id)) : [];
   if (!sameChats(before, next)) openChats.list = next;
   // A chat closed in the terminal stops its phone share (owner, 2026-10-21).
   for (const c of before) if (!openChats.list.some((n) => n.id === c.id)) chatClosed(c.id);
@@ -156,8 +157,8 @@ export async function listChat(id) {
 // landing page.
 function leaveShown(id) {
   const next = openChats.list.find((c) => c.id !== id && c.dir === folderNow() && sessions.byId[c.id]);
+  if (!next || !isKept(next.id)) showLanding();
   if (next) openChat(next.id);
-  else showLanding();
 }
 
 // The list's ×: off the list for every app, with its phone share; the shown
@@ -167,18 +168,20 @@ function leaveShown(id) {
 // chat listed, with the error shown.
 export async function closeListed(id, { mustStop = false } = {}) {
   if (!id) return false;
-  try {
-    await api.stopChat(id);
-  } catch (error) {
+  const dir = chatFolderOf(id)?.dir || folderNow();
+  const stopped = api.stopChat(id).then(() => true).catch((error) => {
     const text = error?.message ?? String(error);
     console.error("stopping a closed chat's work failed", text);
     if (mustStop) {
       notify("error", `Could not stop the chat: ${text}`);
-      return false;
     }
-  }
+    return false;
+  });
+  if (mustStop && !(await stopped)) return false;
+  // Keep cleanup on the original chat's engine even after switching folders.
+  stopped.then(() => api.closeSessionBranch(id, dir)).catch(() => {});
   const wasShown = sessions.currentId === id;
-  api.closeSessionBranch(id).catch(() => {});
+  removing.add(id);
   openChats.list = openChats.list.filter((c) => c.id !== id);
   chatClosed(id);
   if (wasShown) {
@@ -190,6 +193,8 @@ export async function closeListed(id, { mustStop = false } = {}) {
     await openChatsRemove(id);
   } catch (error) {
     console.error("closing an open chat failed", error?.message ?? error);
+  } finally {
+    removing.delete(id);
   }
   read();
   return true;

@@ -26,23 +26,18 @@
     ? [...model.meters, { id: "credits", label: "Credits", text: credits, bar: false }]
     : model.meters);
   const perRow = $derived(metersPerRow(meters.length));
-  const rows = $derived(Math.ceil(meters.length / perRow));
-  // More than one row: a horizontal rule between the rows, and each later
-  // row gets the same gap above its words as the first row has under the
-  // panel's top (owner, 2026-11-03). Four meters go two over two with only
-  // that rule (owner, 2026-10-24); five and six go three over two or three,
-  // keeping the lines between the columns too (owner, 2026-11-03).
-  const ruled = $derived(rows > 1);
-  const columnLines = $derived(!(perRow === 2 && rows > 1));
-  const HEAD = 21; // .usage-wrap's margin-top
-  const rowTemplate = $derived.by(() => {
-    if (!ruled) return null;
-    const height = resets ? 134 : 110;
-    const parts = [`calc(${height} * var(--px))`];
-    for (let r = 1; r < rows; r++) parts.push("calc(1 * var(--px))", `calc(${height + HEAD} * var(--px))`);
-    return parts.join(" ");
-  });
-  const columns = $derived(perRow === 3 ? "116fr 32fr 115fr 31fr 114fr" : Array.from({ length: perRow }, () => "115fr").join(" 31fr "));
+  const rows = $derived(Array.from({ length: Math.ceil(meters.length / perRow) }, (_, i) =>
+    meters.slice(i * perRow, (i + 1) * perRow)));
+  const columnLines = $derived(!(perRow === 2 && rows.length > 1));
+  // Each row owns its columns. The two bottom meters in a group of five
+  // share the full width with one centered divider.
+  function sharesFor(row) {
+    if (meters.length === 5 && row === 1) return [115, 115];
+    return perRow === 3 ? [116, 115, 114] : Array(perRow).fill(115);
+  }
+  function columnsFor(row) {
+    return sharesFor(row).map((share) => `${share}fr`).join(" 31fr ");
+  }
   const resets = $derived(meters.some((m) => m.resets));
 
   // The panel width every meter's label, figure and reset time need whole
@@ -57,8 +52,6 @@
     const measure = () => {
       const cells = [...section.querySelectorAll(".cell")];
       if (cells.length === 0) return;
-      const shares = perRow === 3 ? [116, 115, 114] : Array.from({ length: perRow }, () => 115);
-      const total = perRow === 3 ? 408 : 115 * perRow + 31 * (perRow - 1);
       let row = 0;
       // The words' own width, read from their text: a block's scrollWidth is
       // never under its box, which grew the panel a pixel a measure.
@@ -70,6 +63,8 @@
       };
       cells.forEach((cell, i) => {
         const need = Math.max(...[".label", ".resets > .main", ".value > span"].map((s) => width(cell.querySelector(s))));
+        const shares = sharesFor(Math.floor(i / perRow));
+        const total = shares.reduce((sum, share) => sum + share, 31 * (shares.length - 1));
         row = Math.max(row, ((need + 1) * total) / shares[i % perRow]);
       });
       const column = section.closest(".panel-column") ?? section.parentElement;
@@ -87,25 +82,27 @@
 </script>
 
 <div class="usage-wrap">
-  <section class="usage" class:with-resets={resets} class:ruled aria-label="Usage" style:grid-template-columns={columns} style:grid-template-rows={rowTemplate} bind:this={section}>
-    {#each meters as meter, i (meter.id)}
-      {@const col = i % perRow}
-      {@const row = Math.floor(i / perRow) + 1}
-      {#if ruled && col === 0 && row > 1}<span class="row-rule" style:grid-row={row * 2 - 2} style:grid-column="1 / -1" aria-hidden="true"></span>{/if}
-      {#if columnLines && col > 0}
-        <span class="separator" class:second={col === 2} class:later={row > 1} style:grid-row={ruled ? row * 2 - 1 : row} style:grid-column={2 * col} aria-hidden="true"></span>
-      {/if}
-      <div class="cell" class:later={row > 1} data-meter={meter.id} style:grid-row={ruled ? row * 2 - 1 : row} style:grid-column={2 * col + 1}>
-        <h3 class="label">{meter.label}</h3>
-        <p class="value {meter.level}" class:pending={meter.text === "checking…"}>
-          <span>{meter.text}</span>
-          {#if meter.level}<span class="visually-hidden">{meter.level === "out" ? "almost used up" : "running low"}</span>{/if}
-        </p>
-        {#if meter.bar !== false}<div class="meter" role="meter" aria-label="{meter.label} left" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(meter.left)}>
-          <span class="fill {meter.level}" style:width="{meter.left}%"></span>
-        </div>{/if}
-        {#if meter.resets}<p class="resets"><span class="main">{meter.resets}</span>{#if meter.resetsTail}<span class="tail">{meter.resetsTail}</span>{/if}</p>{/if}
-        {#if meter.refill}<button type="button" class="use-refill" data-refill-use onclick={() => useRefill(refillNow().kind, refillNow().account)}>Use one</button>{/if}
+  <section class="usage" class:with-resets={resets} aria-label="Usage" bind:this={section}>
+    {#each rows as row, r}
+      {#if r > 0}<div class="row-rule" aria-hidden="true"></div>{/if}
+      <div class="meter-row" class:later={r > 0} class:halves={meters.length === 5 && r === 1} style:grid-template-columns={columnsFor(r)}>
+        {#each row as meter, col (meter.id)}
+          {#if columnLines && col > 0}
+            <span class="separator" class:second={col === 2} style:grid-column={2 * col} aria-hidden="true"></span>
+          {/if}
+          <div class="cell" data-meter={meter.id} style:grid-column={2 * col + 1}>
+            <h3 class="label">{meter.label}</h3>
+            <p class="value {meter.level}" class:pending={meter.text === "checking…"}>
+              <span>{meter.text}</span>
+              {#if meter.level}<span class="visually-hidden">{meter.level === "out" ? "almost used up" : "running low"}</span>{/if}
+            </p>
+            {#if meter.bar !== false}<div class="meter" role="meter" aria-label="{meter.label} left" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(meter.left)}>
+              <span class="fill {meter.level}" style:width="{meter.left}%"></span>
+            </div>{/if}
+            {#if meter.resets}<p class="resets"><span class="main">{meter.resets}</span>{#if meter.resetsTail}<span class="tail">{meter.resetsTail}</span>{/if}</p>{/if}
+            {#if meter.refill}<button type="button" class="use-refill" data-refill-use onclick={() => useRefill(refillNow().kind, refillNow().account)}>Use one</button>{/if}
+          </div>
+        {/each}
       </div>
     {:else}
       <p class="no-meters">No meters chosen.</p>
@@ -120,14 +117,15 @@
     margin-top: calc(21 * var(--px));
   }
   .usage {
-    display: grid;
-    grid-auto-rows: calc(110 * var(--px));
+    --row-height: calc(110 * var(--px));
   }
   .usage.with-resets {
-    grid-auto-rows: calc(134 * var(--px));
+    --row-height: calc(134 * var(--px));
   }
-  /* Several rows: a rule row of its own between the content rows (the rows'
-     heights come from rowTemplate). */
+  .meter-row {
+    display: grid;
+    grid-template-rows: var(--row-height);
+  }
   .usage:focus-visible {
     outline-offset: calc(4 * var(--px));
   }
@@ -136,13 +134,8 @@
     min-width: 0;
     padding-top: calc(7 * var(--px));
   }
-  /* A row under a rule starts as far below it as the first row starts below
-     the panel's top (HEAD, 21 dots), its column lines too. */
-  .cell.later {
-    padding-top: calc((21 + 7) * var(--px));
-  }
-  .separator.later {
-    margin-top: calc(21 * var(--px));
+  .meter-row.later {
+    padding-top: calc(21 * var(--px));
   }
   .label {
     font: var(--t-label);
@@ -160,7 +153,12 @@
   .separator.second {
     margin-left: calc(14 * var(--px));
   }
+  .halves .separator {
+    justify-self: center;
+    margin-left: 0;
+  }
   .row-rule {
+    height: calc(1 * var(--px));
     background: var(--rule-frame);
   }
   .value {

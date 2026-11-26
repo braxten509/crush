@@ -147,7 +147,7 @@ export const api = {
   setSessionModel: (sid, model) => commands.api("POST", `${chat(sid)}/model`, undefined, { model }, undefined, folderOf(sid)),
   setSessionBranch: (sid, { branch, create = false }) =>
     commands.api("POST", `${chat(sid)}/git/branch`, undefined, { branch, ...(create ? { create: true } : {}) }, undefined, folderOf(sid)),
-  closeSessionBranch: (sid) => commands.api("DELETE", `${chat(sid)}/git/branch`, undefined, undefined, undefined, folderOf(sid)),
+  closeSessionBranch: (sid, dir = folderOf(sid)) => commands.api("DELETE", `${chat(sid)}/git/branch`, undefined, undefined, undefined, dir),
   // Locked chats (owner, 2026-11-03; rpc.LockSession, rpc.UnlockSession):
   // both answer at once with the chat marked locking or unlocking; the rest
   // arrives as session events. Unlock with stop turns the chat into a

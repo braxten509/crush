@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log/slog"
+	"slices"
 
 	"charm.land/catwalk/v3/pkg/catwalk"
 	"charm.land/fantasy"
@@ -80,6 +81,28 @@ func (a *sessionAgent) createUserMessage(ctx context.Context, call SessionAgentC
 			last = msg
 		}
 		return last, nil
+	}
+	if call.questionMessageID != "" {
+		saved, err := a.messages.Get(ctx, call.questionMessageID)
+		if err != nil {
+			return message.Message{}, err
+		}
+		if saved.SessionID != call.SessionID || saved.Role != message.User || saved.Content().Text != call.Prompt {
+			return message.Message{}, fmt.Errorf("saved question result does not match its turn")
+		}
+		for i, part := range saved.Parts {
+			if text, ok := part.(message.TextContent); ok && text.PendingQuestion {
+				text.Context = modelContext
+				text.PendingQuestion = false
+				saved.Parts[i] = text
+				saved.TurnID = message.TurnIDFrom(ctx)
+				if err := a.messages.Update(ctx, saved); err != nil {
+					return message.Message{}, err
+				}
+				return saved, a.messages.Flush(ctx, saved.ID)
+			}
+		}
+		return saved, nil
 	}
 	if call.Report != nil {
 		msg, err := a.messages.Create(ctx, call.SessionID, message.CreateMessageParams{
@@ -258,7 +281,13 @@ func (a *sessionAgent) getSessionMessages(ctx context.Context, session session.S
 			msgs[0].Role = message.User
 		}
 	}
-	return msgs, nil
+	return withoutPendingQuestions(msgs), nil
+}
+
+func withoutPendingQuestions(msgs []message.Message) []message.Message {
+	return slices.DeleteFunc(msgs, func(m message.Message) bool {
+		return m.Role == message.User && m.Content().PendingQuestion
+	})
 }
 
 // hasUserTextMessage reports whether any user message in msgs contains

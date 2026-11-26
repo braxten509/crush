@@ -528,8 +528,12 @@ func (t *turn) run() (*fantasy.AgentResult, error) {
 		return nil, err
 	}
 	a.memoryNotice(t.ctx, t.call.SessionID)
-	history, files := a.preparePrompt(msgs, t.chatModel.CatwalkCfg.Capabilities.Vision, t.chatModel.CatwalkCfg.Capabilities.Audio, t.call.Attachments...)
+	var history []fantasy.Message
+	var files []fantasy.FilePart
 	if !t.isCLI {
+		// Agent CLIs take the stored messages and attachments directly in
+		// cliStream. Only API models need a second copy in Fantasy's format.
+		history, files = a.preparePrompt(msgs, t.chatModel.CatwalkCfg.Capabilities.Vision, t.chatModel.CatwalkCfg.Capabilities.Audio, t.call.Attachments...)
 		overhead := approxTokenCount(systemPrompt) + approxTokenCount(t.promptPrefix) + approxTokenCount(t.call.Prompt) + int64(len(agentTools)*300)
 		trimmed := a.trimPreparedPrompt(t.call.SessionID, msgs, history, t.chatModel, overhead)
 		if len(trimmed) < len(history) && systemPrompt != builtPrompt {

@@ -93,9 +93,10 @@ type savedReturn struct {
 
 // savedPrompt is a prompt waiting behind a chat's turn.
 type savedPrompt struct {
-	SessionID   string               `json:"session_id"`
-	Prompt      string               `json:"prompt"`
-	Attachments []message.Attachment `json:"attachments,omitempty"`
+	QuestionMessageID string               `json:"question_message_id,omitempty"`
+	SessionID         string               `json:"session_id"`
+	Prompt            string               `json:"prompt"`
+	Attachments       []message.Attachment `json:"attachments,omitempty"`
 	// Owner is the process ID of the Crush whose agent queue holds the
 	// prompt; 0 once a shutdown released it for the next resume.
 	Owner int `json:"owner"`
@@ -371,12 +372,23 @@ func (c *coordinator) restorePrompts() {
 		go func() {
 			for _, p := range prompts {
 				slog.Info("Running a prompt an earlier Crush left queued", "session_id", sessionID)
-				if _, err := c.Run(context.Background(), sessionID, p.Prompt, p.Attachments...); err != nil && !errors.Is(err, context.Canceled) {
+				if err := c.restorePrompt(sessionID, p); err != nil && !errors.Is(err, context.Canceled) {
 					slog.Warn("A restored queued prompt failed", "session_id", sessionID, "error", err)
 				}
 			}
 		}()
 	}
+}
+
+func (c *coordinator) restorePrompt(sessionID string, p savedPrompt) error {
+	var accept *AcceptedRun
+	if p.QuestionMessageID != "" {
+		accept = c.BeginAccepted(sessionID)
+		defer accept.Close()
+		accept.questionMessageID = p.QuestionMessageID
+	}
+	_, err := c.RunAccepted(context.Background(), accept, sessionID, p.Prompt, p.Attachments...)
+	return err
 }
 
 // queuedBySession groups saved prompts by chat, keeping each chat's order.
@@ -490,7 +502,7 @@ func (h *taskHub) writeQueues(release bool) {
 				slog.Warn("Not saving a queued prompt whose files are too big", "session_id", sessionID, "bytes", size)
 				continue
 			}
-			entries = append(entries, savedPrompt{SessionID: sessionID, Prompt: p.Prompt, Attachments: p.Attachments, Owner: owner})
+			entries = append(entries, savedPrompt{SessionID: sessionID, Prompt: p.Prompt, Attachments: p.Attachments, QuestionMessageID: p.QuestionMessageID, Owner: owner})
 		}
 	}
 	slices.SortStableFunc(entries, func(a, b savedPrompt) int {

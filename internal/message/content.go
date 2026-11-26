@@ -89,6 +89,8 @@ func (ReasoningContent) isPart() {}
 type TextContent struct {
 	Text         string `json:"text"`
 	SubmissionID string `json:"submission_id,omitempty"`
+	// PendingQuestion marks a form result recorded before the agent takes it.
+	PendingQuestion bool `json:"pending_question,omitempty"`
 	// Hidden marks generated user continuations that remain in model history.
 	Hidden bool `json:"hidden,omitempty"`
 	// Context is text sent to the model ahead of the prompt, such as host

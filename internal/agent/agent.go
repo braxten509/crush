@@ -51,6 +51,7 @@ type SessionAgentCall struct {
 	// outer call supplies turn settings; identities and attachments stay here.
 	batch               []SessionAgentCall
 	userMessagesCreated bool
+	questionMessageID   string
 	// batchReservation keeps the drain-to-Run handoff busy, so a newer
 	// submission cannot overtake the batch before its Run is scheduled.
 	batchReservation *activeCancel
@@ -393,8 +394,9 @@ func NewSessionAgent(
 // completed the dispatch handoff in Run. Close is the only way to
 // release the reservation and is idempotent.
 type AcceptedRun struct {
-	sched     *sessionScheduler
-	sessionID string
+	sched             *sessionScheduler
+	sessionID         string
+	questionMessageID string
 	// seq is the monotonic accept sequence stamped by BeginAccepted. A
 	// cancel covers this handle iff seq is at or below the session's
 	// cancel mark, so a handle accepted after a cancel (higher seq) is

@@ -2,6 +2,10 @@ package agent
 
 import "github.com/charmbracelet/crush/internal/message"
 
+func (c SessionAgentCall) queuedPrompt() message.QueuedPrompt {
+	return message.QueuedPrompt{Prompt: c.Prompt, Attachments: c.Attachments, SubmissionID: c.SubmissionID, QuestionMessageID: c.questionMessageID}
+}
+
 // pendingSteeredCalls lists what pendingSteered lists, each prompt with the
 // files sent along.
 func (s *cliSteps) pendingSteeredCalls() []message.QueuedPrompt {
@@ -11,7 +15,7 @@ func (s *cliSteps) pendingSteeredCalls() []message.QueuedPrompt {
 	for _, st := range s.steered {
 		for _, q := range st.calls {
 			if !q.ProgressUpdateRequired {
-				prompts = append(prompts, message.QueuedPrompt{Prompt: q.Prompt, Attachments: q.Attachments, SubmissionID: q.SubmissionID})
+				prompts = append(prompts, q.queuedPrompt())
 			}
 		}
 	}
@@ -31,7 +35,7 @@ func (s *sessionScheduler) QueuedPromptFiles(sessionID string) []message.QueuedP
 	for _, calls := range [][]SessionAgentCall{pending, queued} {
 		for _, call := range calls {
 			if !call.ProgressUpdateRequired {
-				prompts = append(prompts, message.QueuedPrompt{Prompt: call.Prompt, Attachments: call.Attachments, SubmissionID: call.SubmissionID})
+				prompts = append(prompts, call.queuedPrompt())
 			}
 		}
 	}

@@ -244,6 +244,9 @@ func (c *coordinator) runTurn(ctx context.Context, accept *AcceptedRun, report *
 	call.Attachments = attachments
 	call.OnComplete = onComplete
 	call.Accepted = accept
+	if accept != nil {
+		call.questionMessageID = accept.questionMessageID
+	}
 	call.NonInteractive = !c.interactiveTurn(ctx)
 	call.sessionRun = sessionRun
 

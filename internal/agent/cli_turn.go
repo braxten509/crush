@@ -276,6 +276,7 @@ func (a *sessionAgent) cliSummarize(ctx context.Context, m *cliagent.Model, sess
 
 func (a *sessionAgent) saveCLILink(ctx context.Context, m *cliagent.Model, sessionID, native string, tasks bool, taskInstructionsHash string) {
 	msgs, err := a.messages.List(ctx, sessionID)
+	msgs = withoutPendingQuestions(msgs)
 	if err != nil || len(msgs) == 0 {
 		return
 	}

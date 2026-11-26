@@ -11,18 +11,18 @@ func (s *sessionScheduler) queuedPromptSnapshots() map[string][]message.QueuedPr
 		out[sessionID] = append(out[sessionID], p)
 	}
 	for sessionID, steered := range s.steering.Seq2() {
-		for _, text := range steered.pendingSteered() {
-			add(sessionID, message.QueuedPrompt{Prompt: text})
+		for _, p := range steered.pendingSteeredCalls() {
+			add(sessionID, p)
 		}
 	}
 	for sessionID, pending := range s.interrupting.Seq2() {
 		for _, call := range pending {
-			add(sessionID, message.QueuedPrompt{Prompt: call.Prompt, Attachments: call.Attachments, SubmissionID: call.SubmissionID})
+			add(sessionID, call.queuedPrompt())
 		}
 	}
 	for sessionID, queued := range s.messageQueue.Seq2() {
 		for _, call := range queued {
-			add(sessionID, message.QueuedPrompt{Prompt: call.Prompt, Attachments: call.Attachments, SubmissionID: call.SubmissionID})
+			add(sessionID, call.queuedPrompt())
 		}
 	}
 	return out

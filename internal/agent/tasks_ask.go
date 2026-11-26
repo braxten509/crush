@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/charmbracelet/crush/internal/agent/tools"
+	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/question"
 	"github.com/charmbracelet/crush/internal/secureentry"
 )
@@ -125,10 +126,20 @@ func (h *taskHub) ask(req TaskRequest) error {
 			delete(h.askSessions, req.Session)
 		})
 		defer accept.Close()
+		// Publish the sanitized result as soon as the form closes. Its turn
+		// takes this same message after setup, including when queued.
+		saved, saveErr := h.c.messages.Create(waitCtx, req.Session, message.CreateMessageParams{
+			Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: msg, PendingQuestion: true}},
+		})
+		if saveErr != nil {
+			slog.Warn("Could not record the form result before delivery", "error", saveErr)
+		} else {
+			accept.questionMessageID = saved.ID
+		}
 		// The chat must hear the outcome even when the turn that opened the
 		// form has ended: by the time the user answers, ctx is gone, and
 		// RunAccepted would drop the answer with it.
-		if _, err := h.c.RunAccepted(context.WithoutCancel(ctx), accept, req.Session, msg); err != nil {
+		if _, err := h.c.RunAccepted(waitCtx, accept, req.Session, msg); err != nil {
 			slog.Error("Failed to hand answers to their session", "error", err)
 		}
 	}()

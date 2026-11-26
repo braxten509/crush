@@ -190,6 +190,7 @@ type taskHub struct {
 	resumeMu sync.Mutex
 	// sessionRuns owns non-interactive runs and their follow-up producers.
 	sessionRuns        map[string]*sessionRun
+	codexCommands      map[*codexCommand]bool
 	backgroundOwners   map[string]string
 	backgroundServices map[string]bool
 	backgroundShells   map[string]*shell.BackgroundShell
@@ -434,6 +435,9 @@ func (h *taskHub) stopAll() {
 	_ = os.RemoveAll(h.dir)
 	h.mu.Lock()
 	h.closing = true
+	for job := range h.codexCommands {
+		job.cancel()
+	}
 	var interrupted []string
 	for id, t := range h.tasks {
 		if t.Status == TaskRunning {
@@ -596,6 +600,11 @@ func (h *taskHub) hasBackgroundWork(sessionID string, includeDelivery bool) bool
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	for job := range h.codexCommands {
+		if job.session == sessionID && (includeDelivery || !job.delivering) {
+			return true
+		}
+	}
 	if sessionID != "" && h.askSessions[sessionID] {
 		return true
 	}

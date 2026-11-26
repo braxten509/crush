@@ -101,6 +101,9 @@ func (c *coordinator) StopForLock(ctx context.Context, ids []string) error {
 	for _, id := range ids {
 		c.Cancel(id)
 		c.ClearQueue(id)
+		if c.tasks != nil {
+			c.tasks.silenceCodexCommands(id, 0, "")
+		}
 	}
 	c.stopTreeDispatched(ids)
 	for {

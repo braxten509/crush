@@ -478,6 +478,9 @@ func killProcess(pid int, byUser bool) error {
 	// The stop is told once, here: a detached process in the tree is not
 	// also reported as ended on its own.
 	h, marked := markInterruptedDetached(pid)
+	if h != nil {
+		h.silenceCodexCommands(root.session, pid, commandText(root.args))
+	}
 	if byUser && h != nil && h.c != nil && root.session != "" {
 		notice := taskResult{Name: BackgroundProcessName, Status: string(TaskStopped), Body: userStopNote(fmt.Sprintf("the background process `%s` (PID %d)", commandText(root.args), pid))}.String()
 		go func() {

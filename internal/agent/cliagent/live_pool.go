@@ -23,6 +23,7 @@ type liveProc[K comparable] struct {
 	ended chan struct{}
 	dead  atomic.Bool
 	timer *time.Timer
+	onEnd func() // releases outstanding work if this process exits or is retired
 }
 
 func (l *liveProc[K]) live() *liveProc[K] { return l }
@@ -32,6 +33,13 @@ func (l *liveProc[K]) stop() {
 	l.timer.Stop()
 	close(l.idle)
 	<-l.drained
+	l.finish()
+}
+
+func (l *liveProc[K]) finish() {
+	if l.onEnd != nil {
+		l.onEnd()
+	}
 	l.p.finish()
 }
 
@@ -80,7 +88,7 @@ func (pool *livePool[K, L]) take(sessionID string, key K, resume string) L {
 	close(base.idle)
 	<-base.drained
 	if base.dead.Load() || base.key != key || resume == "" || resume != l.resumeID() {
-		base.p.finish()
+		base.finish()
 		return none
 	}
 	return l
@@ -108,6 +116,9 @@ func (pool *livePool[K, L]) keep(sessionID string, l L, onLine func([]byte) bool
 			case raw, ok := <-base.lines:
 				if !ok {
 					base.dead.Store(true)
+					if base.onEnd != nil {
+						base.onEnd()
+					}
 					close(base.ended)
 					<-base.idle
 					return
@@ -137,7 +148,7 @@ func (pool *livePool[K, L]) keep(sessionID string, l L, onLine func([]byte) bool
 		pool.mu.Unlock()
 		close(base.idle)
 		<-base.drained
-		base.p.finish()
+		base.finish()
 	})
 	pool.mu.Unlock()
 	if hadOld {

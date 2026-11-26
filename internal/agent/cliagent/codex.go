@@ -139,6 +139,7 @@ type codexKey struct {
 // model can check on them, and follow-ups skip its startup.
 type codexLive struct {
 	liveProc[codexKey]
+	terminals   *codexTerminals
 	thread      string
 	creditModel string
 	creditTier  string
@@ -157,7 +158,7 @@ func codexCtrlB(sessions []string) string {
 	if len(sessions) == 0 {
 		return "Crush requested that the command move to the background, but Codex did not confirm a running terminal. It may have finished or stopped. Check its result and any files it changed before deciding whether to retry it, then continue the original task."
 	}
-	return "Crush moved the command you were waiting on to the background. It is still running in terminal session " + strings.Join(sessions, ", ") + " (poll it with write_stdin and empty input), so don't start it again and don't wait for it now: carry on with anything else, or say in a sentence that it's running in the background and end your turn. Check on it later, e.g. when the user asks."
+	return "Crush moved the command you were waiting on to the background. It is still running in terminal session " + strings.Join(sessions, ", ") + " (poll it with write_stdin and empty input), so don't start it again and don't wait for it now: carry on with anything else, or say in a sentence that it's running in the background and end your turn."
 }
 
 // codexRun is one turn of a Codex app-server process: what it was started
@@ -213,6 +214,7 @@ type codexRun struct {
 	running          atomic.Int32 // commands in progress
 	ctrlB, movedToBg atomic.Bool
 	openCmds         map[string]time.Time
+	terminals        *codexTerminals
 	backgrounded     map[string]bool // their results are already shown
 
 	// Crush tool name and input per item (file changes expand to one call
@@ -238,11 +240,15 @@ func runCodex(ctx context.Context, m *Model, t Turn) error {
 	r.catalogWindow, r.catalogLimit, r.effectivePercent = codexCatalogContext(m.ID)
 	defer func() {
 		if r.finished && keep && r.threadID != "" {
-			codexSessions.keep(t.SessionID, &codexLive{
-				liveProc: liveProc[codexKey]{p: p, lines: lines, key: key}, thread: r.threadID,
+			parked := &codexLive{
+				liveProc:    liveProc[codexKey]{p: p, lines: lines, key: key, onEnd: r.terminals.end},
+				thread:      r.threadID,
+				terminals:   r.terminals,
 				creditModel: r.credits.selectedModel, creditTier: r.credits.tier,
-			}, nil, nil, nil)
+			}
+			codexSessions.keep(t.SessionID, parked, parked.readTerminal, r.terminals.busy, nil)
 		} else {
+			r.terminals.end()
 			p.finish()
 		}
 	}()
@@ -285,6 +291,7 @@ func newCodexRun(ctx context.Context, m *Model, t Turn) *codexRun {
 	r := &codexRun{
 		ctx: ctx, m: m, t: t,
 		credits:      codexTurnCredits{selectedModel: m.ID, tier: m.ServiceTier},
+		terminals:    &codexTerminals{},
 		openCmds:     map[string]time.Time{},
 		backgrounded: map[string]bool{},
 		openItems:    map[string]string{},
@@ -312,7 +319,7 @@ func (r *codexRun) open(keep bool, key codexKey) (*codexLive, <-chan []byte, err
 		live = codexSessions.take(r.t.SessionID, key, r.t.Resume)
 	}
 	if live != nil {
-		r.p, r.threadID = live.p, live.thread
+		r.p, r.threadID, r.terminals = live.p, live.thread, live.terminals
 		r.credits.selectedModel, r.credits.tier = live.creditModel, live.creditTier
 		return live, live.lines, nil
 	}
@@ -424,6 +431,9 @@ func (r *codexRun) readLoop(lines <-chan []byte) (done bool, err error) {
 		}
 		var msg rpcMessage
 		if json.Unmarshal(raw, &msg) != nil {
+			continue
+		}
+		if r.terminals.consume(r.threadID, msg) {
 			continue
 		}
 		if msg.Method != "" && !codexSideNotice[msg.Method] {

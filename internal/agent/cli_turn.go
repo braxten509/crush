@@ -161,6 +161,9 @@ func (a *sessionAgent) cliStream(m *cliagent.Model, call SessionAgentCall, histo
 		turn := cliagent.Turn{SessionID: call.SessionID, Prompt: text, Continue: call.CLIContinue, Attachments: call.Attachments, Resume: resume, Effort: effort, Emit: s.handle, Steer: s.steer, SteerInput: s.steerWithImages, SteerReady: s.steerReady, Env: env, Instructions: instructions}
 		if m.Kind == config.TypeCodexCLI {
 			turn.OnCodexUsage = a.recordCodexCredits(call.SessionID)
+			if a.tasks != nil && !a.isSubAgent {
+				turn.CodexBackground = a.tasks.watchCodexCommand
+			}
 		}
 		if a.cfg != nil {
 			turn.StallRetry = a.cfg.Config().Options.GetStallRetry()

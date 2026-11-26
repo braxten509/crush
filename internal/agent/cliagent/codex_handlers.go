@@ -110,6 +110,8 @@ func (r *codexRun) continueAfterCtrlB(msg rpcMessage) error {
 	var res struct {
 		Data []struct {
 			ItemID    string `json:"itemId"`
+			OSPID     int    `json:"osPid"`
+			Command   string `json:"command"`
 			ProcessID string `json:"processId"`
 		} `json:"data"`
 	}
@@ -121,6 +123,7 @@ func (r *codexRun) continueAfterCtrlB(msg rpcMessage) error {
 		if _, pending := r.openCmds[d.ItemID]; !pending || d.ProcessID == "" {
 			continue
 		}
+		r.trackTerminal(d.ItemID, d.Command, d.OSPID)
 		r.backgrounded[d.ItemID] = true
 		sessions = append(sessions, d.ProcessID)
 	}
@@ -143,6 +146,9 @@ func (r *codexRun) continueAfterCtrlB(msg rpcMessage) error {
 	clear(r.openCmds)
 	r.running.Store(0)
 	note := codexCtrlB(sessions)
+	if len(sessions) > 0 && r.t.CodexBackground != nil && !r.m.Guarded {
+		note += " Crush will report the result to this chat when the command ends."
+	}
 	if len(unconfirmed) > 0 {
 		note += "\nThese commands have no confirmed running terminal; check their results and changed files before retrying any of them:\n" + strings.Join(unconfirmed, "\n")
 	}
@@ -318,6 +324,7 @@ func (r *codexRun) handleItemStarted(item codexItem) (err error) {
 			}
 			delete(r.openCmds, id)
 			r.running.Add(-1)
+			r.trackTerminal(id, "", 0)
 			r.backgrounded[id] = true
 			out := ""
 			if b := r.output[id]; b != nil {

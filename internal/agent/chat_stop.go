@@ -34,6 +34,9 @@ func StopChatWork(c Coordinator, sessionID string) {
 	listed := slices.Clone(hubs)
 	hubsMu.Unlock()
 	for _, h := range listed {
+		for _, id := range tree {
+			h.silenceCodexCommands(id, 0, "")
+		}
 		h.stopTreeTasks(tree)
 	}
 	if co != nil {

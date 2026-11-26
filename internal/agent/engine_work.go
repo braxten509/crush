@@ -141,6 +141,9 @@ func (h *taskHub) stopForGood() {
 	defer h.saveMu.Unlock()
 	h.mu.Lock()
 	h.closing = true
+	for job := range h.codexCommands {
+		job.cancel()
+	}
 	var children []string
 	for id, t := range h.tasks {
 		if t.Status == TaskRunning {

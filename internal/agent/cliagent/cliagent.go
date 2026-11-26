@@ -141,6 +141,9 @@ type Turn struct {
 	// Env is added to the CLI process environment.
 	Env  []string
 	Emit func(Event) error
+	// CodexBackground reserves a follow-up for one terminal. Its callback receives
+	// the final status and output, including after this turn has returned.
+	CodexBackground func(session, command string, osPID int) func(status, output string)
 	// OnCodexUsage records the latest estimated credits for a native Codex turn.
 	OnCodexUsage func(CodexUsage)
 	// Steer returns messages the user queued while the turn runs, or "".

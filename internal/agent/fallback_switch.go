@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"regexp"
 	"sync"
 	"time"
 
@@ -29,12 +28,6 @@ import (
 // fallbackGuessOut is how long an account that ran out without saying
 // until when counts as out.
 const fallbackGuessOut = 30 * time.Minute
-
-// usageLimitPattern recognizes a usage-limit error that names no reset
-// time. An account its provider refuses outright (Claude Code: "can't use
-// your Claude subscription ... payment is past due") counts too, so the
-// order moves on to the next account instead of failing the turn.
-var usageLimitPattern = regexp.MustCompile(`(?i)usage limit|limit reached|hit your limit|out of (extra )?usage|rate.?limit|quota (exceeded|reached)|can.t use your \w+ subscription|past due`)
 
 // fallbackOut is an account that ran out: until when, and whether that
 // time came from the provider or is a guess.
@@ -317,7 +310,7 @@ func isUsageLimit(err error) bool {
 	if _, ok := resetTime(err.Error(), time.Now()); ok {
 		return true
 	}
-	return usageLimitPattern.MatchString(err.Error())
+	return cliagent.MatchesUsageLimitText(err.Error())
 }
 
 // fallbackHolds reports whether the fallback order steers a chat on this

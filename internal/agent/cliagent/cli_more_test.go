@@ -163,6 +163,72 @@ cat >/dev/null
 	require.ErrorIs(t, err, ErrResume)
 }
 
+// AGY reports out-of-usage stops as a warning chat chunk followed by end_turn.
+// Turn a trailing out-of-usage warning into an error without emitting it as
+// assistant text, while keeping normal warnings and continued turns as text.
+func TestAGYUsageWarningEndsTurnAsError(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		updates   string
+		wantErr   string
+		wantTexts []string
+	}{
+		{
+			name: "trailing quota warning becomes an error",
+			updates: `{"jsonrpc":"2.0","method":"session/update","params":{"update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"⚠ Individual quota reached. Please upgrade your subscription to increase your limits. Resets in 1h20m26s.\n"}}}}
+{"jsonrpc":"2.0","method":"session/update","params":{"update":{"sessionUpdate":"usage_update","used":120,"size":1048576}}}`,
+			wantErr: "agy: Individual quota reached. Please upgrade your subscription to increase your limits. Resets in 1h20m26s.",
+		},
+		{
+			name: "warning followed by more text stays normal text",
+			updates: `{"jsonrpc":"2.0","method":"session/update","params":{"update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"\n⚠ Individual quota reached. Resets in 1h20m26s.\n"}}}}
+{"jsonrpc":"2.0","method":"session/update","params":{"update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"That was an example."}}}}`,
+			wantTexts: []string{"\n⚠ Individual quota reached. Resets in 1h20m26s.\n", "That was an example."},
+		},
+		{
+			name:      "non-usage warning stays normal text",
+			updates:   `{"jsonrpc":"2.0","method":"session/update","params":{"update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"⚠ The demo plugin needs you to sign in.\n"}}}}`,
+			wantTexts: []string{"⚠ The demo plugin needs you to sign in.\n"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			script := `#!/bin/sh
+read -r _
+echo '{"jsonrpc":"2.0","id":"1","result":{"protocolVersion":1}}'
+read -r _
+echo '{"jsonrpc":"2.0","id":"2","result":{"sessionId":"conv1"}}'
+read -r _
+echo '{"jsonrpc":"2.0","id":"set-model","result":{}}'
+read -r _
+cat <<'EOF'
+` + tc.updates + `
+{"jsonrpc":"2.0","id":"3","result":{"stopReason":"end_turn"}}
+EOF
+cat >/dev/null
+`
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "agy"), []byte(script), 0o755))
+			t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+			t.Setenv("HOME", t.TempDir())
+
+			events, err := collect(t, "agy", "")
+			var texts []string
+			for _, e := range events {
+				if e.Type == EventText {
+					texts = append(texts, e.Text)
+				}
+			}
+			if tc.wantErr != "" {
+				require.EqualError(t, err, tc.wantErr)
+				require.Empty(t, texts)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.wantTexts, texts)
+		})
+	}
+}
+
 // A message sent while AGY runs a tool goes in at once as another
 // session/prompt. AGY answers the prompt it was on straight away and goes on
 // with the same turn; the message shows once the tool ends and the model's

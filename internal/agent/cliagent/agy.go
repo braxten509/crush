@@ -9,6 +9,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"sync"
 	"syscall"
 
@@ -173,6 +175,45 @@ func ensureAGYGuardHookAt(path, command string) error {
 		return err
 	}
 	return nil
+}
+
+// usageLimitPattern recognizes a usage-limit error that names no reset time.
+// An account its provider refuses outright (Claude Code: "can't use your
+// Claude subscription ... payment is past due") counts too, so the order moves
+// on to the next account instead of failing the turn.
+var usageLimitPattern = regexp.MustCompile(`(?i)usage limit|limit reached|hit your limit|out of (extra )?(?:usage|quota|credits)|rate.?limit|quota (?:exceeded|reached|exhausted)|exhausted your quota|credits balance is too low|prepaid balance is insufficient|can.t use your \w+ subscription|past due`)
+
+// agyResetWarningPattern recognizes a reset time inside an AGY warning chunk
+// ("Resets in 112h43m38s", "try again at 5:20 PM").
+var agyResetWarningPattern = regexp.MustCompile(`(?i)\b(?:resets?|try again|available again|retry)\s+(?:(?:in|at|on)\s+)?(?:\d|(?:mon|tue|wed|thu|fri|sat|sun|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?,?\s)`)
+
+// MatchesUsageLimitText reports whether text names a usage, quota, credits,
+// or billing limit without relying on a reset time.
+func MatchesUsageLimitText(text string) bool {
+	return usageLimitPattern.MatchString(text)
+}
+
+// agyUsageWarning extracts the reason from an AGY ACP warning chunk
+// ("\n⚠ Individual quota reached... Resets in 1h20m26s.\n") when it reports
+// running out of usage or quota. Other warnings stay normal chat text.
+func agyUsageWarning(text string) (string, bool) {
+	trimmed := strings.TrimSpace(text)
+	rest, ok := strings.CutPrefix(trimmed, "⚠")
+	if !ok {
+		return "", false
+	}
+	rest = strings.TrimPrefix(rest, "\ufe0f")
+	if rest == "" || (rest[0] != ' ' && rest[0] != '\t') {
+		return "", false
+	}
+	body := strings.TrimSpace(rest)
+	if body == "" || strings.Count(body, "\n") > 2 {
+		return "", false
+	}
+	if !MatchesUsageLimitText(body) && !agyResetWarningPattern.MatchString(body) {
+		return "", false
+	}
+	return body, true
 }
 
 func clipBytes(b []byte, max int) string {

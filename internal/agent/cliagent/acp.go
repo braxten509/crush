@@ -144,10 +144,14 @@ type acpRun struct {
 	// part of the turn.
 	usage     fantasy.Usage
 	firstDone bool // AGY answered the turn's first prompt
-	handleMu  sync.Mutex
-	bgMu      sync.Mutex
-	running   map[string][2]string
-	moved     map[string]bool
+	// warnRaw and warnMsg hold an AGY out-of-usage warning chunk until a
+	// later update proves the turn kept going, or the prompt ends on it.
+	warnRaw  string
+	warnMsg  string
+	handleMu sync.Mutex
+	bgMu     sync.Mutex
+	running  map[string][2]string
+	moved    map[string]bool
 	// quiet fires when AGY goes silent after its text mid-turn (see
 	// [agyWritingQuiet]); quietGen, under handleMu, drops a stale firing.
 	quiet    *time.Timer
@@ -544,6 +548,10 @@ func (r *acpRun) agyPromptAnswered() (done bool, err error) {
 		}
 	}
 	finishErr := acpStop(r.name, r.final)
+	if finishErr == nil && r.warnMsg != "" {
+		finishErr = fmt.Errorf("%s: %s", r.name, r.warnMsg)
+		r.warnRaw, r.warnMsg = "", ""
+	}
 	if err := r.emitContextUsed(); err != nil {
 		return true, err
 	}
@@ -644,12 +652,36 @@ func (r *acpRun) handleResponse(id string, msg rpcMessage) (done bool, err error
 	return false, nil
 }
 
+// flushAGYWarning emits a held AGY warning chunk as normal text once the
+// turn continues past it.
+func (r *acpRun) flushAGYWarning() error {
+	if r.warnRaw == "" {
+		return nil
+	}
+	raw := r.warnRaw
+	r.warnRaw, r.warnMsg = "", ""
+	r.noteQuiet("agent_message_chunk")
+	return r.t.Emit(Event{Type: EventText, Text: raw})
+}
+
 // handleUpdate handles a session/update notification.
 func (r *acpRun) handleUpdate(msg rpcMessage) error {
 	var params struct {
 		Update acpUpdate `json:"update"`
 	}
 	_ = json.Unmarshal(msg.Params, &params)
+	if r.name == "agy" && params.Update.SessionUpdate == "agent_message_chunk" {
+		if text := acpText(params.Update.Content); text != "" {
+			if warning, ok := agyUsageWarning(text); ok {
+				if err := r.flushAGYWarning(); err != nil {
+					return err
+				}
+				r.stopQuiet()
+				r.warnRaw, r.warnMsg = text, warning
+				return nil
+			}
+		}
+	}
 	switch u := params.Update; {
 	case u.SessionUpdate == "tool_call_update" && (u.Status == "completed" || u.Status == "failed"):
 		r.boundary = true
@@ -696,6 +728,18 @@ func (r *acpRun) handleUpdate(msg rpcMessage) error {
 		}
 	}
 	if r.name == "agy" {
+		switch params.Update.SessionUpdate {
+		case "agent_message_chunk":
+			if acpText(params.Update.Content) != "" {
+				if err := r.flushAGYWarning(); err != nil {
+					return err
+				}
+			}
+		case "agent_thought_chunk", "tool_call", "tool_call_update", "plan":
+			if err := r.flushAGYWarning(); err != nil {
+				return err
+			}
+		}
 		r.noteQuiet(params.Update.SessionUpdate)
 		return r.agyToolUpdate(params.Update)
 	}

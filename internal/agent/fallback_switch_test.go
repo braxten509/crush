@@ -547,3 +547,63 @@ func TestLimitErrorBlamesAccountThatRan(t *testing.T) {
 	require.True(t, firstOut, "the account that ran must be marked out")
 	require.False(t, secondOut, "the newer saved account must not be blamed")
 }
+
+// Antigravity's out-of-usage errors (including exhausted model quota, low AI
+// credits, and empty prepaid balance) must trigger the fallback order.
+func TestAGYUsageErrorsTriggerFallback(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		errText    string
+		knownReset bool
+	}{
+		{
+			name:       "individual quota with reset",
+			errText:    "agy: Individual quota reached. Please upgrade your subscription to increase your limits. Resets in 1h20m26s.",
+			knownReset: true,
+		},
+		{
+			name:    "exhausted model quota",
+			errText: "agy: You have exhausted your quota on this model.",
+		},
+		{
+			name:    "low AI credits",
+			errText: "agy: Your AI credits balance is too low to continue.",
+		},
+		{
+			name:    "empty prepaid balance",
+			errText: "agy: Your organization's prepaid balance is insufficient. Contact your administrator to add funds.",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			blocks := []config.FallbackBlock{
+				useBlock(config.TypeClaudeCode, "", "opus"),
+				useBlock(config.TypeCodexCLI, "", "gpt-5.6-sol"),
+			}
+			c, sid := fallbackCoordinator(t, blocks, nil, nil)
+			cfg := c.cfg.Config()
+			cfg.Providers.Set(string(config.TypeAGYCLI), config.ProviderConfig{
+				ID:     string(config.TypeAGYCLI),
+				Name:   string(config.TypeAGYCLI),
+				Type:   config.TypeAGYCLI,
+				Models: []catwalk.Model{{ID: "gemini-4-neon-high", Name: "Gemini 4 Neon (High)"}},
+			})
+			agyOrder := []config.FallbackBlock{
+				useBlock(config.TypeAGYCLI, "", "gemini-4-neon-high"),
+				useBlock(config.TypeClaudeCode, "", "opus"),
+			}
+			cfg.Options.Fallback = &config.FallbackOrder{On: true, Blocks: agyOrder}
+			setChatModel(t, c, sid, fallbackModelOf(agyOrder[0]))
+
+			require.True(t, c.fallbackOnOut(t.Context(), sid, errors.New(tc.errText)))
+			got := chatModelOf(t, c, sid)
+			require.Equal(t, string(config.TypeClaudeCode), got.Provider)
+			require.Equal(t, "opus", got.Model)
+
+			c.fallback.mu.Lock()
+			out, marked := c.fallback.out[outKey{acct: fallback.Account{Kind: config.TypeAGYCLI}}]
+			c.fallback.mu.Unlock()
+			require.True(t, marked)
+			require.Equal(t, tc.knownReset, out.known)
+		})
+	}
+}

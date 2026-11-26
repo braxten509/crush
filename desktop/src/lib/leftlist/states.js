@@ -129,6 +129,7 @@ export function chatOfEvent(type, payload) {
     case "message":
     case "run_complete":
     case "helper":
+    case "job":
       return payload?.session_id ?? "";
     case "session":
       return payload?.id ?? "";

@@ -12,6 +12,8 @@ import (
 	"github.com/charmbracelet/crush/internal/agent/tools"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/hooks"
+	"github.com/charmbracelet/crush/internal/proto"
+	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/crush/internal/shell"
 	"github.com/stretchr/testify/require"
 )
@@ -306,4 +308,48 @@ func TestBackgroundServiceRemainsTrackedWithoutBlockingCompletion(t *testing.T) 
 	require.Empty(t, stop.Error)
 	require.False(t, stop.Background.IsError)
 	require.True(t, job.WaitContext(t.Context()))
+}
+
+func TestManagedBackgroundJobPublishesLiveEvents(t *testing.T) {
+	h, _, _ := savingJobHub(t)
+	broker := pubsub.NewBroker[proto.Job]()
+	t.Cleanup(broker.Shutdown)
+	h.jobEvents = broker
+	events := broker.Subscribe(t.Context())
+
+	sess, err := h.c.sessions.Create(t.Context(), "live job events")
+	require.NoError(t, err)
+	hold, finish := gate(t)
+	response := h.background(TaskRequest{Session: sess.ID, Background: &BackgroundRequest{
+		Command: hold, WorkingDir: t.TempDir(), Name: "video job",
+	}})
+	require.Empty(t, response.Error)
+	var meta tools.BashResponseMetadata
+	require.NoError(t, json.Unmarshal([]byte(response.Background.Metadata), &meta))
+	job, ok := shell.GetBackgroundShellManager().Get(meta.ShellID)
+	require.True(t, ok)
+	t.Cleanup(func() {
+		finish()
+		_ = shell.GetBackgroundShellManager().Kill(job.ID)
+		_ = shell.GetBackgroundShellManager().Remove(job.ID)
+	})
+
+	select {
+	case ev := <-events:
+		require.Equal(t, pubsub.CreatedEvent, ev.Type)
+		require.Equal(t, job.ID, ev.Payload.JobID)
+		require.Equal(t, sess.ID, ev.Payload.SessionID)
+	case <-time.After(3 * time.Second):
+		t.Fatal("missing created job event")
+	}
+
+	finish()
+	select {
+	case ev := <-events:
+		require.Equal(t, pubsub.DeletedEvent, ev.Type)
+		require.Equal(t, job.ID, ev.Payload.JobID)
+		require.Equal(t, sess.ID, ev.Payload.SessionID)
+	case <-time.After(3 * time.Second):
+		t.Fatal("missing deleted job event")
+	}
 }

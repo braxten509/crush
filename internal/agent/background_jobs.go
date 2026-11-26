@@ -16,6 +16,8 @@ import (
 	"github.com/charmbracelet/crush/internal/agent/tools/shelltool"
 	"github.com/charmbracelet/crush/internal/filechange"
 	"github.com/charmbracelet/crush/internal/message"
+	"github.com/charmbracelet/crush/internal/proto"
+	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/crush/internal/shell"
 	"github.com/google/uuid"
 )
@@ -205,7 +207,15 @@ func (h *taskHub) watchJob(ctx context.Context, release func(), sessionID, marke
 	}
 	h.mu.Unlock()
 	// The job's owner is recorded by the hook (the backend keeps it).
-	workStarted(WorkStart{Kind: WorkJob, ID: job.ID, SessionID: sessionID})
+	owner := workStarted(WorkStart{Kind: WorkJob, ID: job.ID, SessionID: sessionID})
+	h.publishJob(pubsub.CreatedEvent, proto.Job{
+		JobID:     job.ID,
+		Command:   job.Command,
+		Name:      job.Description,
+		Started:   job.Started,
+		SessionID: sessionID,
+		StartedBy: owner,
+	})
 	if h.saves(ctx) {
 		h.rememberJob(job, sessionID, service)
 	}
@@ -221,6 +231,7 @@ func (h *taskHub) watchJob(ctx context.Context, release func(), sessionID, marke
 			delete(h.userStops, job.ID)
 			delete(h.droppedJobs, job.ID)
 			h.mu.Unlock()
+			h.publishJob(pubsub.DeletedEvent, proto.Job{JobID: job.ID, SessionID: sessionID})
 		}()
 		removeCheckIn := h.addCheckIn(sessionID, backgroundJobWork(ctx, job, marker, service))
 		waited := job.WaitContext(ctx)
@@ -344,6 +355,13 @@ func (h *taskHub) recordBackgroundTool(ctx context.Context, sessionID string, ca
 		return
 	}
 	shelltool.PersistBackgroundReview(ctx, h.c.messages, sessionID, result)
+}
+
+func (h *taskHub) publishJob(kind pubsub.EventType, job proto.Job) {
+	if h == nil || h.jobEvents == nil {
+		return
+	}
+	h.jobEvents.Publish(kind, job)
 }
 
 func managedBackgroundJob(marker string) *shell.BackgroundShell {

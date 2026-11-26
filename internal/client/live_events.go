@@ -11,6 +11,7 @@ import (
 // smaller gaps, engine-design.md 5.3, 5.4, 5.5 and 5.9).
 var liveDecoders = map[pubsub.PayloadType]func(json.RawMessage) any{
 	pubsub.PayloadTypeHelper:              decodeEventAs[proto.Helper],
+	pubsub.PayloadTypeJob:                 decodeEventAs[proto.Job],
 	pubsub.PayloadTypeShellOutput:         decodeEventAs[proto.ShellOutput],
 	pubsub.PayloadTypeLimits:              decodeEventAs[proto.CLILimits],
 	pubsub.PayloadTypeMemoryStatus:        decodeEventAs[proto.MemoryStatus],

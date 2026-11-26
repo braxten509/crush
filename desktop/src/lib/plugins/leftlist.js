@@ -97,7 +97,7 @@ watch(() => {
 });
 
 // A read when an event names a chat; a new chat is unknown until one lands.
-for (const type of ["message", "session", "run_complete", "agent_event", "helper"]) {
+for (const type of ["message", "session", "run_complete", "agent_event", "helper", "job"]) {
   onEvent(type, (kind, payload) => {
     if (type === "session" && payload?.id) {
       if (kind === "deleted") {

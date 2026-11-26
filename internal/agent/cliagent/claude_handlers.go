@@ -129,7 +129,11 @@ func (r *claudeRun) handleSystem(line claudeLine) error {
 		}
 	}
 	// Only a started task can be backgrounded; asking earlier
-	// finds nothing.
+	// finds nothing. When Claude starts one already backgrounded, note it
+	// so the process shows immediately instead of waiting for the age limit.
+	if line.Subtype == "task_started" && line.IsBackgrounded {
+		NoteBackground()
+	}
 	if line.Subtype == "task_started" && line.ToolUseID != "" && !line.IsBackgrounded {
 		if r.ctl.ctrlB.Swap(false) {
 			_ = r.p.send(map[string]any{"type": "control_request", "request_id": "crush-ctrl-b-" + line.ToolUseID, "request": map[string]any{"subtype": "background_tasks", "tool_use_id": line.ToolUseID}})
@@ -239,6 +243,7 @@ func (r *claudeRun) handleUser(line claudeLine) error {
 				BackgroundTaskID string `json:"backgroundTaskId"`
 			}
 			if json.Unmarshal(line.ToolUseResult, &res) == nil && res.BackgroundTaskID != "" {
+				NoteBackground()
 				meta = markBackground(call[0], meta)
 			}
 		}

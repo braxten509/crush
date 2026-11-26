@@ -168,7 +168,7 @@ func scanAgentProcesses(markers []string, includeForeground bool) []Process {
 			}
 			continue
 		}
-		if p.nativeShellID == "" && !isDetached(p, procs) && now.Sub(p.started) < backgroundMinAge && !p.started.Before(moved) {
+		if p.nativeShellID == "" && !isDetached(p, procs) && now.Sub(p.started) < backgroundMinAge && (moved.IsZero() || p.started.After(moved.Add(time.Second))) {
 			continue
 		}
 		if isCommandRoot(p, procs) {

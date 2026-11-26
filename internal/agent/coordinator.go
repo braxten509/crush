@@ -162,7 +162,9 @@ type CoordinatorOptions struct {
 	Notify      pubsub.Publisher[notify.Notification]
 	RunComplete pubsub.Publisher[notify.RunComplete]
 	// Tasks receives background sub-agent updates. Nil turns them off.
-	Tasks  pubsub.Publisher[Task]
+	Tasks pubsub.Publisher[Task]
+	// Jobs receives managed background job start/end events. Nil turns them off.
+	Jobs   pubsub.Publisher[proto.Job]
 	Skills *skills.Manager
 	// HookRunner runs the configured hooks. Nil makes one from the live
 	// config.
@@ -207,6 +209,9 @@ func NewCoordinator(ctx context.Context, opts CoordinatorOptions) (Coordinator, 
 	}
 	if opts.Tasks != nil {
 		c.tasks = newTaskHub(c, opts.Tasks)
+		if c.tasks != nil {
+			c.tasks.jobEvents = opts.Jobs
+		}
 	}
 
 	agentCfg, ok := opts.Config.Config().Agents[config.AgentCoder]

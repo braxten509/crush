@@ -8,11 +8,11 @@
 import { untrack } from "svelte";
 import { SvelteMap } from "svelte/reactivity";
 import { api } from "../engine/api.js";
-import { onResync } from "../engine/events.js";
+import { onEvent, onFolderEvent, onResync } from "../engine/events.js";
 import { messages } from "../stores/messages.svelte.js";
 import { sessions } from "../stores/sessions.svelte.js";
 import { notify } from "../stores/ui.svelte.js";
-import { since, timeOf } from "./helpers.svelte.js";
+import { since } from "./helpers.svelte.js";
 
 const READ_EVERY_MS = 1000;
 // As for helpers (helpers.svelte.js): a killed row stays out until a read
@@ -48,10 +48,14 @@ function isServer(job, servers) {
   return servers.some((s) => (job.job_id && s.job_id === job.job_id) || (job.pid && s.pid === job.pid));
 }
 
-// Keep job rows for as long as the desktop keeps the chat loaded.
+// Keep job rows for as long as the desktop keeps the chat loaded, including
+// live job events received while another tab or folder is shown.
 const saved = new WeakMap();
 let held = new SvelteMap(); // job key → ms the engine answered its kill (0 while on its way)
+let eventAt = new Map(); // job key → { seq, deleted, job } for events during a read
+let eventSeq = 0;
 let readTurn = 0;
+let reading = false;
 let timer = null;
 
 // The chat the jobs follow: the one being opened, else the one shown. The
@@ -68,12 +72,9 @@ export function trayJobs() {
   return jobs.list.filter((job) => !isServer(job, servers) && !held.has(jobKey(job)));
 }
 
-// The jobs the right panel's Background list shows: those past their 4th
-// second (owner, 2026-10-25: a quick check's wave of 1-2 second jobs stays
-// out). A job with no start time is shown.
-const SHOW_AFTER_MS = 4000;
-export function lastingJobs(list, now = Date.now()) {
-  return list.filter((job) => job.foreground || !(now - timeOf(job.started) <= SHOW_AFTER_MS));
+// The right panel shows every non-server background job right away.
+export function lastingJobs(list) {
+  return list;
 }
 
 // The server jobs left out of the tray (for the probe).
@@ -86,6 +87,32 @@ function schedule() {
   timer = jobs.sid ? setTimeout(read, READ_EVERY_MS) : null;
 }
 
+function upsertJob(list, job) {
+  const key = jobKey(job);
+  const idx = list.findIndex((item) => jobKey(item) === key);
+  if (idx >= 0) {
+    const next = list.slice();
+    next[idx] = job;
+    return next;
+  }
+  return [...list, job];
+}
+
+function removeJob(list, key) {
+  if (!list.some((item) => jobKey(item) === key)) return list;
+  return list.filter((item) => jobKey(item) !== key);
+}
+
+function mergeRead(list, startedSeq) {
+  let next = list.filter((job) => job && (job.job_id || job.pid));
+  for (const [key, note] of eventAt) {
+    if (note.seq <= startedSeq) continue;
+    next = note.deleted ? removeJob(next, key) : upsertJob(next, note.job);
+  }
+  eventAt.clear();
+  jobs.list = next;
+}
+
 async function read() {
   clearTimeout(timer);
   timer = null;
@@ -93,12 +120,19 @@ async function read() {
   if (!sid) return;
   const turn = ++readTurn;
   const startedAt = Date.now();
-  const [list, servers] = await Promise.all([api.jobs(sid).catch(() => null), api.servers().catch(() => null)]);
+  const startedSeq = eventSeq;
+  reading = true;
+  const jobsCall = api.jobs(sid).catch(() => null);
+  const serversCall = api.servers().catch(() => null);
+  const list = await jobsCall;
   if (turn !== readTurn) return;
+  reading = false;
   if (Array.isArray(list)) {
-    jobs.list = list.filter((job) => job && (job.job_id || job.pid));
+    mergeRead(list, startedSeq);
     prune(startedAt);
   }
+  const servers = await serversCall;
+  if (turn !== readTurn) return;
   jobs.servers = Array.isArray(servers) ? servers : [];
   schedule();
 }
@@ -114,6 +148,7 @@ function prune(readStartedAt, now = Date.now()) {
 function showChat(sid) {
   if (sid === jobs.sid) return;
   readTurn += 1;
+  reading = false;
   clearTimeout(timer);
   timer = null;
   const previous = messages.bySession[jobs.sid];
@@ -124,7 +159,27 @@ function showChat(sid) {
   jobs.list = snapshot?.list ?? [];
   jobs.servers = snapshot?.servers ?? [];
   held = snapshot?.held ?? new SvelteMap();
+  eventAt = new Map();
   if (sid) read();
+}
+
+function updateJob(kind, job) {
+  if (!job || !(job.job_id || job.pid) || !job.session_id) return;
+  const key = jobKey(job);
+  const deleted = kind === "deleted";
+  if (job.session_id === jobs.sid) {
+    if (reading) eventAt.set(key, { seq: ++eventSeq, deleted, job });
+    jobs.list = deleted ? removeJob(jobs.list, key) : upsertJob(jobs.list, job);
+    if (deleted) held.delete(key);
+    return;
+  }
+  const chat = messages.bySession[job.session_id];
+  if (!chat) return;
+  const snapshot = saved.get(chat) ?? { list: [], servers: [], held: new SvelteMap() };
+  snapshot.list = deleted ? removeJob(snapshot.list, key) : upsertJob(snapshot.list, job);
+  if (deleted) snapshot.held.delete(key);
+  if (snapshot.list.length) saved.set(chat, snapshot);
+  else saved.delete(chat);
 }
 
 // POST …/jobs/kill with {"job_id"} when the job has one, else {"pid"} (5.4),
@@ -159,5 +214,7 @@ export function startJobs() {
       untrack(() => showChat(sid));
     });
   });
+  onEvent("job", updateJob);
+  onFolderEvent("job", updateJob);
   onResync(() => read());
 }

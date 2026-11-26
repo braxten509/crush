@@ -29,8 +29,8 @@ use std::time::Duration;
 
 const TICK: Duration = Duration::from_secs(2);
 /// The events that keep another folder's drawn chats current: its messages,
-/// and its sub-agents' rows (a done one leaves the list).
-const CHAT_EVENTS: &[&str] = &["message", "helper"];
+/// its sub-agents' rows, and its background jobs.
+const CHAT_EVENTS: &[&str] = &["message", "helper", "job"];
 const CALL_LIMIT: Duration = Duration::from_secs(3);
 
 /// One folder's stream; dropping it stops the stream.

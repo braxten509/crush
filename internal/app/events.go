@@ -40,6 +40,7 @@ func (app *App) setupEvents() {
 	app.subscribeMustDeliver(ctx, "pinentry-notifications", pinentry.DefaultPrompts().SubscribeNotifications)
 	app.subscribeMustDeliver(ctx, "run-completions", app.runCompletions.Subscribe)
 	app.subscribe(ctx, "tasks", app.tasks.Subscribe)
+	app.subscribe(ctx, "jobs", app.jobs.Subscribe)
 	app.subscribe(ctx, "mcp", mcp.SubscribeEvents)
 	app.subscribe(ctx, "mcp-channels", app.subscribeScopedChannelEvents)
 	app.subscribe(ctx, "lsp", SubscribeLSPEvents)

@@ -19,6 +19,7 @@ import (
 
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/openchats"
+	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/crush/internal/question"
 	"github.com/charmbracelet/crush/internal/secretguard"
@@ -147,10 +148,11 @@ type TaskReply struct {
 }
 
 type taskHub struct {
-	c      *coordinator
-	dir    string
-	root   *os.Root
-	events pubsub.Publisher[Task]
+	c         *coordinator
+	dir       string
+	root      *os.Root
+	events    pubsub.Publisher[Task]
+	jobEvents pubsub.Publisher[proto.Job]
 
 	mu      sync.Mutex
 	seq     int

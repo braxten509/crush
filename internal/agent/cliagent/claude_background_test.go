@@ -39,6 +39,25 @@ cat >/dev/null
 	require.Equal(t, map[string]bool{"t1": true, "t2": false}, background)
 }
 
+// Claude announcing a backgrounded task updates LastBackground right away so
+// its process shows up immediately instead of waiting for the age threshold.
+func TestClaudeBackgroundTaskUpdatesLastBackground(t *testing.T) {
+	lastBackground.Store(0)
+	dir := t.TempDir()
+	script := `#!/bin/sh
+read -r _; read -r _
+echo '{"type":"system","subtype":"init","session_id":"s1"}'
+echo '{"type":"system","subtype":"task_started","task_id":"b1","task_type":"local_bash","is_backgrounded":true}'
+echo '{"type":"result","subtype":"success"}'
+cat >/dev/null
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "claude"), []byte(script), 0o755))
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	m := &Model{Kind: config.TypeClaudeCode, ID: "m", Dir: dir}
+	require.NoError(t, m.Run(t.Context(), Turn{Prompt: "hi", Emit: func(Event) error { return nil }}))
+	require.False(t, LastBackground().IsZero(), "backgrounded Claude tasks must update LastBackground immediately")
+}
+
 // Claude Code starts with its auto-background wait at 2 minutes, so a long
 // command moves to the background instead of holding the turn.
 func TestClaudeStartsWithTwoMinuteAutoBackground(t *testing.T) {

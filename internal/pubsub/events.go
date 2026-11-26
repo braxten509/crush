@@ -40,6 +40,7 @@ const (
 
 	// Events added for the desktop engine (engine-design.md, section 0.1).
 	PayloadTypeHelper              PayloadType = "helper"
+	PayloadTypeJob                 PayloadType = "job"
 	PayloadTypeShellOutput         PayloadType = "shell_output"
 	PayloadTypeLimits              PayloadType = "limits"
 	PayloadTypeMemoryStatus        PayloadType = "memory_status"

@@ -35,6 +35,7 @@ import (
 	"github.com/charmbracelet/crush/internal/permission"
 	"github.com/charmbracelet/crush/internal/pinentry"
 	"github.com/charmbracelet/crush/internal/prompthistory"
+	"github.com/charmbracelet/crush/internal/proto"
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/crush/internal/question"
 	"github.com/charmbracelet/crush/internal/session"
@@ -90,6 +91,7 @@ type App struct {
 	// instead of guessing from message finish parts.
 	runCompletions *pubsub.Broker[notify.RunComplete]
 	tasks          *pubsub.Broker[agent.Task]
+	jobs           *pubsub.Broker[proto.Job]
 
 	// herdrClient reports agent state to herdr when running inside
 	// a herdr-managed pane. Nil when not in a herdr environment.
@@ -145,6 +147,7 @@ func New(ctx context.Context, conn *sql.DB, store *config.ConfigStore, skillsMgr
 		agentNotifications: pubsub.NewBroker[notify.Notification](),
 		runCompletions:     pubsub.NewBroker[notify.RunComplete](),
 		tasks:              pubsub.NewBroker[agent.Task](),
+		jobs:               pubsub.NewBroker[proto.Job](),
 	}
 
 	app.setupEvents()
@@ -415,6 +418,7 @@ func (app *App) initCoderAgent(ctx context.Context, interactive bool) error {
 		Notify:      app.agentNotifications,
 		RunComplete: app.runCompletions,
 		Tasks:       app.tasks,
+		Jobs:        app.jobs,
 		Skills:      app.Skills,
 		HookRunner:  app.hookRunner,
 		Interactive: interactive,

@@ -460,12 +460,20 @@ func Background(sessionID string) bool {
 	if !ok || !v.(*backgrounder).fn() {
 		return false
 	}
-	lastBackground.Store(time.Now().UnixNano())
+	NoteBackground()
 	return true
 }
 
-// lastBackground is when [Background] last moved commands (Unix nanoseconds).
+// lastBackground is when a CLI command was last moved to the background (Unix
+// nanoseconds).
 var lastBackground atomic.Int64
+
+// NoteBackground records that a CLI command was explicitly backgrounded right
+// now (by Ctrl+B or by the CLI itself), so it is listed immediately instead of
+// waiting for the background age threshold.
+func NoteBackground() {
+	lastBackground.Store(time.Now().UnixNano())
+}
 
 // LastBackground reports when the user last moved a CLI's running commands
 // to the background, or the zero time if never. Commands already running

@@ -247,6 +247,9 @@ func (m *Model) Run(ctx context.Context, t Turn) error {
 	}
 	calls := &openCalls{calls: map[string]openCall{}, after: t.AutoBackground}
 	if t.Emit != nil {
+		if m.Kind == config.TypeCodexCLI || m.Kind == config.TypeAGYCLI {
+			t.Emit = imagePreviews(m, t)
+		}
 		t.Emit = calls.track(t.Emit)
 	}
 	// A command the CLI waits on for the user's time (2 minutes unless

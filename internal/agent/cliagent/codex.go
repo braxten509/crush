@@ -28,6 +28,7 @@ type codexItem struct {
 	Phase            string          `json:"phase"`
 	Command          string          `json:"command"`
 	Cwd              string          `json:"cwd"`
+	Path             string          `json:"path"`
 	Status           string          `json:"status"`
 	AggregatedOutput *string         `json:"aggregatedOutput"`
 	ExitCode         *int            `json:"exitCode"`
@@ -37,8 +38,10 @@ type codexItem struct {
 	Arguments        json.RawMessage `json:"arguments"`
 	Result           *struct {
 		Content []struct {
-			Type string `json:"type"`
-			Text string `json:"text"`
+			Type     string `json:"type"`
+			Text     string `json:"text"`
+			Data     string `json:"data"`
+			MimeType string `json:"mimeType"`
 		} `json:"content"`
 	} `json:"result"`
 	Error *struct {

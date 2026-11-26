@@ -73,6 +73,9 @@ func diskMetadata(name, input, output string) string {
 			FilePath string `json:"file_path"`
 		}
 		_ = json.Unmarshal([]byte(input), &in)
+		if imageFilename(in.FilePath) {
+			return marshal(tools.ViewResponseMetadata{FilePath: in.FilePath})
+		}
 		content, _ := os.ReadFile(in.FilePath)
 		return marshal(tools.ViewResponseMetadata{FilePath: in.FilePath, Content: clipBytes(content, 64<<10)})
 	case tools.EditToolName, tools.WriteToolName:

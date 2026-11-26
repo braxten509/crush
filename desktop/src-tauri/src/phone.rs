@@ -79,16 +79,29 @@ pub fn find() -> AppResult<bool> {
     if first_phone(&adb).is_some() {
         return Ok(true);
     }
-    if let Ok(Ran::Exited { stdout, .. }) = run_limited(Command::new(&adb).args(["mdns", "services"]), FIND_LIMIT, false) {
+    let mut discovered = false;
+    if let Ok(Ran::Exited { code: Some(0), stdout }) = run_limited(Command::new(&adb).args(["mdns", "services"]), FIND_LIMIT, false) {
         for line in String::from_utf8_lossy(&stdout).lines() {
             let mut parts = line.split_whitespace();
             let (Some(_), Some(kind), Some(address)) = (parts.next(), parts.next(), parts.next()) else { continue };
             if kind.starts_with("_adb-tls-connect") {
+                discovered = true;
                 let _ = run_limited(Command::new(&adb).args(["connect", address]), FIND_LIMIT, false);
+                if first_phone(&adb).is_some() {
+                    return Ok(true);
+                }
+            } else if kind.starts_with("_adb-tls-pairing") {
+                discovered = true;
             }
         }
     }
-    Ok(first_phone(&adb).is_some())
+    if first_phone(&adb).is_some() {
+        Ok(true)
+    } else if discovered {
+        Err(AppError::new("phone_connection_failed", "Found your phone on Wi-Fi but couldn't connect. Check that this PC is paired in Wireless debugging."))
+    } else {
+        Ok(false)
+    }
 }
 
 pub fn screenshot() -> AppResult<PhoneShot> {

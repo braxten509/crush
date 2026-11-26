@@ -387,6 +387,8 @@ func (r *codexRun) handleItemStarted(item codexItem) (err error) {
 				break
 			}
 		}
+	case "imageView":
+		err = r.emitCall(item.ID, tools.ViewToolName, marshal(map[string]string{"file_path": item.Path}))
 	case "mcpToolCall":
 		err = r.emitCall(item.ID, "mcp_"+item.Server+"_"+item.Tool, string(item.Arguments))
 	case "webSearch":
@@ -448,19 +450,29 @@ func (r *codexRun) handleItemCompleted(item codexItem) (err error) {
 				break
 			}
 		}
+	case "imageView":
+		if _, started := r.calls[item.ID]; !started {
+			if err := r.emitCall(item.ID, tools.ViewToolName, marshal(map[string]string{"file_path": item.Path})); err != nil {
+				return err
+			}
+		}
+		err = r.emitResult(item.ID, "", failed)
 	case "mcpToolCall":
 		var parts []string
+		var data, mime string
 		if item.Result != nil {
 			for _, c := range item.Result.Content {
 				if c.Type == "text" {
 					parts = append(parts, c.Text)
+				} else if c.Type == "image" && data == "" {
+					data, mime = c.Data, c.MimeType
 				}
 			}
 		}
 		if item.Error != nil {
 			failed, parts = true, []string{item.Error.Message}
 		}
-		err = r.emitResult(item.ID, strings.Join(parts, "\n"), failed)
+		err = r.t.Emit(Event{Type: EventToolResult, ID: item.ID, Name: r.calls[item.ID][0], Output: strings.Join(parts, "\n"), IsError: failed, Data: data, MimeType: mime})
 	case "webSearch":
 		err = r.emitResult(item.ID, "Searched the web", failed)
 	}

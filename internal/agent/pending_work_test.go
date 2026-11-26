@@ -182,7 +182,7 @@ func TestSavedFallbackMemoryComesBack(t *testing.T) {
 
 	next := pendingTestCoordinator(t, env, clock)
 	next.loadFallbackMemory()
-	reading := next.fallbackReadings(clock.Now(), nil)(acct, "opus")
+	reading := next.fallbackReadings(clock.Now(), nil)(acct, "opus", 0)
 	require.True(t, reading.Known)
 	require.EqualValues(t, 100, reading.Used)
 	require.True(t, reading.OpenAt.Equal(time.Date(2026, 10, 19, 5, 20, 0, 0, boise)), reading.OpenAt)

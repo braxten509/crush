@@ -29,7 +29,7 @@ func wait(acct Account) config.FallbackBlock {
 
 // readings: accounts not listed have room and no refills.
 func readings(m map[Account]Reading) Readings {
-	return func(a Account, _ string) Reading { return m[a] }
+	return func(a Account, _ string, _ float64) Reading { return m[a] }
 }
 
 func out(at time.Time) Reading { return Reading{Known: true, Used: 100, OpenAt: at} }
@@ -162,19 +162,18 @@ func TestComeBackReturnsToAnEarlierBlockWithRoom(t *testing.T) {
 func TestOutMovesUpToAComeBackBlockWithRoom(t *testing.T) {
 	order := config.FallbackOrder{On: true, Blocks: []config.FallbackBlock{use(claude2, "opus"), use(claude1, "opus")}}
 	r := map[Account]Reading{claude1: out(now.Add(time.Hour))}
-	require.Equal(t, Kind(Stay), OnOut(order, kindOf, 1, readings(r), now, nil).Kind)
+	require.Equal(t, Action{Kind: Wait, Block: 1, Until: now.Add(time.Hour)}, OnOut(order, kindOf, 1, readings(r), now, nil))
 	order.Blocks[0].ComeBack = true
 	require.Equal(t, Action{Kind: Switch, Block: 0}, OnOut(order, kindOf, 1, readings(r), now, nil))
 }
 
-func TestTheLastBlockRunningOutStays(t *testing.T) {
+func TestLastBlockWaitsForItsKnownReset(t *testing.T) {
 	r := readings(map[Account]Reading{codex1: out(now.Add(time.Hour))})
-	require.Equal(t, Kind(Stay), OnOut(example(), kindOf, 3, r, now, nil).Kind)
+	require.Equal(t, Action{Kind: Wait, Block: 3, Until: now.Add(time.Hour)}, OnOut(example(), kindOf, 3, r, now, nil))
 }
 
-// With every account out, the chat waits for the "come back" account that
-// refills first, unless its own account refills sooner (owner, 2026-10-22).
-func TestAllOutWaitsForTheSoonestComeBackRefill(t *testing.T) {
+// Every enabled account can supply the first usable refill.
+func TestAllOutWaitsForTheSoonestAccount(t *testing.T) {
 	claude3 := Account{Kind: config.TypeClaudeCode, ID: "c3"}
 	order := config.FallbackOrder{On: true, Blocks: []config.FallbackBlock{use(claude2, "opus"), use(claude1, "opus"), use(claude3, "opus")}}
 	order.Blocks[0].ComeBack, order.Blocks[1].ComeBack = true, true
@@ -182,9 +181,9 @@ func TestAllOutWaitsForTheSoonestComeBackRefill(t *testing.T) {
 	require.Equal(t, Action{Kind: Wait, Block: 1, Until: now.Add(time.Hour)}, OnOut(order, kindOf, 2, readings(r), now, nil))
 	// Its own account refills sooner: stay, and the chat goes on when it does.
 	r[claude3] = out(now.Add(30 * time.Minute))
-	require.Equal(t, Kind(Stay), OnOut(order, kindOf, 2, readings(r), now, nil).Kind)
-	// Without "come back", nothing earlier is waited for.
+	require.Equal(t, Action{Kind: Wait, Block: 2, Until: now.Add(30 * time.Minute)}, OnOut(order, kindOf, 2, readings(r), now, nil))
+	// An earlier account still wins when neither is marked "come back".
 	r[claude3] = out(now.Add(5 * time.Hour))
 	order.Blocks[0].ComeBack, order.Blocks[1].ComeBack = false, false
-	require.Equal(t, Kind(Stay), OnOut(order, kindOf, 2, readings(r), now, nil).Kind)
+	require.Equal(t, Action{Kind: Wait, Block: 1, Until: now.Add(time.Hour)}, OnOut(order, kindOf, 2, readings(r), now, nil))
 }

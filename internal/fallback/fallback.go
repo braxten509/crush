@@ -37,12 +37,12 @@ type Reading struct {
 // Readings reads an account's usage as it counts for a model: the limits
 // the whole account shares and the model's own ("" reads only the shared
 // ones). An account whose Fable ran out still has room for its Opus.
-type Readings func(acct Account, model string) Reading
+type Readings func(acct Account, model string, moveAt float64) Reading
 
 // readBlock is the usage that counts for block b: its account's, for its
 // model.
 func readBlock(read Readings, b config.FallbackBlock, kindOf KindOf) Reading {
-	return read(BlockAccount(b, kindOf), b.Model)
+	return read(BlockAccount(b, kindOf), b.Model, b.MoveAtPercent)
 }
 
 // Kind is what an Action does.
@@ -204,7 +204,7 @@ func OnOut(order config.FallbackOrder, kindOf KindOf, at int, read Readings, now
 	}
 	if b := order.Blocks[at]; b.Type == config.FallbackUse && b.RefillFirst {
 		acct := BlockAccount(b, kindOf)
-		if !noRefill[acct] && read(acct, b.Model).Refills > 0 {
+		if !noRefill[acct] && readBlock(read, b, kindOf).Refills > 0 {
 			return Action{Kind: Refill, Account: acct, Block: at}
 		}
 	}
@@ -217,12 +217,12 @@ func OnOut(order config.FallbackOrder, kindOf KindOf, at int, read Readings, now
 		acct := BlockAccount(b, kindOf)
 		switch b.Type {
 		case config.FallbackUse:
-			if !passedBy(b) && !Full(read(acct, b.Model), b.MoveAtPercent) {
+			if !passedBy(b) && !Full(readBlock(read, b, kindOf), b.MoveAtPercent) {
 				return Action{Kind: Switch, Block: j, Return: ret}
 			}
 		case config.FallbackRefill:
 			target := useBlockFor(order, kindOf, acct)
-			if target >= 0 && !noRefill[acct] && read(acct, order.Blocks[target].Model).Refills > 0 {
+			if target >= 0 && !noRefill[acct] && readBlock(read, order.Blocks[target], kindOf).Refills > 0 {
 				return Action{Kind: Refill, Account: acct, Block: target, Return: ret}
 			}
 		case config.FallbackWait:
@@ -231,7 +231,7 @@ func OnOut(order config.FallbackOrder, kindOf KindOf, at int, read Readings, now
 				continue // nothing to wait for, or already waiting for another
 			}
 			// The wait is for the model the chat would run there.
-			r := read(acct, order.Blocks[target].Model)
+			r := readBlock(read, order.Blocks[target], kindOf)
 			if target != at && !Full(r, order.Blocks[target].MoveAtPercent) {
 				return Action{Kind: Switch, Block: target}
 			}
@@ -248,37 +248,29 @@ func OnOut(order config.FallbackOrder, kindOf KindOf, at int, read Readings, now
 			return Action{Kind: Wait, Block: target, Until: r.OpenAt}
 		}
 	}
-	if ret != nil {
-		// Nothing after the wait block has room: wait after all.
-		return Action{Kind: Wait, Block: ret.Block, Until: ret.At}
-	}
-	return soonestComeBack(order, kindOf, at, read)
+	return firstAvailable(order, kindOf, at, read, now)
 }
 
-// soonestComeBack is the wait for the earlier "come back" block whose
-// account refills first, once nothing has room (owner, 2026-10-22). When
-// the chat's own account refills sooner, or no time is known, it stays:
-// the plain reset retry continues it there.
-func soonestComeBack(order config.FallbackOrder, kindOf KindOf, at int, read Readings) Action {
-	act := Action{Kind: Stay}
-	if own := readBlock(read, order.Blocks[at], kindOf); !own.OpenAt.IsZero() {
-		act.Until = own.OpenAt
-	}
-	for k := range at {
-		b := order.Blocks[k]
-		if b.Type != config.FallbackUse || !b.ComeBack || passedBy(b) {
+// Once the normal fallback choices run out, compare every usable block.
+// Prefer the current account on a tie, then the order in the settings.
+func firstAvailable(order config.FallbackOrder, kindOf KindOf, at int, read Readings, now time.Time) Action {
+	best := Action{Kind: Stay}
+	for i, b := range order.Blocks {
+		if b.Type != config.FallbackUse || passedBy(b) {
 			continue
 		}
 		r := readBlock(read, b, kindOf)
-		if r.OpenAt.IsZero() || (!act.Until.IsZero() && !r.OpenAt.Before(act.Until)) {
+		if i != at && r.Known && !Full(r, b.MoveAtPercent) {
+			return Action{Kind: Switch, Block: i}
+		}
+		if !r.OpenAt.After(now) {
 			continue
 		}
-		act = Action{Kind: Wait, Block: k, Until: r.OpenAt}
+		if best.Kind == Stay || r.OpenAt.Before(best.Until) || (i == at && r.OpenAt.Equal(best.Until)) {
+			best = Action{Kind: Wait, Block: i, Until: r.OpenAt}
+		}
 	}
-	if act.Kind == Stay {
-		return Action{Kind: Stay}
-	}
-	return act
+	return best
 }
 
 // comeBackWithRoom is the first earlier block marked "come back" whose

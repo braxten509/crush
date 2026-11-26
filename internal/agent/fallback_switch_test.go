@@ -207,6 +207,46 @@ func TestWaitBlockWaitsThenReturnsToTheAccount(t *testing.T) {
 	require.Equal(t, "", chatModelOf(t, c, sid).Account)
 }
 
+// The five-hour limit on Claude 1 resets first, but its weekly limit
+// still blocks work. The chat should wake on Claude 2 instead.
+func TestExhaustedChatResumesOnFirstUsableAccount(t *testing.T) {
+	blocks := []config.FallbackBlock{
+		useBlock(config.TypeClaudeCode, "", "opus"),
+		useBlock(config.TypeClaudeCode, "claude-2", "opus"),
+		useBlock(config.TypeCodexCLI, "", "gpt-5.6-sol"),
+	}
+	c, sid := fallbackCoordinator(t, blocks, nil, nil)
+	setChatModel(t, c, sid, fallbackModelOf(blocks[2]))
+	start := time.Date(2026, 11, 26, 12, 0, 0, 0, time.UTC)
+	clock := &fakeClock{now: start}
+	c.fallback.now, c.limitRetries.now = clock.Now, clock.Now
+	t.Cleanup(func() { c.limitRetries.drop(sid) })
+	cliagent.StoreAccountLimits(config.TypeClaudeCode, "", []cliagent.Limit{
+		{Name: "5h", Used: 100, ResetsAt: start.Add(5 * time.Minute)},
+		{Name: "Weekly", Used: 100, ResetsAt: start.Add(24 * time.Hour)},
+	}, 0)
+	refill := start.Add(17 * time.Minute)
+	cliagent.StoreAccountLimits(config.TypeClaudeCode, "claude-2", []cliagent.Limit{
+		{Name: "5h", Used: 100, ResetsAt: refill},
+	}, 0)
+	sent := make(chan string, 1)
+	c.fallback.send = func(id string) { sent <- id }
+	require.True(t, c.handleAccountError(t.Context(), sid, fallbackModelOf(blocks[2]), errors.New("usage limit resets in 4h")))
+	waits := readPendingFile(t, c).Waits
+	require.Len(t, waits, 1)
+	require.Equal(t, "claude-2", waits[0].Account)
+	require.True(t, waits[0].At.Equal(refill.Add(limitRetryDelay)))
+	requireMoveLines(t, chatLines(t, c, sid), "Claude 2")
+	clock.Set(waits[0].At)
+	select {
+	case id := <-sent:
+		require.Equal(t, sid, id)
+	case <-time.After(5 * time.Second):
+		t.Fatal("the waiting chat did not resume")
+	}
+	require.Equal(t, "claude-2", chatModelOf(t, c, sid).Account)
+}
+
 func TestRefillFirstSpendsACodexRefill(t *testing.T) {
 	first := useBlock(config.TypeCodexCLI, "codex-2", "gpt-5.6-sol")
 	first.RefillFirst = true

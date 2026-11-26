@@ -176,12 +176,23 @@ func (c *coordinator) fallbackReadings(now time.Time, skip map[fallback.Account]
 		}
 	}
 	c.fallback.mu.Unlock()
-	return func(a fallback.Account, model string) fallback.Reading {
+	return func(a fallback.Account, model string, moveAt float64) fallback.Reading {
 		limits := cliagent.AccountLimits(a.Kind, a.ID, model)
 		r := fallback.Reading{Known: len(limits) > 0, Refills: cliagent.Refills(a.Kind, a.ID)}
+		unknownReset := false
 		for _, l := range limits {
-			r.Used = max(r.Used, 100-l.Left())
-			if l.Left() <= 0 && l.ResetsAt.After(r.OpenAt) {
+			if !l.ResetsAt.IsZero() && !l.ResetsAt.After(now) {
+				continue
+			}
+			used := l.Used
+			r.Used = max(r.Used, used)
+			if used < 100 && (moveAt <= 0 || used < moveAt) {
+				continue
+			}
+			if l.ResetsAt.IsZero() {
+				unknownReset = true
+			}
+			if l.ResetsAt.After(r.OpenAt) {
 				r.OpenAt = l.ResetsAt
 			}
 		}
@@ -194,6 +205,9 @@ func (c *coordinator) fallbackReadings(now time.Time, skip map[fallback.Account]
 			if o.known && o.until.After(r.OpenAt) {
 				r.OpenAt = o.until
 			}
+		}
+		if unknownReset {
+			r.OpenAt = time.Time{}
 		}
 		if skip[a] {
 			r.Known, r.Used = true, 100
@@ -223,7 +237,7 @@ func (c *coordinator) fallbackReady(ctx context.Context, b config.FallbackBlock,
 	now := c.fallback.clock()
 	switch {
 	case err == nil:
-		return !fallback.Full(c.fallbackReadings(now, nil)(acct, b.Model), b.MoveAtPercent)
+		return !fallback.Full(c.fallbackReadings(now, nil)(acct, b.Model, b.MoveAtPercent), b.MoveAtPercent)
 	case errors.Is(err, cliagent.ErrNoUsageSource):
 		return true // nothing to read: taken as it is
 	}

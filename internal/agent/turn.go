@@ -528,13 +528,19 @@ func (t *turn) run() (*fantasy.AgentResult, error) {
 		return nil, err
 	}
 	a.memoryNotice(t.ctx, t.call.SessionID)
+	overhead := approxTokenCount(systemPrompt) + approxTokenCount(t.promptPrefix) + approxTokenCount(t.call.Prompt) + int64(len(agentTools)*300)
+	handoff := providerHandoff{target: t.chatModel.ModelCfg, history: msgs, dataDir: a.transcriptDataDir(), sessionID: t.call.SessionID,
+		budget: handoffBytes(t.chatModel.CatwalkCfg.ContextWindow, a.historyTokenBudget(t.chatModel, overhead))}
 	var history []fantasy.Message
 	var files []fantasy.FilePart
 	if !t.isCLI {
 		// Agent CLIs take the stored messages and attachments directly in
 		// cliStream. Only API models need a second copy in Fantasy's format.
-		history, files = a.preparePrompt(msgs, t.chatModel.CatwalkCfg.Capabilities.Vision, t.chatModel.CatwalkCfg.Capabilities.Audio, t.call.Attachments...)
-		overhead := approxTokenCount(systemPrompt) + approxTokenCount(t.promptPrefix) + approxTokenCount(t.call.Prompt) + int64(len(agentTools)*300)
+		apiMsgs, err := handoff.apiHistory(t.currentSession.SummaryMessageID)
+		if err != nil {
+			return nil, err
+		}
+		history, files = a.preparePrompt(apiMsgs, t.chatModel.CatwalkCfg.Capabilities.Vision, t.chatModel.CatwalkCfg.Capabilities.Audio, t.call.Attachments...)
 		trimmed := a.trimPreparedPrompt(t.call.SessionID, msgs, history, t.chatModel, overhead)
 		if len(trimmed) < len(history) && systemPrompt != builtPrompt {
 			// Trimming dropped older messages, maybe with updates the
@@ -562,7 +568,7 @@ func (t *turn) run() (*fantasy.AgentResult, error) {
 	// callbacks from the CLI's events.
 	stream := agent.Stream
 	if t.isCLI {
-		stream = a.cliStream(t.cliModel, t.call, msgs, t.chatModel.ModelCfg.ReasoningEffort, t.onCompacting, t.onActivity, func() string {
+		stream = a.cliStream(t.cliModel, t.call, handoff, t.chatModel.ModelCfg.ReasoningEffort, t.onCompacting, t.onActivity, func() string {
 			if t.fileReview == nil {
 				return ""
 			}
@@ -805,7 +811,7 @@ func (t *turn) loadHistory() ([]message.Message, error) {
 		return nil, fmt.Errorf("failed to get session: %w", err)
 	}
 
-	msgs, err := a.getSessionMessages(t.ctx, t.currentSession)
+	msgs, err := a.activeHistory(t.ctx, t.call.SessionID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get session messages: %w", err)
 	}

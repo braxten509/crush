@@ -60,7 +60,7 @@ func cliPromptWithAttachments(prompt string, attachments []message.Attachment) (
 // permissions and rendering work exactly as they do for API models.
 // lastToolMessage reports the newest tool message the turn saved, for the
 // CLI's tool markers.
-func (a *sessionAgent) cliStream(m *cliagent.Model, call SessionAgentCall, history []message.Message, effort string, onCompacting func(bool) error, onActivity func(activity, detail string) error, lastToolMessage func() string, interruptToolCall func() bool) func(context.Context, fantasy.AgentStreamCall) (*fantasy.AgentResult, error) {
+func (a *sessionAgent) cliStream(m *cliagent.Model, call SessionAgentCall, handoff providerHandoff, effort string, onCompacting func(bool) error, onActivity func(activity, detail string) error, lastToolMessage func() string, interruptToolCall func() bool) func(context.Context, fantasy.AgentStreamCall) (*fantasy.AgentResult, error) {
 	showCompacting := onCompacting
 	onCompacting = func(active bool) error {
 		if active {
@@ -80,8 +80,13 @@ func (a *sessionAgent) cliStream(m *cliagent.Model, call SessionAgentCall, histo
 		// A branch's first turn with this tool forks the tool's own memory
 		// at the cut; the handoff then adds only what came after it.
 		var fork *cliFork
-		if link.Native == "" {
-			if f, ok := a.branchFork(ctx, m, call.SessionID, history); ok {
+		last, hasLast := lastModelReply(handoff.history)
+		switched := hasLast && (last.Provider != handoff.target.Provider || last.Model != handoff.target.Model)
+		if switched && !m.HasBackgroundWork(call.SessionID) {
+			// An older native session can already have a full context.
+			link = cliagent.Link{}
+		} else if link.Native == "" {
+			if f, ok := a.branchFork(ctx, m, call.SessionID, handoff.history); ok {
 				fork, link = &f, f.link
 			}
 		}
@@ -91,9 +96,17 @@ func (a *sessionAgent) cliStream(m *cliagent.Model, call SessionAgentCall, histo
 		}
 		// An agent CLI reads the host's view and notes with its turn text.
 		prompt = call.modelContext + prompt
-		text, resume := cliHandoffWithTranscript(history, link, prompt, a.transcriptDataDir(), call.SessionID)
+		var text, resume string
 		if fork != nil && len(fork.note) > 0 {
-			text = handoffPromptWithTranscript(branchNoteIntro, fork.note, history, text, a.transcriptDataDir(), call.SessionID)
+			// Include both the partial turn and subsequent work in one budget.
+			start := slices.IndexFunc(handoff.history, func(m message.Message) bool { return m.ID == fork.note[0].ID })
+			text, err = handoff.prompt(branchNoteIntro, handoff.history[start:], prompt)
+			resume = link.Native
+		} else {
+			text, resume, err = handoff.forCLI(link, prompt)
+		}
+		if err != nil {
+			return nil, err
 		}
 		// Refresh even resumed CLI sessions: their native skill catalogs and
 		// kept system prompts may predate a /skills toggle or installation.
@@ -197,7 +210,10 @@ func (a *sessionAgent) cliStream(m *cliagent.Model, call SessionAgentCall, histo
 				slog.Warn("Agent CLI could not resume its session; starting fresh", "cli", m.Kind, "session", resume)
 			}
 			turn.Fork = nil
-			turn.Prompt, turn.Resume = cliHandoffWithTranscript(history, cliagent.Link{}, prompt, a.transcriptDataDir(), call.SessionID)
+			turn.Prompt, turn.Resume, err = handoff.forCLI(cliagent.Link{}, prompt)
+			if err != nil {
+				return nil, err
+			}
 			turn.Prompt = wrap(turn.Prompt, cliagent.Link{}, turn.Resume)
 			nameNew()
 			err = m.Run(ctx, turn)
@@ -238,7 +254,11 @@ func (a *sessionAgent) cliSummarize(ctx context.Context, m *cliagent.Model, sess
 		return nil, nil
 	}
 	prompt = string(summaryPrompt) + "\n\n" + prompt + "\n\nDon't use any tools: reply with the summary only."
-	text, resume := cliHandoffWithTranscript(history, link, prompt, a.transcriptDataDir(), sessionID)
+	handoff := providerHandoff{history: history, dataDir: a.transcriptDataDir(), sessionID: sessionID, budget: handoffBytes(m.ContextWindow, handoffTokens)}
+	text, resume, err := handoff.forCLI(link, prompt)
+	if err != nil {
+		return nil, err
+	}
 	if resume == "" {
 		return nil, nil
 	}

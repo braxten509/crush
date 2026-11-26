@@ -12,6 +12,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func testCLIHandoff(t *testing.T, history []message.Message, link cliagent.Link, prompt string) (string, string) {
+	t.Helper()
+	h := providerHandoff{history: history, dataDir: t.TempDir(), sessionID: "sample", budget: handoffTokens * 4}
+	text, resume, err := h.forCLI(link, prompt)
+	require.NoError(t, err)
+	return text, resume
+}
+
 func TestCLIHandoff(t *testing.T) {
 	msg := func(id string, role message.MessageRole, text string) message.Message {
 		return message.Message{ID: id, Role: role, Provider: "codex-cli", Model: "gpt", Parts: []message.ContentPart{message.TextContent{Text: text}}}
@@ -24,25 +32,25 @@ func TestCLIHandoff(t *testing.T) {
 	}
 
 	// New session: everything is handed over, nothing resumed.
-	prompt, resume := cliHandoff(history, cliagent.Link{}, "next")
+	prompt, resume := testCLIHandoff(t, history, cliagent.Link{}, "next")
 	require.Empty(t, resume)
 	require.Contains(t, prompt, "PINEAPPLE")
 	require.Contains(t, prompt, "codex answer")
 	require.True(t, len(prompt) > len("next") && prompt[len(prompt)-4:] == "next")
 
 	// Resumed session that saw up to message 2: only 3 and 4 are new.
-	prompt, resume = cliHandoff(history, cliagent.Link{Native: "n1", Through: "2"}, "next")
+	prompt, resume = testCLIHandoff(t, history, cliagent.Link{Native: "n1", Through: "2"}, "next")
 	require.Equal(t, "n1", resume)
 	require.NotContains(t, prompt, "PINEAPPLE")
 	require.Contains(t, prompt, "codex answer")
 
 	// Resumed session that is up to date: just the prompt.
-	prompt, resume = cliHandoff(history, cliagent.Link{Native: "n1", Through: "4"}, "next")
+	prompt, resume = testCLIHandoff(t, history, cliagent.Link{Native: "n1", Through: "4"}, "next")
 	require.Equal(t, "n1", resume)
 	require.Equal(t, "next", prompt)
 
 	// Its last-seen message was summarized away: start over with everything.
-	_, resume = cliHandoff(history, cliagent.Link{Native: "n1", Through: "gone"}, "next")
+	_, resume = testCLIHandoff(t, history, cliagent.Link{Native: "n1", Through: "gone"}, "next")
 	require.Empty(t, resume)
 }
 
@@ -61,7 +69,7 @@ func TestCLIHandoff_ErrorFinish(t *testing.T) {
 		{ID: "3", Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "continue"}}},
 	}
 
-	prompt, _ := cliHandoff(history, cliagent.Link{}, "next")
+	prompt, _ := testCLIHandoff(t, history, cliagent.Link{}, "next")
 	require.Contains(t, prompt, "model access is disabled")
 }
 

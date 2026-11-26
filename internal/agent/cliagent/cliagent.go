@@ -234,6 +234,20 @@ func (p *provider) LanguageModel(_ context.Context, modelID string) (fantasy.Lan
 	return m, nil
 }
 
+// HasBackgroundWork reports whether starting a fresh native session would
+// stop work that this chat's previous Claude or Codex process still owns.
+func (m *Model) HasBackgroundWork(sessionID string) bool {
+	switch m.Kind {
+	case config.TypeClaudeCode:
+		live, ok := claudeSessions.peek(sessionID)
+		return ok && live.busy()
+	case config.TypeCodexCLI:
+		live, ok := codexSessions.peek(sessionID)
+		return ok && live.terminals.busy()
+	}
+	return false
+}
+
 // Run executes one turn, emitting events until the CLI finishes it.
 func (m *Model) Run(ctx context.Context, t Turn) error {
 	if t.Continue && m.Kind != config.TypeClaudeCode {

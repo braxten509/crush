@@ -3,177 +3,158 @@ package agent
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/crush/internal/agent/cliagent"
+	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/message"
 )
 
-// Handoff budgets, in bytes. The newest messages are kept whole first.
 const (
-	handoffBudget     = 120_000
-	handoffUserMax    = 12_000
-	handoffTextMax    = 6_000
-	handoffToolArgMax = 300
-	handoffToolOutMax = 800
-)
-
-// The intros of a handoff: a resumed session gets only what it missed, a
-// fresh one the written copy of the whole conversation.
-const (
+	handoffTokens           = 30_000
 	handoffResumeIntro      = "Since your last reply, the user continued this conversation with other AI agents. Here is what happened meanwhile:"
-	handoffWrittenCopyIntro = "This conversation started before you joined; earlier turns were handled by other AI agents. Here it is so far:"
+	handoffWrittenCopyIntro = "This conversation started before you joined. Here is its recent history:"
 )
 
-// cliHandoff builds the prompt for a CLI turn and picks the native session
-// to resume. A native session that has seen the conversation up to some
-// point is resumed with only what happened since (turns by other agents);
-// otherwise a fresh session gets the whole conversation.
-func cliHandoff(history []message.Message, link cliagent.Link, prompt string) (string, string) {
-	return cliHandoffWithTranscript(history, link, prompt, "", "")
+// handoffBytes uses the same four-byte estimate as approxTokenCount. Keep at
+// least half of a small model's window for its instructions and ongoing work.
+func handoffBytes(window, available int64) int {
+	tokens := int64(handoffTokens)
+	if window > 0 {
+		tokens = min(tokens, window/2)
+	}
+	return int(max(0, min(tokens, available))) * 4
 }
 
-func cliHandoffWithTranscript(history []message.Message, link cliagent.Link, prompt, dataDir, sessionID string) (string, string) {
+type providerHandoff struct {
+	history            []message.Message
+	target             config.SelectedModel
+	dataDir, sessionID string
+	budget             int // bytes available for the inline excerpt
+}
+
+func (h providerHandoff) forCLI(link cliagent.Link, prompt string) (string, string, error) {
 	if link.Native != "" {
-		for i, msg := range history {
-			if msg.ID != link.Through {
-				continue
+		for i, m := range h.history {
+			if m.ID == link.Through {
+				if i == len(h.history)-1 {
+					return prompt, link.Native, nil
+				}
+				text, err := h.prompt(handoffResumeIntro, h.history[i+1:], prompt)
+				return text, link.Native, err
 			}
-			missed := history[i+1:]
-			if len(missed) == 0 {
-				return prompt, link.Native
-			}
-			return handoffPromptWithTranscript(handoffResumeIntro, missed, history, prompt, dataDir, sessionID), link.Native
 		}
 	}
-	if len(history) == 0 {
-		return prompt, ""
+	if len(h.history) == 0 {
+		return prompt, "", nil
 	}
-	return handoffPromptWithTranscript(handoffWrittenCopyIntro, history, history, prompt, dataDir, sessionID), ""
+	text, err := h.prompt(handoffWrittenCopyIntro, h.history, prompt)
+	return text, "", err
 }
 
-func handoffPrompt(intro string, msgs []message.Message, prompt string) string {
-	return handoffPromptWithTranscript(intro, msgs, msgs, prompt, "", "")
-}
-
-func handoffPromptWithTranscript(intro string, msgs, fullHistory []message.Message, prompt, dataDir, sessionID string) string {
-	rendered, shortened := transcriptDetails(msgs)
-	searchLine := ""
-	if shortened && dataDir != "" {
-		if path, _, err := writeSearchableTranscript(dataDir, sessionID, fullHistory); err == nil && path != "" {
-			searchLine = fmt.Sprintf("\nThe complete, unshortened conversation transcript is saved on disk at %s — search it with grep or read lines with view if you need earlier details.\n", path)
-		}
+func (h providerHandoff) prompt(intro string, recent []message.Message, prompt string) (string, error) {
+	path, _, err := writeSearchableTranscript(h.dataDir, h.sessionID, h.history)
+	if err != nil {
+		return "", fmt.Errorf("save conversation for the next agent: %w", err)
 	}
-	return fmt.Sprintf(`<conversation_handoff>
-You are running inside Crush, a terminal app where the user can switch between AI agents mid-conversation. %s
-
-%s%sTreat this as your own context: build on finished work instead of redoing it, and don't mention the handoff unless asked.
-</conversation_handoff>
-
-%s`, intro, rendered, searchLine, prompt)
+	body, _ := renderTranscript("", recent)
+	heading := "<conversation_handoff>\n" + intro + "\n\n"
+	lookup := fmt.Sprintf("\nSearch %q or read it by line for the full conversation, including tool calls and results. Continue the user's work from here.\n</conversation_handoff>\n\n", path)
+	return heading + recentExcerpt(body, recent, max(0, h.budget-len(heading)-len(lookup))) + lookup + prompt, nil
 }
 
-// transcript renders messages for a handoff, newest first within the
-// budget, then restores reading order.
-func transcript(msgs []message.Message) string {
-	rendered, _ := transcriptDetails(msgs)
-	return rendered
-}
-
-func transcriptDetails(msgs []message.Message) (string, bool) {
-	var blocks []string
-	size, omitted := 0, 0
-	clippedAny := false
-	for i := len(msgs) - 1; i >= 0; i-- {
-		block, clipped := renderMessageDetails(msgs[i])
-		if block == "" {
+func recentExcerpt(body string, recent []message.Message, budget int) string {
+	if budget <= 2 {
+		return tailBytes(body, max(0, budget))
+	}
+	if len(body) <= budget {
+		return body
+	}
+	// A single large tool result can cover the entire excerpt. Keep the
+	// latest user request alongside its tail in that case.
+	var request string
+	for i := len(recent) - 1; i >= 0; i-- {
+		m := recent[i]
+		text := m.Content()
+		if !m.IsPrompt() || text.Hidden || text.Text == "" {
 			continue
 		}
-		if clipped {
-			clippedAny = true
+		if _, _, generated := ParseTaskNotification(text.Text); generated {
+			continue
 		}
-		if size+len(block) > handoffBudget {
-			omitted = i + 1
-			break
+		if !strings.Contains(body[len(body)-budget:], text.Text) {
+			request = tailBytes("Latest user request:\n"+text.Text, min(budget/4, 8000)) + "\n\n"
 		}
-		size += len(block)
-		blocks = append(blocks, block)
+		break
 	}
-	var b strings.Builder
-	if omitted > 0 {
-		fmt.Fprintf(&b, "[%d earlier messages omitted]\n\n", omitted)
-	}
-	for i := len(blocks) - 1; i >= 0; i-- {
-		b.WriteString(blocks[i])
-		b.WriteString("\n")
-	}
-	return b.String(), omitted > 0 || clippedAny
+	return request + tailBytes(body, max(0, budget-len(request)))
 }
 
-func renderMessage(msg message.Message) string {
-	s, _ := renderMessageDetails(msg)
-	return s
-}
-
-func renderMessageDetails(msg message.Message) (string, bool) {
-	var b strings.Builder
-	clipped := false
-	clipTrack := func(s string, max int) string {
-		if len(s) > max {
-			clipped = true
-		}
-		return clip(s, max)
-	}
-	switch msg.Role {
-	case message.User:
-		if text := msg.Content().Text; text != "" {
-			fmt.Fprintf(&b, "[user]\n%s\n", clipTrack(text, handoffUserMax))
-		}
-	case message.Assistant:
-		who := "assistant"
-		if msg.Model != "" {
-			who = fmt.Sprintf("assistant: %s/%s", msg.Provider, msg.Model)
-		}
-		if msg.IsSummaryMessage {
-			who = "summary of the earlier conversation"
-		}
-		text := msg.Content().Text
-		calls := msg.ToolCalls()
-		errText := msg.ErrorText()
-		if text == "" && len(calls) == 0 && errText == "" {
-			return "", false
-		}
-		if text != "" || len(calls) > 0 {
-			fmt.Fprintf(&b, "[%s]\n", who)
-			if text != "" {
-				b.WriteString(clipTrack(text, handoffTextMax) + "\n")
-			}
-			for _, tc := range calls {
-				fmt.Fprintf(&b, "-> %s %s\n", tc.Name, clipTrack(tc.Input, handoffToolArgMax))
-			}
-		}
-		if errText != "" {
-			if b.Len() > 0 {
-				b.WriteString("\n")
-			}
-			b.WriteString(clipTrack(errText, handoffTextMax) + "\n")
-		}
-	case message.Tool:
-		for _, tr := range msg.ToolResults() {
-			status := "ok"
-			if tr.IsError {
-				status = "error"
-			}
-			fmt.Fprintf(&b, "<- %s %s: %s\n", tr.Name, status, clipTrack(strings.TrimSpace(tr.Content), handoffToolOutMax))
-		}
-	}
-	return b.String(), clipped
-}
-
-// clip shortens s to about max bytes, keeping its start and end.
-func clip(s string, max int) string {
-	if len(s) <= max {
+func tailBytes(s string, n int) string {
+	if len(s) <= n {
 		return s
 	}
-	half := max / 2
-	return strings.ToValidUTF8(s[:half], "") + "\n[... middle omitted ...]\n" + strings.ToValidUTF8(s[len(s)-half:], "")
+	tail := s[len(s)-n:]
+	for len(tail) > 0 && !utf8.RuneStart(tail[0]) {
+		tail = tail[1:]
+	}
+	return tail
+}
+
+// transcriptPrompt includes text files, shell commands and subagent reports
+// as the agent saw them. Binary attachments are named instead of base64 encoded.
+func transcriptPrompt(m message.Message) string {
+	var b strings.Builder
+	b.WriteString(m.Content().Text)
+	for _, p := range m.Parts {
+		switch v := p.(type) {
+		case message.BinaryContent:
+			fmt.Fprintf(&b, "\n[attachment: %s, %s]", v.Path, v.MIMEType)
+			if strings.HasPrefix(v.MIMEType, "text/") {
+				b.WriteByte('\n')
+				b.Write(v.Data)
+			}
+		case message.SubAgentReport:
+			b.WriteString("\n" + v.PromptText())
+		case message.ShellCommand:
+			fmt.Fprintf(&b, "\n$ %s\n%s\n(exit code %d)", v.Command, v.Output, v.ExitCode)
+		}
+	}
+	return b.String()
+}
+
+// apiHistory keeps the receiving model's own subsequent turns in native
+// format. Earlier providers' signed reasoning and tool protocols are not
+// portable, so their conversation is replayed as one bounded transcript.
+func (h providerHandoff) apiHistory(summaryID string) ([]message.Message, error) {
+	foreign, firstLocal, summary := -1, -1, -1
+	for i, m := range h.history {
+		if m.ID == summaryID && summaryID != "" {
+			summary = i
+		}
+		if m.Role != message.Assistant || m.IsSummaryMessage || m.Provider == "" {
+			continue
+		}
+		if m.Provider != h.target.Provider || m.Model != h.target.Model {
+			foreign, firstLocal = i, -1
+		} else if firstLocal < 0 {
+			firstLocal = i
+		}
+	}
+	if foreign < 0 || firstLocal >= 0 && summary > firstLocal {
+		return sinceSummary(h.history, summaryID), nil
+	}
+	cut := len(h.history)
+	if firstLocal >= 0 {
+		cut = firstLocal
+		for cut > foreign+1 && h.history[cut-1].Role == message.User {
+			cut--
+		}
+	}
+	text, err := h.prompt(handoffWrittenCopyIntro, h.history[:cut], "")
+	if err != nil {
+		return nil, err
+	}
+	prefix := message.Message{Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: text}}}
+	return append([]message.Message{prefix}, h.history[cut:]...), nil
 }

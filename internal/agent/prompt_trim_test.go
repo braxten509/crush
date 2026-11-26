@@ -222,7 +222,9 @@ func TestCLIHandoffWithTranscriptIncludesSearchablePathWhenClipped(t *testing.T)
 		},
 	}
 
-	prompt, resume := cliHandoffWithTranscript(history, cliagent.Link{}, "continue work", dir, "cli-switch")
+	h := providerHandoff{history: history, dataDir: dir, sessionID: "cli-switch", budget: 800}
+	prompt, resume, err := h.forCLI(cliagent.Link{}, "continue work")
+	require.NoError(t, err)
 	require.Empty(t, resume)
 	require.Contains(t, prompt, "transcripts/cli-switch.md")
 

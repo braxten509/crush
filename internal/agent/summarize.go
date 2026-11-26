@@ -49,10 +49,11 @@ func (a *sessionAgent) summarize(ctx context.Context, sessionID, trigger string,
 	if err != nil {
 		return fmt.Errorf("failed to get session: %w", err)
 	}
-	msgs, err := a.getSessionMessages(ctx, currentSession)
+	full, err := a.activeHistory(ctx, sessionID)
 	if err != nil {
 		return err
 	}
+	msgs := sinceSummary(full, currentSession.SummaryMessageID)
 	if len(msgs) == 0 {
 		// Nothing to summarize.
 		return nil
@@ -63,7 +64,7 @@ func (a *sessionAgent) summarize(ctx context.Context, sessionID, trigger string,
 	}
 
 	aiMsgs, _ := a.preparePrompt(msgs, chatModel.CatwalkCfg.Capabilities.Vision, chatModel.CatwalkCfg.Capabilities.Audio)
-	aiMsgs = a.trimPreparedPrompt(sessionID, msgs, aiMsgs, chatModel, approxTokenCount(string(summaryPrompt))+approxTokenCount(systemPromptPrefix))
+	aiMsgs = a.trimPreparedPrompt(sessionID, full, aiMsgs, chatModel, approxTokenCount(string(summaryPrompt))+approxTokenCount(systemPromptPrefix))
 
 	genCtx, cancel := context.WithCancel(ctx)
 	// Inside a turn (automatic compaction) Stop still names that turn; a
@@ -97,7 +98,7 @@ func (a *sessionAgent) summarize(ctx context.Context, sessionID, trigger string,
 
 	var resp *fantasy.AgentResult
 	if cliModel, ok := chatModel.Model.(*cliagent.Model); ok {
-		resp, err = a.cliSummarize(genCtx, cliModel, sessionID, chatModel.ModelCfg.ReasoningEffort, msgs, summaryPromptText, &summaryMessage)
+		resp, err = a.cliSummarize(genCtx, cliModel, sessionID, chatModel.ModelCfg.ReasoningEffort, full, summaryPromptText, &summaryMessage)
 	}
 	if resp == nil && err == nil {
 		resp, err = agent.Stream(genCtx, a.summaryStreamCall(genCtx, sessionID, chatModel, summaryPromptText, aiMsgs, opts, onAuthRefresh, systemPromptPrefix, &summaryMessage))

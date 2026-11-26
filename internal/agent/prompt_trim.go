@@ -88,16 +88,12 @@ func (a *sessionAgent) trimPreparedPrompt(sessionID string, msgs []message.Messa
 }
 
 func writeSearchableTranscript(dataDir, sessionID string, msgs []message.Message) (string, transcriptIndex, error) {
-	idx := transcriptIndex{
-		toolCalls:   make(map[string][2]int),
-		toolResults: make(map[string][2]int),
-	}
 	if sessionID == "" {
 		sessionID = "session"
 	}
 	dir := filepath.Join(dataDir, transcriptSubdir)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return "", idx, err
+		return "", transcriptIndex{}, err
 	}
 	safeID := strings.Map(func(r rune) rune {
 		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
@@ -105,7 +101,36 @@ func writeSearchableTranscript(dataDir, sessionID string, msgs []message.Message
 		}
 		return '_'
 	}, sessionID)
-	path := filepath.Join(dir, safeID+".md")
+	path, err := filepath.Abs(filepath.Join(dir, safeID+".md"))
+	if err != nil {
+		return "", transcriptIndex{}, err
+	}
+
+	text, idx := renderTranscript(sessionID, msgs)
+	// A provider can still be reading the previous snapshot.
+	tmp, err := os.CreateTemp(dir, ".transcript-*")
+	if err != nil {
+		return "", idx, err
+	}
+	defer os.Remove(tmp.Name())
+	if _, err = tmp.WriteString(text); err != nil {
+		tmp.Close()
+		return "", idx, err
+	}
+	if err := tmp.Close(); err != nil {
+		return "", idx, err
+	}
+	if err := os.Rename(tmp.Name(), path); err != nil {
+		return "", idx, err
+	}
+	return path, idx, nil
+}
+
+func renderTranscript(sessionID string, msgs []message.Message) (string, transcriptIndex) {
+	idx := transcriptIndex{
+		toolCalls:   make(map[string][2]int),
+		toolResults: make(map[string][2]int),
+	}
 
 	var b strings.Builder
 	line := 1
@@ -119,15 +144,17 @@ func writeSearchableTranscript(dataDir, sessionID string, msgs []message.Message
 		return start, line - 1
 	}
 
-	writeBlock(fmt.Sprintf("# Full Conversation Transcript (%s)\n", sessionID))
+	if sessionID != "" {
+		writeBlock(fmt.Sprintf("# Full Conversation Transcript (%s)\n", sessionID))
+	}
 	for i, msg := range msgs {
 		switch msg.Role {
-		case message.User:
-			text := strings.TrimSpace(msg.Content().Text)
+		case message.User, message.System:
+			text := transcriptPrompt(msg)
 			if text == "" {
 				continue
 			}
-			writeBlock(fmt.Sprintf("\n## Message %d [user]\n%s\n", i+1, text))
+			writeBlock(fmt.Sprintf("\n## Message %d [%s]\n%s\n", i+1, msg.Role, text))
 		case message.Assistant:
 			who := "assistant"
 			if msg.Model != "" {
@@ -171,10 +198,7 @@ func writeSearchableTranscript(dataDir, sessionID string, msgs []message.Message
 		}
 	}
 	idx.totalLines = max(line-1, 1)
-	if err := os.WriteFile(path, []byte(b.String()), 0o600); err != nil {
-		return "", idx, err
-	}
-	return path, idx, nil
+	return b.String(), idx
 }
 
 func shortenOlderToolParts(history []fantasy.Message, budget int64, transcriptPath string, idx transcriptIndex) ([]fantasy.Message, int) {

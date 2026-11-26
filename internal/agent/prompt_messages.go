@@ -12,7 +12,6 @@ import (
 	"charm.land/fantasy"
 
 	"github.com/charmbracelet/crush/internal/message"
-	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/crush/internal/stringext"
 )
 
@@ -260,28 +259,27 @@ func filterFileParts(parts []fantasy.MessagePart) []fantasy.MessagePart {
 	return filtered
 }
 
-func (a *sessionAgent) getSessionMessages(ctx context.Context, session session.Session) ([]message.Message, error) {
-	// Read only the tail a compacted session actually sends. The full
-	// transcript can be tens of megabytes on the single shared connection.
-	msgs, err := a.messages.ListFromSummary(ctx, session.ID, session.SummaryMessageID)
+// activeHistory takes one snapshot before the current prompt is recorded.
+// Handoffs and their searchable copy both use this same branch.
+func (a *sessionAgent) activeHistory(ctx context.Context, sessionID string) ([]message.Message, error) {
+	msgs, err := a.messages.List(ctx, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list messages: %w", err)
 	}
+	return withoutPendingQuestions(msgs), nil
+}
 
-	if session.SummaryMessageID != "" {
-		summaryMsgIndex := -1
-		for i, msg := range msgs {
-			if msg.ID == session.SummaryMessageID {
-				summaryMsgIndex = i
-				break
+func sinceSummary(msgs []message.Message, summaryID string) []message.Message {
+	if summaryID != "" {
+		for i, m := range msgs {
+			if m.ID == summaryID {
+				tail := slices.Clone(msgs[i:])
+				tail[0].Role = message.User
+				return tail
 			}
 		}
-		if summaryMsgIndex != -1 {
-			msgs = msgs[summaryMsgIndex:]
-			msgs[0].Role = message.User
-		}
 	}
-	return withoutPendingQuestions(msgs), nil
+	return msgs
 }
 
 func withoutPendingQuestions(msgs []message.Message) []message.Message {

@@ -3,6 +3,7 @@
 // GET …/config before the answer reaches the page (commands.rs
 // redact_answer): a provider comes with has_api_key, has_oauth and the
 // token's expiry times (oauth_times) instead of the key and the token.
+import { agyFamilies, agyModel } from "./agy.js";
 import { api } from "../engine/api.js";
 
 // reasoning: catwalk v3's own, kept for its thinking word ("always" has no
@@ -177,5 +178,6 @@ export function modelInfo(cfg, catalog, selected) {
   const fromAccount = [...(configured?.chatgpt_models ?? []), ...(configured?.grok_models ?? [])].find((m) => m.id === selected.model);
   const fromCatalog = catalog.find((p) => p.id === selected.provider)?.models.find((m) => m.id === selected.model);
   if (!fromConfig && !fromCatalog && !fromAccount) return null;
-  return { ...(fromCatalog ?? {}), ...(fromAccount ?? {}), ...(fromConfig ?? {}), name: fromConfig?.name || fromAccount?.name || fromCatalog?.name || selected.model };
+  const model = { ...(fromCatalog ?? {}), ...(fromAccount ?? {}), ...(fromConfig ?? {}), name: fromConfig?.name || fromAccount?.name || fromCatalog?.name || selected.model };
+  return configured?.type === "agy-cli" ? agyModel(model, agyFamilies(configured.models)) : model;
 }

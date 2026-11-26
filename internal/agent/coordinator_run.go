@@ -175,7 +175,9 @@ func (c *coordinator) runTurn(ctx context.Context, accept *AcceptedRun, report *
 	// its model settings, and the model refresh below must all target the
 	// same agent even if SetMainAgent swaps the main agent mid-flight.
 	agent, agentName := c.activeAgent()
-	c.fallbackBeforeTurn(ctx, sessionID)
+	if !agent.IsSessionBusy(sessionID) && (accept == nil || !accept.followUp) {
+		c.fallbackBeforeTurn(ctx, sessionID)
+	}
 	if err := c.updateAgentModels(ctx, agent, agentName); err != nil {
 		return nil, fmt.Errorf("failed to update models: %w", err)
 	}

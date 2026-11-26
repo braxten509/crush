@@ -392,6 +392,27 @@ describe("the model menu (ModelMenu.svelte)", () => {
     expect(sessions.byId.here.model).toEqual(own);
   });
 
+  it("groups AGY variants and sends the chosen AGY model ID", async () => {
+    const provider = "agy-cli";
+    const own = { provider, model: "example-xhigh", account: "second" };
+    state.routes["GET providers"] = [];
+    state.routes["GET config"] = {
+      providers: { [provider]: { name: "Antigravity", type: provider, models:
+        ["low", "xhigh", "max"].map((level) => ({ id: `example-${level}`, name: `Example (${level})` })) } },
+    };
+    const { sessions } = await import("../../lib/stores/sessions.svelte.js");
+    sessions.currentId = "here";
+    sessions.byId.here = { id: "here", model: own };
+    mount();
+    await vi.waitFor(() => expect(levelButtons()).toHaveLength(3));
+    expect(modelRows()).toHaveLength(1);
+    expect(levelButtons()[1].getAttribute("aria-checked")).toBe("true");
+    levelButtons()[2].click();
+    await vi.waitFor(() => expect(sessions.byId.here.model).toMatchObject({ provider, model: "example-max", account: "second" }));
+    expect(state.posts.find((post) => post.path === "sessions/here/model").body.model.model).toBe("example-max");
+    expect(modelRows()).toHaveLength(1);
+  });
+
   it("saves effort on this chat's model while another chat has another model", async () => {
     const other = { provider: "anthropic", model: "claude-b" };
     state.routes["GET config"] = config(other);

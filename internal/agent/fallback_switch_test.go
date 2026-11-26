@@ -463,3 +463,47 @@ func TestAFailedRefillBeforeATurnPlansNoWait(t *testing.T) {
 	require.Zero(t, sent)
 	require.Equal(t, "codex-2", chatModelOf(t, c, sid).Account)
 }
+
+// A background job or queued follow-up arriving mid-turn must not switch the
+// chat's saved account while the active turn is still running on the old one.
+func TestBusyChatDoesNotSwitchAccountBeforeTurn(t *testing.T) {
+	blocks := []config.FallbackBlock{
+		useBlock(config.TypeClaudeCode, "", "opus"),
+		useBlock(config.TypeClaudeCode, "claude-2", "opus"),
+	}
+	c, sid := fallbackCoordinator(t, blocks, map[string]float64{"claude-code/": 100}, nil)
+	sa := c.currentAgent().(*sessionAgent)
+	sa.activeRequests.Set(sid, &activeCancel{cancel: func() {}})
+	defer sa.activeRequests.Del(sid)
+
+	c.fallbackBeforeTurn(t.Context(), sid)
+	require.Equal(t, "", chatModelOf(t, c, sid).Account)
+	require.Empty(t, chatLines(t, c, sid))
+
+	sa.activeRequests.Del(sid)
+	c.fallbackBeforeTurn(t.Context(), sid)
+	require.Equal(t, "claude-2", chatModelOf(t, c, sid).Account)
+}
+
+// A limit error blames the account that actually ran the turn, not a newer
+// account saved on the chat meanwhile.
+func TestLimitErrorBlamesAccountThatRan(t *testing.T) {
+	usage := map[string]float64{}
+	c, sid, _ := opusOrder(t, usage)
+	ran := chatModelOf(t, c, sid)
+	newer := ran
+	newer.Account = "claude-2"
+	setChatModel(t, c, sid, newer)
+
+	require.True(t, c.handleAccountError(t.Context(), sid, ran, errOut))
+	require.Equal(t, "claude-2", chatModelOf(t, c, sid).Account)
+	require.Empty(t, chatLines(t, c, sid))
+	require.Empty(t, c.limitRetries.pending)
+
+	c.fallback.mu.Lock()
+	_, firstOut := c.fallback.out[outKey{acct: fallback.Account{Kind: config.TypeClaudeCode, ID: ""}}]
+	_, secondOut := c.fallback.out[outKey{acct: fallback.Account{Kind: config.TypeClaudeCode, ID: "claude-2"}}]
+	c.fallback.mu.Unlock()
+	require.True(t, firstOut, "the account that ran must be marked out")
+	require.False(t, secondOut, "the newer saved account must not be blamed")
+}

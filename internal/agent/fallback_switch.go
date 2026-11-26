@@ -335,6 +335,9 @@ func (c *coordinator) fallbackBeforeTurn(ctx context.Context, sessionID string) 
 	if !c.interactiveTurn(ctx) {
 		return
 	}
+	if agent := c.currentAgent(); agent != nil && agent.IsSessionBusy(sessionID) {
+		return
+	}
 	cur, ok := c.chatSelection(ctx, sessionID)
 	if !ok {
 		return
@@ -363,7 +366,7 @@ func (c *coordinator) handleAccountError(ctx context.Context, sessionID string, 
 	if err == nil || errors.As(err, new(recoveredAccountError)) {
 		return false
 	}
-	if c.fallbackOnOut(ctx, sessionID, err) {
+	if c.fallbackOnOutModel(ctx, sessionID, model, err) {
 		return true
 	}
 	at := c.planLimitRetry(sessionID, err)
@@ -376,19 +379,34 @@ func (c *coordinator) handleAccountError(ctx context.Context, sessionID string, 
 	return true
 }
 
-// fallbackOnOut handles a turn that ran out of usage on a model the order
-// steers. It reports whether the order took the chat; when it did not, the
-// plain reset retry applies.
+// fallbackOnOut handles a turn that ran out of usage on the chat's saved
+// model; callers that know the exact model that ran use fallbackOnOutModel.
 func (c *coordinator) fallbackOnOut(ctx context.Context, sessionID string, err error) bool {
+	return c.fallbackOnOutModel(ctx, sessionID, config.SelectedModel{}, err)
+}
+
+// fallbackOnOutModel handles a turn that ran out of usage on ran (the model
+// that actually ran, or the chat's saved model when unset). It reports
+// whether the order took the chat; when it did not, the plain reset retry
+// applies.
+func (c *coordinator) fallbackOnOutModel(ctx context.Context, sessionID string, ran config.SelectedModel, err error) bool {
 	needsSignIn := agyNeedsSignIn(err)
 	if !c.interactiveTurn(ctx) || (!needsSignIn && !isUsageLimit(err)) {
 		return false
 	}
-	cur, ok := c.chatSelection(ctx, sessionID)
-	if !ok {
-		return false
+	saved, hasSaved := c.chatSelection(ctx, sessionID)
+	cur := ran
+	if cur.Provider == "" || cur.Model == "" {
+		if !hasSaved {
+			return false
+		}
+		cur = saved
 	}
+	switchedAway := hasSaved && (saved.Provider != cur.Provider || saved.Model != cur.Model || saved.Account != cur.Account)
 	if needsSignIn {
+		if switchedAway {
+			return true
+		}
 		b, line, ok := c.nextAfterSignIn(ctx, cur, cur)
 		if !ok {
 			return false
@@ -411,6 +429,9 @@ func (c *coordinator) fallbackOnOut(ctx context.Context, sessionID string, err e
 	}
 	now := c.fallback.clock()
 	c.markOut(fallback.BlockAccount(order.Blocks[at], c.providerKind), cur.Model, err, now)
+	if switchedAway {
+		return true
+	}
 	act := fallback.OnOut(order, c.providerKind, at, c.fallbackReadings(now, nil), now, nil)
 	return c.applyFallback(ctx, sessionID, order, at, act, true, map[fallback.Account]bool{}, map[fallback.Account]bool{})
 }

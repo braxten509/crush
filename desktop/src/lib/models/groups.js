@@ -5,6 +5,7 @@
 // ChatGPT or Grok sign-in with the account's models; "Recently used" on top,
 // its stale entries dropped (and the pruned list returned for saving).
 
+import { agyFamilies, agyModel, agyRows } from "./agy.js";
 import { cliOf } from "../accounts/clis.js";
 
 const OPENAI = "openai";
@@ -56,7 +57,9 @@ export function buildGroups({ catalog, cfg, type, current = null, hidden = null 
   let selectedKey = "";
 
   function group(name, configured, provider, models) {
-    for (const model of models) {
+    const variants = provider.type === "agy-cli" ? agyFamilies(models) : null;
+    for (const raw of models) {
+      const model = variants ? agyModel(raw, variants) : raw;
       const key = modelKey(provider.id, model.id);
       const item = { key, id: `${name}\u0000${key}`, group: name, configured, recent: false, provider: { id: provider.id, name: provider.name || provider.id, type: provider.type ?? "" }, model };
       items.push(item);
@@ -114,7 +117,7 @@ export function buildGroups({ catalog, cfg, type, current = null, hidden = null 
   // their own memory and can't compact another chat (agent/summarize.go).
   const shown = type === "compact" ? [...recentItems, ...items].filter((item) => !cliOf(item.provider.id)) : [...recentItems, ...items];
   return {
-    items: shown,
+    items: [...agyRows(shown.filter((row) => row.recent), current, valid), ...agyRows(shown.filter((row) => !row.recent), current, valid)],
     selectedKey,
     prunedRecent: valid.length !== recentList.length ? valid : null,
   };
@@ -133,7 +136,7 @@ export function selectedModelOf(item, efforts = {}) {
   const out = { model: item.model.id, provider: item.provider.id };
   const remembered = efforts?.[modelKey(item.provider.id, item.model.id)];
   const effort = remembered && (item.model.reasoning_levels ?? []).includes(remembered) ? remembered : item.model.default_reasoning_effort;
-  if (effort) out.reasoning_effort = effort;
+  if (effort && !item.model.agyVariants) out.reasoning_effort = effort;
   if (item.model.default_max_tokens) out.max_tokens = item.model.default_max_tokens;
   return out;
 }

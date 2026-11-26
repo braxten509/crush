@@ -11,12 +11,16 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/charmbracelet/crush/internal/config"
+	"github.com/tidwall/gjson"
+	"mvdan.cc/sh/v3/expand"
+	"mvdan.cc/sh/v3/syntax"
 )
 
 const agyProfileFile = "agy-keyring-id"
@@ -135,6 +139,54 @@ func removeAGYLogin(dir string) error {
 	return nil
 }
 
+// agyHookScripts finds regular sibling scripts passed to configured hook
+// commands. Resolve home-relative paths without executing the commands.
+func agyHookScripts(home, hooks string) ([]string, error) {
+	data, err := os.ReadFile(hooks)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	dir := filepath.Dir(hooks)
+	env := &expand.Config{Env: expand.ListEnviron("HOME=" + home)}
+	var scripts []string
+	for _, command := range gjson.GetBytes(data, "@dig:command").Array() {
+		tree, err := syntax.NewParser().Parse(strings.NewReader(command.String()), "")
+		if err != nil {
+			continue
+		}
+		syntax.Walk(tree, func(node syntax.Node) bool {
+			call, ok := node.(*syntax.CallExpr)
+			if !ok {
+				return true
+			}
+			for _, arg := range call.Args {
+				path, err := expand.Literal(env, arg)
+				if err != nil || path != filepath.Clean(path) || filepath.Dir(path) != dir {
+					continue
+				}
+				info, err := os.Lstat(path)
+				if err != nil || !info.Mode().IsRegular() || path == hooks {
+					continue
+				}
+				switch filepath.Ext(path) {
+				case ".py", ".sh", ".bash", ".zsh", ".js", ".mjs", ".cjs", ".ts", ".rb", ".pl":
+				default:
+					if info.Mode().Perm()&0o111 == 0 {
+						continue
+					}
+				}
+				scripts = append(scripts, path)
+			}
+			return true
+		})
+	}
+	slices.Sort(scripts)
+	return slices.Compact(scripts), nil
+}
+
 // RunAGYProfile starts one AGY process with access to only its profile entry
 // through Secret Service. The existing guarded/read-only command, if any,
 // runs inside this filesystem view with its own restrictions.
@@ -189,6 +241,15 @@ func RunAGYProfile(ctx context.Context, id, name string, args []string, login bo
 	configDir := filepath.Join(gemini, "config")
 	hooks := filepath.Join(configDir, "hooks.json")
 	wrap = append(wrap, "--ro-bind-try", skills, skills, "--dir", configDir, "--ro-bind-try", hooks, hooks, "--dir", cli)
+	// Interpreted hooks can be regular, non-executable files beside hooks.json.
+	// Bind files individually so AGY can still create its private config files.
+	scripts, err := agyHookScripts(home, hooks)
+	if err != nil {
+		return fmt.Errorf("list AGY hook scripts: %w", err)
+	}
+	for _, path := range scripts {
+		wrap = append(wrap, "--ro-bind", path, path)
+	}
 	// AGY saves its settings (the terms answer too) and setup steps by
 	// replacing the file, which a shared read-only file refuses. These start
 	// as copies of account 1's; what AGY writes stays in the sandbox.

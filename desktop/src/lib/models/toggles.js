@@ -17,9 +17,9 @@ const errorText = (error) => error?.message ?? String(error);
 async function coder() {
   if (!modelData.cfg) await refreshModels();
   if (!modelData.cfg) throw new Error("configuration not found");
-  const { selected } = coderModel();
+  const { selected, info } = coderModel();
   if (!selected?.model) throw new Error("no model is selected");
-  return { selected: { ...selected } };
+  return { selected: { ...selected }, info };
 }
 
 // A model picked in a chat is saved with that chat (owner, 2026-10-24:
@@ -86,8 +86,15 @@ export async function toggleThinking() {
 // setReasoningEffort (model_select.go:440-475); ultracode is null when the
 // model has no Ultracode switch. Throws a failed save, so the sheet stays.
 export async function setEffort(effort, ultracode = null) {
-  const { selected } = await coder();
-  selected.reasoning_effort = effort;
+  const { selected, info: model } = await coder();
+  if (model?.agyVariants) {
+    const variant = model.agyVariants[effort];
+    if (!variant) throw new Error("This AGY model does not offer that effort");
+    selected.model = variant;
+    delete selected.reasoning_effort;
+  } else {
+    selected.reasoning_effort = effort;
+  }
   let info = `Reasoning effort set to ${effort}`;
   if (ultracode !== null) {
     selected.ultracode = ultracode;

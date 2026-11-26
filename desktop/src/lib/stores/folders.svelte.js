@@ -2,6 +2,7 @@
 // times of open chats of other folders in the left list (openlist.js). Read
 // when the window joins a folder and every 30 s while connected. With it,
 // what those chats are doing, asked of their own folders' engines (states).
+import { untrack } from "svelte";
 import { api } from "../engine/api.js";
 import { folderChatStates } from "../engine/commands.js";
 import { onEvent, onFolderEvent } from "../engine/events.js";
@@ -16,13 +17,29 @@ let seq = 0;
 
 export async function loadCatalog() {
   const mine = ++seq;
-  try {
-    const list = await api.savedSessions("");
-    if (mine === seq) folders.byId = Object.fromEntries((Array.isArray(list) ? list : []).filter((s) => s?.ID).map((s) => [s.ID, s]));
-  } catch (error) {
-    console.error("chat catalog read failed", error?.message ?? error);
-  }
+  const dirs = new Set(openChats.list.map((chat) => chat.dir).filter(Boolean));
+  const current = conn.project.path || conn.project.cwd;
+  if (current) dirs.add(current);
+  const lists = await Promise.all([...dirs].map(async (dir) => {
+    try {
+      return await api.savedSessions("", 0, dir);
+    } catch (error) {
+      console.error("chat catalog read failed", dir, error?.message ?? error);
+      return Object.values(folders.byId).filter((s) => s.Directory === dir);
+    }
+  }));
+  if (mine === seq) folders.byId = Object.fromEntries(lists.flat().filter((s) => s?.ID).map((s) => [s.ID, s]));
 }
+
+// The shared open list may arrive after the connection event.
+$effect.root(() => {
+  $effect(() => {
+    if (conn.state !== "connected" || !openChats.loaded) return;
+    void openChats.list;
+    void conn.project.path;
+    untrack(loadCatalog);
+  });
+});
 
 // The open chats of other folders, what each is doing (owner, 2026-10-21:
 // check every 30 s): {id: {is_busy, has_unfinished_work, pending_prompt}}.
@@ -69,7 +86,6 @@ let timer = null;
 
 onEvent("connection", (_kind, ev) => {
   if (ev?.state !== "connected") return;
-  loadCatalog();
   loadStates();
   timer ??= setInterval(() => {
     if (conn.state !== "connected" || globalThis.document?.visibilityState === "hidden") return;

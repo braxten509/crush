@@ -36,15 +36,16 @@ export function listedRows(open, options = {}) {
   const chats = (Array.isArray(open) ? open : []).filter((c) => c?.id);
   const listed = new Set(chats.map((c) => c.id));
   const dirOf = new Map(chats.map((c) => [c.id, c.dir]));
-  // A chat of another folder has no record in the store: it is drawn from the
-  // all-folder catalog and what its engine says it is doing, and its branch
-  // parent comes from the catalog (BranchOf), so it nests as it would in its
-  // own folder (owner, 2026-11-19: branches lost their place on a switch).
+  // Live records can outlast a folder switch. The folder determines the
+  // source of a branch link independently of where its status is read.
   const others = new Set();
+  const outside = new Set(chats.filter((c) => !here(c.dir)).map((c) => c.id));
   const records = Object.values(byId);
+  const known = new Set(records.map((s) => s.id));
   for (const c of chats) {
     if (byId[c.id]) continue;
     others.add(c.id);
+    known.add(c.id);
     const saved = catalog[c.id];
     const state = states[c.id] ?? {};
     const lock = state.lock_state || saved?.LockState || "";
@@ -59,22 +60,27 @@ export function listedRows(open, options = {}) {
   }
   // A closed chat between an open branch and its open ancestor is added
   // closed, so the branch moves up under that ancestor, not to the top.
-  for (const id of [...others]) {
+  const branchParent = (id) => outside.has(id)
+    ? catalog[id]?.BranchOf || parentOf(id)
+    : parentOf(id) || catalog[id]?.BranchOf;
+  for (const id of listed) {
     const seen = new Set([id]);
-    for (let up = catalog[id]?.BranchOf; up && !seen.has(up) && !byId[up] && catalog[up]; up = catalog[up].BranchOf) {
+    for (let up = branchParent(id); up && !seen.has(up); up = branchParent(up)) {
       seen.add(up);
-      if (others.has(up)) break;
-      others.add(up);
-      records.push({ id: up, title: catalog[up].Title || "New Session", created_at: catalog[up].CreatedAt ?? 0, updated_at: catalog[up].UpdatedAt ?? 0 });
+      if (outside.has(id)) outside.add(up);
+      if (known.has(up)) continue;
+      if (!catalog[up]) break;
+      known.add(up);
+      records.push({ id: up, title: catalog[up].Title, created_at: catalog[up].CreatedAt, updated_at: catalog[up].UpdatedAt });
     }
   }
   // Every chat, unlisted ones closed: a closed chat gives its place to its
   // open branches. Another folder has no selected chat to unfold a family,
   // so its branches always show (a pick there switches folders first).
   const built = buildRows(records, {
-    parentOf: (id) => (others.has(id) ? catalog[id]?.BranchOf || null : parentOf(id)),
+    parentOf: branchParent,
     isClosed: (id) => !listed.has(id),
-    expanded: [...others],
+    expanded: [...outside],
     selectedId,
     busy: (id) => (others.has(id) ? Boolean(states[id]?.is_busy) : busy(id)),
     stateOf,

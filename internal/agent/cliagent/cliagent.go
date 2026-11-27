@@ -269,7 +269,8 @@ func (m *Model) Run(ctx context.Context, t Turn) error {
 	// A command the CLI waits on for the user's time (2 minutes unless
 	// changed) is moved to the background, never holding the turn past
 	// the cap Crush's own bash tool keeps.
-	if t.SessionID != "" && CanBackground(m.Kind) {
+	// Agy commands use the native shell's own per-command timer.
+	if t.SessionID != "" && m.Kind != config.TypeAGYCLI && CanBackground(m.Kind) {
 		defer calls.autoBackground(t.SessionID)()
 	}
 	ctx = context.WithValue(ctx, openCallsKey{}, calls)

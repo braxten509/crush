@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -8,6 +9,8 @@ import (
 	"time"
 
 	"github.com/charmbracelet/crush/internal/agent"
+	"github.com/charmbracelet/crush/internal/agent/tools"
+	"github.com/charmbracelet/crush/internal/config"
 	"github.com/spf13/cobra"
 	"mvdan.cc/sh/v3/syntax"
 )
@@ -23,6 +26,15 @@ func newBackgroundCommand() *cobra.Command {
 				return errors.New("not running inside a Crush session")
 			}
 			request := agent.BackgroundRequest{}
+			wait := 10 * time.Minute
+			if cmd.Flags().Changed("agy-foreground") {
+				request.AGYWait, _ = cmd.Flags().GetDuration("agy-foreground")
+				request.AGYTurn = os.Getenv(agent.AGYCommandTurnEnv)
+				if request.AGYTurn == "" {
+					return errors.New("Agy foreground commands require an active turn")
+				}
+				wait += time.Duration(config.MaxAutoBackgroundSeconds) * time.Second
+			}
 			request.Name, _ = cmd.Flags().GetString("name")
 			request.Service, _ = cmd.Flags().GetBool("service")
 			request.OutputID, _ = cmd.Flags().GetString("output")
@@ -58,7 +70,7 @@ func newBackgroundCommand() *cobra.Command {
 				return err
 			}
 			// Leave time for the normal permission dialog, without stalling the hub.
-			reply, err := sendTaskRequestTimeout(directory, agent.TaskRequest{Session: session, Background: &request}, 10*time.Minute)
+			reply, err := sendTaskRequestTimeout(directory, agent.TaskRequest{Session: session, Background: &request}, wait)
 			if err != nil {
 				return err
 			}
@@ -72,9 +84,17 @@ func newBackgroundCommand() *cobra.Command {
 				return errors.New(reply.Background.Content)
 			}
 			_, err = fmt.Fprintln(cmd.OutOrStdout(), reply.Background.Content)
+			if err == nil && request.AGYTurn != "" {
+				var meta tools.BashResponseMetadata
+				if json.Unmarshal([]byte(reply.Background.Metadata), &meta) == nil && meta.ExitCode != 0 {
+					os.Exit(meta.ExitCode)
+				}
+			}
 			return err
 		},
 	}
+	cmd.Flags().Duration("agy-foreground", 0, "Keep a command attached until Crush backgrounds it")
+	_ = cmd.Flags().MarkHidden("agy-foreground")
 	cmd.Flags().Bool("service", false, "Keep this long-running service from delaying finish notifications")
 	cmd.Flags().String("name", "", "Short description of the job")
 	cmd.Flags().String("output", "", "Read output from a job")

@@ -561,6 +561,7 @@ func (t *bashTool) completed(r *bashRun, bgShell *shell.BackgroundShell, stdout,
 	stdout = formatOutput(stdout, stderr, execErr, t.spillDir)
 
 	metadata := tools.BashResponseMetadata{
+		ExitCode:         exitCode,
 		StartTime:        r.startTime.UnixMilli(),
 		EndTime:          time.Now().UnixMilli(),
 		Output:           stdout,
@@ -682,5 +683,6 @@ func autoBackgroundWait(requested int, limit time.Duration) time.Duration {
 	if requested > 0 {
 		wait = min(limit, time.Duration(requested)*time.Second)
 	}
-	return max(ForegroundWaitLimit+time.Second, wait)
+	// A CLI may yield its shell sooner than a native foreground wait.
+	return min(limit, max(ForegroundWaitLimit+time.Second, wait))
 }

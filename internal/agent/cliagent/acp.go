@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"maps"
 	"net/http"
 	"net/http/httptrace"
 	"net/url"
@@ -137,9 +136,6 @@ type acpRun struct {
 	// AGY takes a session/prompt at any time and folds it into the turn at
 	// the model's next step, answering the prompt it ends with no usage at
 	// once. The message is shown at the next step boundary after that.
-	// running are AGY's shell calls not yet finished (crush name, input),
-	// moved those Ctrl+B already showed in the background; handleMu keeps
-	// that move from running inside the read loop's handling of a line.
 	// usage adds up the answers to AGY's prompts: each covers only its own
 	// part of the turn.
 	usage     fantasy.Usage
@@ -149,9 +145,6 @@ type acpRun struct {
 	warnRaw  string
 	warnMsg  string
 	handleMu sync.Mutex
-	bgMu     sync.Mutex
-	running  map[string][2]string
-	moved    map[string]bool
 	// quiet fires when AGY goes silent after its text mid-turn (see
 	// [agyWritingQuiet]); quietGen, under handleMu, drops a stale firing.
 	quiet    *time.Timer
@@ -210,11 +203,6 @@ func runACPWith(ctx context.Context, m *Model, t Turn, name, bin string, args []
 		calls:    map[string]*acpTool{},
 		loading:  t.Resume != "",
 		steerIDs: map[string]string{},
-		running:  map[string][2]string{},
-		moved:    map[string]bool{},
-	}
-	if name == "agy" && t.SessionID != "" && !t.NoTools {
-		defer onBackground(t.SessionID, r.toBackground)()
 	}
 
 	stop := p.watchCancel(ctx, func() {
@@ -741,7 +729,6 @@ func (r *acpRun) handleUpdate(msg rpcMessage) error {
 			}
 		}
 		r.noteQuiet(params.Update.SessionUpdate)
-		return r.agyToolUpdate(params.Update)
 	}
 	if err := acpHandleUpdate(params.Update, r.calls, r.t.Emit); err != nil {
 		return err
@@ -1031,37 +1018,6 @@ func acpBlocksLaws(call acpUpdate, parts []acpContent, dir string) bool {
 	return false
 }
 
-// agyToolUpdate handles AGY's tool updates, keeping track of its running
-// shell calls for [acpRun.toBackground]. A call already shown in the
-// background has its real end left out.
-func (r *acpRun) agyToolUpdate(u acpUpdate) error {
-	done := u.Status == "completed" || u.Status == "failed"
-	r.bgMu.Lock()
-	moved := r.moved[u.ToolCallID]
-	if done {
-		delete(r.running, u.ToolCallID)
-		delete(r.moved, u.ToolCallID)
-	}
-	r.bgMu.Unlock()
-	if moved {
-		if done {
-			delete(r.calls, u.ToolCallID)
-		}
-		return nil
-	}
-	if err := acpHandleUpdate(u, r.calls, r.t.Emit); err != nil {
-		return err
-	}
-	if tc := r.calls[u.ToolCallID]; tc != nil && tc.announced && tc.crushName == tools.BashToolName {
-		_, input := acpTool2Crush(tc)
-		r.bgMu.Lock()
-		r.running[u.ToolCallID] = [2]string{tc.crushName, input}
-		r.bgMu.Unlock()
-	}
-	r.toolRunning.Store(len(r.calls) > 0)
-	return nil
-}
-
 // agyWritingQuiet is how long AGY stays silent after its text, mid-turn,
 // before Crush says the model is writing. AGY sends a tool call only once
 // it is whole, so a long edit is silence until then. Its text comes in
@@ -1100,32 +1056,4 @@ func (r *acpRun) stopQuiet() {
 	if r.quiet != nil {
 		r.quiet.Stop()
 	}
-}
-
-// toBackground shows AGY's running shell calls as moved to the background,
-// the way Ctrl+B does for the other CLIs. AGY carries on with its turn
-// while a slow command runs; only the chat waited on it.
-func (r *acpRun) toBackground() bool {
-	r.bgMu.Lock()
-	calls := r.running
-	r.running = map[string][2]string{}
-	for id := range calls {
-		r.moved[id] = true
-	}
-	r.bgMu.Unlock()
-	if len(calls) == 0 {
-		return false
-	}
-	go func() {
-		r.handleMu.Lock()
-		defer r.handleMu.Unlock()
-		for _, id := range slices.Sorted(maps.Keys(calls)) {
-			call := calls[id]
-			meta := markBackground(call[0], resultMetadata(call[0], call[1], agyBackgroundNote))
-			if r.t.Emit(Event{Type: EventToolResult, ID: id, Name: call[0], Output: agyBackgroundNote, Metadata: meta}) != nil {
-				return
-			}
-		}
-	}()
-	return true
 }

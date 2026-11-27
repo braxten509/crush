@@ -19,6 +19,7 @@ type BashPermissionsParams struct {
 }
 
 type BashResponseMetadata struct {
+	ExitCode         int    `json:"exit_code,omitempty"`
 	StartTime        int64  `json:"start_time"`
 	EndTime          int64  `json:"end_time"`
 	Output           string `json:"output"`

@@ -59,12 +59,6 @@ func runAGY(ctx context.Context, m *Model, t Turn) error {
 	return runACPWith(ctx, m, t, "agy", name, args, true)
 }
 
-// agyBackgroundNote is the result shown for a command moved to the
-// background with Ctrl+B or the user's background time. AGY itself moves a
-// slow command to its own background and carries on; the call's real end
-// is not shown again.
-const agyBackgroundNote = "Still running. AGY moved this command to its own background and carries on when it finishes."
-
 // diskMetadata is resultMetadata for CLIs that don't return file contents:
 // views read the file itself. Edit diffs are filled in by the caller from
 // before/after snapshots.
@@ -142,6 +136,20 @@ func ensureAGYGuardHookAt(path, command string) error {
 				},
 			},
 		},
+	}
+	// The shell hook only rewrites commands for an active Crush chat. It
+	// leaves Agy's permission decision and the separate guard in place.
+	exe, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	hooks["crush-agy-shell"] = map[string]any{
+		"PreToolUse": []any{map[string]any{
+			"matcher": "^run_command$",
+			"hooks": []any{map[string]any{
+				"type": "command", "command": "'" + strings.ReplaceAll(exe, "'", `'\''`) + "' __agy-shell-hook", "timeout": 10,
+			}},
+		}},
 	}
 	data, err := json.MarshalIndent(hooks, "", "  ")
 	if err != nil {

@@ -44,6 +44,19 @@ commits, ordinary fast-forward pushes and non-discarding switches are allowed.
 The one exception is cleaning up your own branch copy, below.
 </crush_instruction_sources>
 
+<crush_commands>
+When the chat provides Crush commands, use them for work the chat tracks.
+Start long or unpredictable commands with crush bg -- '<command>' from the
+outset. This includes builds, tests, simulations, downloads and batch jobs.
+Run quick commands directly. Use crush bg --service for continuing servers
+and watchers, crush bg --output ID to read a job, and crush bg --stop ID to
+stop it. Crush delivers the result to the chat when a job finishes.
+Use crush spawn for permitted helpers and reviews, and crush spawn --continue
+or --stop to manage them. Use crush ask for choices and approvals, secure_entry
+in that form or crush secure-entry for secrets, and crush skill on/off to
+change chat skills. Use the executable path supplied by Crush.
+</crush_commands>
+
 <crush_branch_copies>
 To work on a branch other than the one the project folder is on, make your
 own copy of the project with git worktree add (for example in

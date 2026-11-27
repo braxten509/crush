@@ -172,6 +172,11 @@ func (a *sessionAgent) cliStream(m *cliagent.Model, call SessionAgentCall, hando
 		// Prompts sent mid-turn go in at the next tool boundary (see
 		// steerCalls), or wait for the turn to end if no tool runs.
 		turn := cliagent.Turn{SessionID: call.SessionID, Prompt: text, Continue: call.CLIContinue, Attachments: call.Attachments, Resume: resume, Effort: effort, Emit: s.handle, Steer: s.steer, SteerInput: s.steerWithImages, SteerReady: s.steerReady, Env: env, Instructions: instructions}
+		if m.Kind == config.TypeAGYCLI && a.tasks != nil && !a.isSubAgent && !m.Guarded && !m.ReadOnly {
+			key, end := a.tasks.beginAGYCommands(ctx, call.SessionID)
+			defer end()
+			turn.Env = append(turn.Env, AGYCommandTurnEnv+"="+key)
+		}
 		if m.Kind == config.TypeCodexCLI {
 			turn.OnCodexUsage = a.recordCodexCredits(call.SessionID)
 			if a.tasks != nil && !a.isSubAgent {

@@ -24,14 +24,35 @@ import (
 
 const managedJobEnv = "CRUSH_MANAGED_BACKGROUND_JOB"
 
+const AGYCommandTurnEnv = "CRUSH_AGY_COMMAND_TURN"
+
+type agyCommandTurn struct {
+	session string
+	ctx     context.Context
+}
+
+// A foreground command belongs to one Agy turn. Only confirmed background
+// jobs move to the session watcher and survive the turn's cancellation.
+func (h *taskHub) beginAGYCommands(ctx context.Context, session string) (string, func()) {
+	key := uuid.NewString()
+	ctx, cancel := context.WithCancel(ctx)
+	h.agyTurns.Store(key, agyCommandTurn{session, ctx})
+	return key, func() {
+		h.agyTurns.Delete(key)
+		cancel()
+	}
+}
+
 // BackgroundRequest uses the same shell tools and policies as native agents.
 type BackgroundRequest struct {
-	Service    bool   `json:"service,omitempty"`
-	Command    string `json:"command,omitempty"`
-	WorkingDir string `json:"working_dir,omitempty"`
-	Name       string `json:"name,omitempty"`
-	OutputID   string `json:"output_id,omitempty"`
-	StopID     string `json:"stop_id,omitempty"`
+	AGYWait    time.Duration `json:"agy_wait,omitempty"`
+	AGYTurn    string        `json:"agy_turn,omitempty"`
+	Service    bool          `json:"service,omitempty"`
+	Command    string        `json:"command,omitempty"`
+	WorkingDir string        `json:"working_dir,omitempty"`
+	Name       string        `json:"name,omitempty"`
+	OutputID   string        `json:"output_id,omitempty"`
+	StopID     string        `json:"stop_id,omitempty"`
 }
 
 func (h *taskHub) background(req TaskRequest) TaskReply {
@@ -43,6 +64,17 @@ func (h *taskHub) background(req TaskRequest) TaskReply {
 		}
 	}()
 	fail := func(err error) TaskReply { return TaskReply{Error: err.Error()} }
+	watchCtx := ctx
+	if key := req.Background.AGYTurn; key != "" {
+		value, ok := h.agyTurns.Load(key)
+		if !ok || value.(agyCommandTurn).session != req.Session {
+			return fail(fmt.Errorf("Agy command belongs to a turn that has ended"))
+		}
+		ctx = value.(agyCommandTurn).ctx
+		if err := ctx.Err(); err != nil {
+			return fail(err)
+		}
+	}
 	if h.c == nil || h.c.sessions == nil || req.Session == "" {
 		return fail(fmt.Errorf("a valid Crush session is required"))
 	}
@@ -88,8 +120,12 @@ func (h *taskHub) background(req TaskRequest) TaskReply {
 		if chat, err := h.c.sessions.Get(ctx, req.Session); err == nil && chat.WorkDir != "" {
 			workDir = chat.WorkDir
 		}
-		tool = shelltool.NewBashTool(h.c.permissions, workDir, options.DataDirectory, options.Attribution, options.GetMaxBackgroundJobs(), h.c.cfg.Config().Permissions, reportStartedJob)
-		input = tools.BashParams{Command: params.Command, WorkingDir: params.WorkingDir, Description: params.Name, RunInBackground: true}
+		limit := h.c.autoBackground()
+		if params.AGYTurn != "" && params.AGYWait > 0 {
+			limit = min(limit, params.AGYWait)
+		}
+		tool = shelltool.NewBashTool(h.c.permissions, workDir, options.DataDirectory, options.Attribution, options.GetMaxBackgroundJobs(), h.c.cfg.Config().Permissions, reportStartedJob, shelltool.WithAutoBackground(func() time.Duration { return limit }))
+		input = tools.BashParams{Command: params.Command, WorkingDir: params.WorkingDir, Description: params.Name, RunInBackground: params.AGYTurn == ""}
 		ctx = withGuardedWorkDir(ctx, workDir)
 	}
 	// The secrets guard, then the tool hooks, as on an agent's own tools.
@@ -107,17 +143,22 @@ func (h *taskHub) background(req TaskRequest) TaskReply {
 	if err != nil {
 		return fail(err)
 	}
-	if id == "" {
+	var metadata tools.BashResponseMetadata
+	if !response.IsError && id == "" {
+		if err := json.Unmarshal([]byte(response.Metadata), &metadata); err != nil {
+			return fail(err)
+		}
+	}
+	// Agy already displays each foreground call. A tracked job or a shell
+	// edit also needs the native record that owns its file review.
+	_, review := filechange.TakeReview(response.Metadata)
+	if id == "" && (params.AGYTurn == "" || metadata.ShellID != "" || review != nil) {
 		// Save the tool result so edits made after the calling CLI turn ends
 		// still receive the normal file-change review.
-		h.recordBackgroundTool(ctx, req.Session, call, response)
+		h.recordBackgroundTool(watchCtx, req.Session, call, response)
 	}
 	if id != "" || response.IsError {
 		return TaskReply{Background: &response}
-	}
-	var metadata tools.BashResponseMetadata
-	if err := json.Unmarshal([]byte(response.Metadata), &metadata); err != nil {
-		return fail(err)
 	}
 	if metadata.ShellID != "" {
 		job, ok := shell.GetBackgroundShellManager().Get(metadata.ShellID)
@@ -129,7 +170,7 @@ func (h *taskHub) background(req TaskRequest) TaskReply {
 			response.Content += " This is a service; it will not delay completion notifications."
 		}
 		transferred = true
-		h.watchJob(ctx, release, req.Session, callID, job, params.Service)
+		h.watchJob(watchCtx, release, req.Session, callID, job, params.Service)
 	}
 	return TaskReply{Background: &response}
 }

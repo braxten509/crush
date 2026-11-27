@@ -189,6 +189,7 @@ type taskHub struct {
 	// a time; every resume claims again.
 	resumeMu sync.Mutex
 	// sessionRuns owns non-interactive runs and their follow-up producers.
+	agyTurns           sync.Map // active Agy turn ID to agyCommandTurn
 	sessionRuns        map[string]*sessionRun
 	codexCommands      map[*codexCommand]bool
 	backgroundOwners   map[string]string
@@ -746,7 +747,8 @@ The same command messages a sub-agent that is still working, to correct or steer
 Task IDs keep working after Crush restarts. Resume or continue a helper only with spawn --continue, never with an agent CLI's own resume flags.
 
 Crush refuses a "sleep" longer than 10 seconds in the foreground. Keep waits of 10 seconds or less in the foreground. For routine commands, wait at least 10 seconds before yielding (for Codex, use yield_time_ms of at least 10000). Run longer waits in the background, or loop on a check for what you're waiting on (until <check>; do sleep 2; done).
-Always run tests (test suites, test scripts, builds run to test) in the background, never in the foreground, using %[1]s bg -- 'timeout 600 <command>' for agent CLIs. This registers the job with Crush, makes it visible, and delivers a completion message. Use %[1]s bg --output <job-id> for output or %[1]s bg --stop <job-id> to stop it. Do not use nohup or a bare trailing ampersand for tracked jobs. Native API agents can use the bash tool's run_in_background option. Give every test command a time limit so a hung test ends on its own (for example "timeout 600 <command>", or the runner's own flag like "go test -timeout 10m"). Keep working while they run; check their output when you need the results instead of blocking on them, and if your tool tells you when a background command finishes, you can end your turn and continue then.
+Use %[1]s bg -- '<command>' by default whenever a command may take a while or its duration is unknown. This includes builds, simulations, measurements and batch jobs. Crush will send the result when it finishes.
+Always run tests (test suites, test scripts, builds run to test) in the background, never in the foreground, using %[1]s bg -- 'timeout 600 <command>' for agent CLIs. This registers the job with Crush, makes it visible, and delivers a completion message. Use %[1]s bg --output <job-id> for output or %[1]s bg --stop <job-id> to stop it. Do not use nohup or a bare trailing ampersand for tracked jobs. Give every test command a time limit so a hung test ends on its own (for example "timeout 600 <command>", or the runner's own flag like "go test -timeout 10m"). Keep working while they run; check their output when you need the results instead of blocking on them, and if your tool tells you when a background command finishes, you can end your turn and continue then.
 Use %[1]s bg --service -- '<command>' for servers and watchers that should remain running after the work is complete. This keeps them tracked and stoppable without delaying the finish notification. Never mark tests, builds, or other finite work as services.
 
 Use sub-agents for independent work that can run in parallel (research, separate parts of a change, reviews, second opinions from another model). Do quick or tightly coupled work yourself. Only use them when the user asks for sub-agents, other models, or parallel work, or when the task clearly benefits.%[7]s

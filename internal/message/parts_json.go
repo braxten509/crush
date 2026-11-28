@@ -168,3 +168,6 @@ func (c *ReasoningContent) UnmarshalJSON(data []byte) error {
 	}
 	return nil
 }
+
+// DecodeParts reads the saved parts of a conversation message.
+func DecodeParts(data []byte) ([]ContentPart, error) { return unmarshalParts(data) }

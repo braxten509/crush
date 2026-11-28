@@ -46,6 +46,8 @@ The one exception is cleaning up your own branch copy, below.
 
 <crush_commands>
 When the chat provides Crush commands, use them for work the chat tracks.
+When the user references chat <number>, read its saved conversation and details
+with crush session reference <number> from any project.
 Start long or unpredictable commands with crush bg -- '<command>' from the
 outset. This includes builds, tests, simulations, downloads and batch jobs.
 Run quick commands directly. Use crush bg --service for continuing servers

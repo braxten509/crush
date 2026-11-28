@@ -16,6 +16,7 @@
   // bar (Mac, Windows, outside the app) this draws nothing.
   import { invoke } from "@tauri-apps/api/core";
   import { api } from "../../lib/engine/api.js";
+  import { writeClipboard } from "../../lib/copy.js";
   import { conversationMarkdown } from "../../lib/export-conversation.js";
   import { notify } from "../../lib/stores/ui.svelte.js";
   import appIcon from "../../assets/heart.svg?url";
@@ -48,6 +49,8 @@
     const chatBranch = sid ? sessions.byId[sid]?.branch : "";
     return chatBranch || ws.branch || "";
   });
+
+  const chatNumber = $derived(sessions.byId[sessions.currentId]?.chat_number);
 
   let branchMenuOpen = $state(false);
   let branchList = $state([]);
@@ -236,6 +239,15 @@
         {/if}
       </span>
     {/if}
+    {#if chatNumber}
+      <span class="chat-number">#{chatNumber}</span>
+      <button type="button" class="copy-number" aria-label="Copy chat number" title="Copy chat number"
+        onclick={() => writeClipboard(String(chatNumber), "Chat number copied")}>
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" aria-hidden="true">
+          <rect x="6" y="5" width="8" height="9" rx="1" /><path d="M10 3V2H2v9h2" />
+        </svg>
+      </button>
+    {/if}
     </span>
     <span class="buttons">
       {#if sessions.currentId}
@@ -363,6 +375,24 @@
     text-transform: uppercase;
     color: var(--slate);
   }
+  .chat-number {
+    margin-left: calc(15 * var(--px));
+    font: var(--t-path);
+    color: var(--slate);
+  }
+  .copy-number {
+    align-self: center;
+    display: grid;
+    place-items: center;
+    padding: 4px;
+    border: 0;
+    background: none;
+    color: var(--slate);
+    cursor: pointer;
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
+  }
+  .copy-number:hover { background: var(--control-hover); }
   .branch-wrap {
     position: relative;
     display: inline-flex;

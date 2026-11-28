@@ -24,6 +24,7 @@ import "encoding/json"
 // ContextBudget and EstimatedUsage are stored. A save sends back the whole
 // record it read, so both survive it.
 type Session struct {
+	ChatNumber       int64           `json:"chat_number,omitempty"`
 	ID               string          `json:"id"`
 	ParentSessionID  string          `json:"parent_session_id"`
 	Title            string          `json:"title"`

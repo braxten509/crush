@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -84,4 +85,27 @@ func Long(p string) string {
 		return p
 	}
 	return strings.Replace(p, "~", homedir, 1)
+}
+
+// CrushData returns the shared application data directory.
+func CrushData() string {
+	if crushData := os.Getenv("CRUSH_GLOBAL_DATA"); crushData != "" {
+		return crushData
+	}
+	if xdgDataHome := os.Getenv("XDG_DATA_HOME"); xdgDataHome != "" {
+		return filepath.Join(xdgDataHome, "crush")
+	}
+
+	// return the path to the main data directory
+	// for windows, it should be in `%LOCALAPPDATA%/crush/`
+	// for linux and macOS, it should be in `$HOME/.local/share/crush/`
+	if runtime.GOOS == "windows" {
+		localAppData := cmp.Or(
+			os.Getenv("LOCALAPPDATA"),
+			filepath.Join(os.Getenv("USERPROFILE"), "AppData", "Local"),
+		)
+		return filepath.Join(localAppData, "crush")
+	}
+
+	return filepath.Join(Dir(), ".local", "share", "crush")
 }

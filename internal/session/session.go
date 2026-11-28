@@ -55,6 +55,7 @@ type Session struct {
 	// Directory and DataDirectory identify a saved chat in the all-project catalog.
 	Directory       string `json:",omitempty"`
 	DataDirectory   string `json:",omitempty"`
+	ChatNumber      int64
 	ContextBudget   ContextBudget
 	ID              string
 	ParentSessionID string
@@ -189,6 +190,7 @@ type Service interface {
 type service struct {
 	*pubsub.Broker[Session]
 	db                 *sql.DB
+	numbers            sync.Map
 	q                  *db.Queries
 	fileHistoryCleanup []func(context.Context) error
 
@@ -657,6 +659,7 @@ func (s *service) fromDBItem(item db.Session) Session {
 		slog.Error("Failed to unmarshal todos", "session_id", item.ID, "error", err)
 	}
 	return Session{
+		ChatNumber:       s.chatNumber(item.ID),
 		ContextBudget:    budget,
 		Model:            model,
 		Branch:           branch,
@@ -896,4 +899,17 @@ func (s *service) ParseAgentToolSessionID(sessionID string) (messageID string, t
 func (s *service) IsAgentToolSession(sessionID string) bool {
 	_, _, ok := s.ParseAgentToolSessionID(sessionID)
 	return ok
+}
+
+func (s *service) chatNumber(id string) int64 {
+	if value, ok := s.numbers.Load(id); ok {
+		return value.(int64)
+	}
+	number, err := db.AssignChatNumber(s.db, id)
+	if err != nil {
+		slog.Error("Could not assign chat number", "error", err)
+		return 0
+	}
+	s.numbers.Store(id, number)
+	return number
 }

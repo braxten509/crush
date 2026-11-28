@@ -18,6 +18,7 @@ import (
 // PendingPrompt) are left zero for the caller to fill in.
 func SessionFromDomain(s session.Session) Session {
 	return Session{
+		ChatNumber:       s.ChatNumber,
 		ID:               s.ID,
 		ParentSessionID:  s.ParentSessionID,
 		Title:            s.Title,
@@ -48,6 +49,7 @@ func SessionFromDomain(s session.Session) Session {
 // payload before this conversion runs.
 func SessionToDomain(s Session) session.Session {
 	return session.Session{
+		ChatNumber:       s.ChatNumber,
 		ID:               s.ID,
 		ParentSessionID:  s.ParentSessionID,
 		Title:            s.Title,

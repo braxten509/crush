@@ -17,6 +17,7 @@
   import DetailsOverlay from "../panel/DetailsOverlay.svelte";
   import ImageViewer from "../panel/ImageViewer.svelte";
   import VideoViewer from "../panel/VideoViewer.svelte";
+  import ChoiceVideoViewer from "../ask/ChoiceVideoViewer.svelte";
   import ModelMenu from "../models/ModelMenu.svelte";
   import ContextMenu from "../timeline/ContextMenu.svelte";
 
@@ -47,6 +48,7 @@
 
 <ImageViewer />
 <VideoViewer />
+<ChoiceVideoViewer />
 
 <!-- The model button's menu shares the right-click menu's slot (ui.menu), so
      the key router gives it the "menu" scope alone. -->

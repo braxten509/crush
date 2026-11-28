@@ -516,10 +516,14 @@
                 <div class="note"><Field bind:value={noteText} placeholder="Add a note" label="Note" /></div>
               {/if}
             </div>
-            {#if picture?.videos && !(picture.choice.image && !picture.choice.video)}
-              <ChoiceVideo path={picture.choice.video ?? ""} shown={i === active} />
-            {:else if picture}
-              <Picture path={picture.choice.image} />
+            {#if picture}
+              <div class="media">
+                {#if picture.videos && !(picture.choice.image && !picture.choice.video)}
+                  <ChoiceVideo path={picture.choice.video ?? ""} shown={i === active} />
+                {:else}
+                  <Picture path={picture.choice.image} />
+                {/if}
+              </div>
             {/if}
           </div>
         </div>
@@ -639,6 +643,7 @@
     display: grid;
   }
   .page {
+    container-type: inline-size;
     grid-area: 1 / 1;
     display: flex;
     flex-direction: column;
@@ -654,14 +659,26 @@
     height: 0;
     overflow: hidden;
   }
+  /* The page measures its own width, so a picture or video sits right of
+     the answers when there is room (owner, 2026-11-27: it never did, as
+     nothing above the form was a size container). */
   .body {
     display: flex;
     flex-direction: column;
     gap: calc(16 * var(--px));
   }
-  @container (min-width: 900px) {
+  .media {
+    display: flex;
+    justify-content: center;
+    min-width: 0;
+  }
+  @container (min-width: 700px) {
     .body.with-picture {
       flex-direction: row;
+      align-items: flex-start;
+    }
+    .media {
+      flex: 0 0 50%;
     }
   }
   .answers {

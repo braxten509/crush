@@ -51,7 +51,7 @@
   let base = $state({ width: 0, height: 0 });
   let opener = null;
 
-  const pic = $derived(ui.viewer?.video ? null : ui.viewer);
+  const pic = $derived(ui.viewer?.video || ui.viewer?.choiceVideo ? null : ui.viewer);
   const open = $derived(Boolean(pic));
   const zoomed = $derived(zoom > 1 && base.width > 0);
   const movable = $derived(!viewing.fit || zoomed);

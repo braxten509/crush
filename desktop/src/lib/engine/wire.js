@@ -128,7 +128,7 @@
  *   confirm_description:string}} QuestionRequest
  *  @typedef {{id:string, type:"yes_no"|"single_choice"|"multi_choice"|"free_text"|"secure_entry", label:string,
  *   question:string, description:string, choices:QuestionChoice[], selected?:string[]}} QuestionItem  (selected: G-13)
- *  @typedef {{id:string, label:string, description:string, image:string, audio?:string}} QuestionChoice
+ *  @typedef {{id:string, label:string, description:string, image:string, audio?:string, video?:string}} QuestionChoice
  *  @typedef {{batch_request_id:string, responses:QuestionResponse[]}} QuestionAnswer
  *  @typedef {{request_id:string, selected_ids:string[], fill_in_text:string, yes?:boolean, notes?:Object<string,string>}} QuestionResponse
  *  @typedef {{resolved:boolean}} QuestionAnswerResponse

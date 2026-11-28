@@ -25,6 +25,7 @@
   import Rule from "../Rule.svelte";
   import AudioRow from "./AudioRow.svelte";
   import Picture from "./Picture.svelte";
+  import ChoiceVideo from "./ChoiceVideo.svelte";
   import SecureField from "./SecureField.svelte";
   import { cancelQuestions, submitAnswers } from "../../lib/ask/answers.js";
   import { CUSTOM_MAX, FREE_MAX, initialState, isAnswered, NOTE_MAX, respond, summaryLine, tabLabels, typeOf } from "../../lib/ask/form.js";
@@ -65,12 +66,15 @@
   const answeredCount = $derived(items.filter((it, i) => answeredAt(i)).length);
   const unanswered = $derived(items.length - answeredCount);
 
-  // A page's picture: the hovered row's on the active page, else the cursor's.
+  // A page's picture or video: the hovered row's on the active page, else the
+  // cursor's. A page with videos follows the cursor only, so moving the mouse
+  // over to a video's Play button never swaps it for another (2026-11-27).
   function pictureOf(i) {
     const it = items[i];
-    if (!it?.choices?.some((c) => c.image)) return null;
-    const at = i === active && hovered >= 0 ? hovered : (states[i]?.cursor ?? 0);
-    return it.choices[at] ?? { image: "" };
+    const videos = Boolean(it?.choices?.some((c) => c.video));
+    if (!videos && !it?.choices?.some((c) => c.image)) return null;
+    const at = i === active && hovered >= 0 && !videos ? hovered : (states[i]?.cursor ?? 0);
+    return { videos, choice: it.choices[at] ?? { image: "", video: "" } };
   }
 
   function answeredAt(i) {
@@ -512,8 +516,10 @@
                 <div class="note"><Field bind:value={noteText} placeholder="Add a note" label="Note" /></div>
               {/if}
             </div>
-            {#if picture}
-              <Picture path={picture.image} />
+            {#if picture?.videos && !(picture.choice.image && !picture.choice.video)}
+              <ChoiceVideo path={picture.choice.video ?? ""} shown={i === active} />
+            {:else if picture}
+              <Picture path={picture.choice.image} />
             {/if}
           </div>
         </div>

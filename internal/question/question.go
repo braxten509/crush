@@ -51,6 +51,9 @@ type Choice struct {
 	// Audio is an optional absolute path to an audio file (.mp3, .wav,
 	// .m4a, .aac, .ogg, or .flac) that the user can play in the form.
 	Audio string `json:"audio,omitempty"`
+	// Video is an optional absolute path to a video file (.mp4, .webm, or
+	// .mov) shown in the form while the choice is under the cursor.
+	Video string `json:"video,omitempty"`
 }
 
 // Question is a single question definition within a Request.
@@ -178,11 +181,29 @@ func (q Question) Validate() error {
 					return fmt.Errorf("%s: choice %d (%s) audio can't be read: %v", label, i+1, c.ID, err)
 				}
 			}
+			if c.Video != "" {
+				if !filepath.IsAbs(c.Video) || !IsVideoPath(c.Video) {
+					return fmt.Errorf("%s: choice %d (%s) video must be an absolute path to a .mp4, .webm, or .mov file", label, i+1, c.ID)
+				}
+				if _, err := os.Stat(c.Video); err != nil {
+					return fmt.Errorf("%s: choice %d (%s) video can't be read: %v", label, i+1, c.ID, err)
+				}
+			}
 		}
 	default:
 		return fmt.Errorf("%s: unknown type %q (must be yes_no, single_choice, multi_choice, or free_text)", label, q.Type)
 	}
 	return nil
+}
+
+// IsVideoPath reports whether path ends in a video type the question form
+// can play (.mp4, .webm, or .mov).
+func IsVideoPath(path string) bool {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".mp4", ".webm", ".mov":
+		return true
+	}
+	return false
 }
 
 // HasSecureEntry reports whether any question is a secure entry.

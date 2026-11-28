@@ -730,6 +730,7 @@ async function serve(request) {
     return new Response("not found", { status: 404 });
   }
   if (url.host === "localhost" && name.startsWith("/recordings/")) return serveRecording(request, name.slice("/recordings/".length));
+  if (url.host === "localhost" && name === "/question-video") return serveQuestionVideo(request, url.searchParams.get("path") ?? "");
   if (name === "/" || name === "") name = "/index.html";
   const file = path.normalize(path.join(DIST, name));
   if (url.host !== "localhost" || !file.startsWith(DIST + path.sep)) return new Response("not found", { status: 404 });
@@ -751,10 +752,25 @@ const VIDEO_TYPES = { mp4: "video/mp4", m4v: "video/mp4", webm: "video/webm", mk
 async function serveRecording(request, name) {
   const type = VIDEO_TYPES[/\.(\w+)$/u.exec(name)?.[1]?.toLowerCase() ?? ""];
   if (!/^[\w.-]+$/u.test(name) || !type) return new Response("not found", { status: 404 });
-  const file = path.join(RECORDINGS, name);
+  return serveVideoFile(request, path.join(RECORDINGS, name), type);
+}
+
+// A question choice's video (an absolute .mp4, .webm or .mov path the
+// engine already checked), streamed like a recording.
+const QUESTION_VIDEO_TYPES = { mp4: "video/mp4", webm: "video/webm", mov: "video/quicktime" };
+
+async function serveQuestionVideo(request, file) {
+  const type = QUESTION_VIDEO_TYPES[/\.(\w+)$/u.exec(file)?.[1]?.toLowerCase() ?? ""];
+  if (!path.isAbsolute(file) || !type) return new Response("not found", { status: 404 });
+  return serveVideoFile(request, path.normalize(file), type);
+}
+
+async function serveVideoFile(request, file, type) {
   let size;
   try {
-    size = (await fs.promises.stat(file)).size;
+    const info = await fs.promises.stat(file);
+    if (!info.isFile()) return new Response("not found", { status: 404 });
+    size = info.size;
   } catch {
     return new Response("not found", { status: 404 });
   }

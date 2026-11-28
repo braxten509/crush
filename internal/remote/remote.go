@@ -229,6 +229,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /v1/media/{msg}/{idx}", s.handleMedia)
 	mux.HandleFunc("GET /v1/question-image/{request}/{question}/{choice}", s.handleQuestionImage)
 	mux.HandleFunc("GET /v1/question-audio/{request}/{question}/{choice}", s.handleQuestionAudio)
+	mux.HandleFunc("GET /v1/question-video/{request}/{question}/{choice}", s.handleQuestionVideo)
 	mux.HandleFunc("POST /v1/send", s.handleSend)
 	mux.HandleFunc("POST /v1/cancel", s.simple(ActCancel))
 	mux.HandleFunc("POST /v1/interrupt", s.simple(ActInterrupt))
@@ -359,7 +360,58 @@ func (s *Server) handleMedia(w http.ResponseWriter, r *http.Request) {
 const (
 	maxQuestionImage = 8 << 20
 	maxQuestionAudio = 25 << 20
+	maxQuestionVideo = 100 << 20
 )
+
+// handleQuestionVideo serves the video file of a choice in the questions the
+// shared chat waits on, with range support. The path comes from the pending
+// request only, never from the phone.
+func (s *Server) handleQuestionVideo(w http.ResponseWriter, r *http.Request) {
+	notFound := func() { writeError(w, http.StatusNotFound, errors.New("no such video")) }
+	q, ok := pendingQuestionFor(s.src, s.hub.currentSession())
+	if !ok || q.ID != r.PathValue("request") {
+		notFound()
+		return
+	}
+	var path string
+	for _, qq := range q.Questions {
+		if qq.ID != r.PathValue("question") {
+			continue
+		}
+		for _, c := range qq.Choices {
+			if c.ID == r.PathValue("choice") {
+				path = c.Video
+			}
+		}
+	}
+	var typ string
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".mp4":
+		typ = "video/mp4"
+	case ".webm":
+		typ = "video/webm"
+	case ".mov":
+		typ = "video/quicktime"
+	}
+	if typ == "" || !filepath.IsAbs(path) {
+		notFound()
+		return
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		notFound()
+		return
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil || !info.Mode().IsRegular() || info.Size() > maxQuestionVideo {
+		notFound()
+		return
+	}
+	w.Header().Set("Content-Type", typ)
+	w.Header().Set("Cache-Control", "private, max-age=3600")
+	http.ServeContent(w, r, "", info.ModTime(), f)
+}
 
 // handleQuestionAudio serves the audio file of a choice in the questions the
 // shared chat waits on. The path comes from the pending request only, never
